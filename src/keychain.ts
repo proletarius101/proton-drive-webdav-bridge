@@ -233,8 +233,9 @@ function deleteCredentialsFromKeyring(): void {
     const entry = new Entry(SERVICE_NAME, ACCOUNT_NAME);
     entry.deletePassword();
     logger.debug('Deleted credentials from native keyring');
-  } catch {
-    // Entry might not exist
+  } catch (error) {
+    // Entry might not exist - log for debugging
+    logger.debug(`Failed to delete credentials from native keyring: ${error}`);
   }
 }
 
@@ -284,8 +285,9 @@ export async function deleteStoredCredentials(): Promise<void> {
   } else {
     try {
       deleteCredentialsFromKeyring();
-    } catch {
-      // Ignore
+    } catch (error) {
+      // Log deletion failure but continue
+      logger.debug(`Failed to delete credentials from keyring: ${error}`);
     }
   }
   // Also try to delete file in case of previous fallback

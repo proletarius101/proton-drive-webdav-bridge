@@ -17,7 +17,8 @@ function readPidFile(): number | null {
   try {
     const pid = parseInt(readFileSync(pidFile, 'utf-8').trim(), 10);
     return isNaN(pid) ? null : pid;
-  } catch {
+  } catch (error) {
+    logger.debug(`Failed to read PID file: ${error}`);
     return null;
   }
 }
@@ -89,7 +90,6 @@ export function registerStopCommand(program: Command): void {
         removePidFile();
         console.log('✓ Server stopped successfully.');
         logger.info(`Server stopped (PID: ${pid})`);
-
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error(`✗ Failed to stop server: ${message}`);

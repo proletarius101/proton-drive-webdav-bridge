@@ -253,8 +253,9 @@ function createProtonHttpClient(
               body: json ? JSON.stringify(json) : undefined,
               signal: signal || controller.signal,
             });
-          } catch {
-            // Refresh failed
+          } catch (error) {
+            // Log refresh failure but continue
+            logger.debug(`Credential refresh failed: ${error}`);
           }
         }
 
@@ -290,8 +291,9 @@ function createProtonHttpClient(
               body,
               signal: signal || controller.signal,
             });
-          } catch {
-            // Refresh failed
+          } catch (error) {
+            // Log refresh failure but continue
+            logger.debug(`Credential refresh failed: ${error}`);
           }
         }
 

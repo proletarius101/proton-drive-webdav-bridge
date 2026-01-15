@@ -11,9 +11,7 @@ import { storeCredentials, deleteStoredCredentials, hasStoredCredentials } from 
 import { logger } from '../logger.js';
 
 export function registerAuthCommand(program: Command): void {
-  const authCmd = program
-    .command('auth')
-    .description('Manage Proton account authentication');
+  const authCmd = program.command('auth').description('Manage Proton account authentication');
 
   // Login subcommand
   authCmd
@@ -35,10 +33,12 @@ export function registerAuthCommand(program: Command): void {
         }
 
         // Get username
-        const username = options.username || await input({
-          message: 'Proton username or email:',
-          validate: (value) => value.length > 0 || 'Username is required',
-        });
+        const username =
+          options.username ||
+          (await input({
+            message: 'Proton username or email:',
+            validate: (value) => value.length > 0 || 'Username is required',
+          }));
 
         // Get password
         const password = await passwordPrompt({
@@ -105,7 +105,6 @@ export function registerAuthCommand(program: Command): void {
         console.log(`\n✓ Successfully logged in as ${username}`);
         console.log('Credentials stored securely.');
         logger.info(`User ${username} authenticated successfully`);
-
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error(`\n✗ Login failed: ${message}`);
@@ -138,7 +137,6 @@ export function registerAuthCommand(program: Command): void {
         await deleteStoredCredentials();
         console.log('✓ Logged out successfully. Credentials removed.');
         logger.info('User logged out');
-
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error(`✗ Logout failed: ${message}`);
@@ -159,8 +157,9 @@ export function registerAuthCommand(program: Command): void {
           try {
             const { username } = await restoreSessionFromStorage();
             console.log(`✓ Logged in as: ${username}`);
-          } catch {
+          } catch (error) {
             console.log('⚠ Credentials stored but session may be expired. Try logging in again.');
+            console.log(error);
           }
         } else {
           console.log('✗ Not logged in. Use "proton-drive-bridge auth login" to authenticate.');

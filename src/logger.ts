@@ -20,8 +20,9 @@ const LOG_DIR = getLogDir();
 // Ensure log directory exists
 try {
   mkdirSync(LOG_DIR, { recursive: true });
-} catch {
-  // Ignore if already exists
+} catch (error) {
+  // Log error but continue - directory might already exist or be inaccessible
+  console.error(`Failed to create log directory: ${error}`);
 }
 
 // ============================================================================

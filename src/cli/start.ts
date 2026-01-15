@@ -36,7 +36,8 @@ function readPidFile(): number | null {
   try {
     const pid = parseInt(readFileSync(pidFile, 'utf-8').trim(), 10);
     return isNaN(pid) ? null : pid;
-  } catch {
+  } catch (error) {
+    logger.debug(`Failed to read PID file: ${error}`);
     return null;
   }
 }
@@ -129,7 +130,6 @@ export function registerStartCommand(program: Command): void {
         console.log(`  Linux: davfs2, GNOME Files, or other WebDAV clients`);
         console.log(`  Windows: Map network drive using WebDAV path`);
         console.log('\nPress Ctrl+C to stop the server.');
-
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error(`✗ Failed to start server: ${message}`);

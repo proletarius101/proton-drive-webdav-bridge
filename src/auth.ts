@@ -522,7 +522,8 @@ async function verifyAndGetModulus(signedModulus: string): Promise<Uint8Array> {
   const { verified } = verificationResult.signatures[0];
   try {
     await verified;
-  } catch {
+  } catch (error) {
+    logger.warn(`Server identity verification failed: ${error}`);
     throw new Error('Unable to verify server identity');
   }
 
@@ -919,7 +920,8 @@ export class ProtonAuth {
             try {
               const privateKey = await openpgp.readPrivateKey({ armoredKey: key.PrivateKey });
               await openpgp.decryptKey({ privateKey, passphrase: addressKeyPassword });
-            } catch {
+            } catch (error) {
+              logger.warn(`Failed to verify address key ${key.ID} passphrase: ${error}`);
               throw new Error(`Address key ${key.ID} passphrase verification failed.`);
             }
           }
@@ -1043,6 +1045,7 @@ export class ProtonAuth {
       childAccessToken,
       childRefreshToken,
       SaltedKeyPass,
+      UserID,
     } = credentials;
 
     this.parentSession = {
@@ -1051,6 +1054,7 @@ export class ProtonAuth {
       RefreshToken: parentRefreshToken,
       keyPassword: SaltedKeyPass,
       passwordMode: credentials.passwordMode,
+      UserID,
     };
 
     this.session = {
@@ -1059,6 +1063,7 @@ export class ProtonAuth {
       RefreshToken: childRefreshToken,
       keyPassword: SaltedKeyPass,
       passwordMode: credentials.passwordMode,
+      UserID,
     };
 
     try {
@@ -1328,8 +1333,9 @@ export class ProtonAuth {
         method: 'DELETE',
         headers: createHeaders(this.session),
       });
-    } catch {
-      // Ignore logout errors
+    } catch (error) {
+      // Log but don't throw - logout failure is non-critical
+      logger.debug(`Logout request failed: ${error}`);
     }
 
     this.session = null;

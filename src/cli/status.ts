@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from 'fs';
 import { hasStoredCredentials, getStoredCredentials } from '../keychain.js';
 import { getPidFilePath, getLogFilePath } from '../paths.js';
 import { getConfig } from '../config.js';
+import { logger } from '../logger.js';
 
 function readPidFile(): number | null {
   const pidFile = getPidFilePath();
@@ -18,7 +19,8 @@ function readPidFile(): number | null {
   try {
     const pid = parseInt(readFileSync(pidFile, 'utf-8').trim(), 10);
     return isNaN(pid) ? null : pid;
-  } catch {
+  } catch (error) {
+    logger.debug(`Failed to read PID file: ${error}`);
     return null;
   }
 }
@@ -70,8 +72,9 @@ export function registerStatusCommand(program: Command): void {
           try {
             const creds = await getStoredCredentials();
             status.auth.username = creds?.username || null;
-          } catch {
-            // Ignore
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            logger.warn(`Failed to retrieve stored credentials: ${message}`);
           }
         }
 
@@ -115,7 +118,6 @@ export function registerStatusCommand(program: Command): void {
 
           console.log(`Log file: ${status.logFile}`);
         }
-
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error(`Error getting status: ${message}`);
