@@ -43,7 +43,7 @@
   "dependencies": {
     "@inquirer/prompts": "^8.0.1",
     "@napi-rs/keyring": "^1.1.6",
-    "@protontech/drive-sdk": "^0.7.0",
+    "@protontech/drive-sdk": "^0.9.2",
     "bcryptjs": "^3.0.3",
     "commander": "^14.0.2",
     "openpgp": "^6.2.2",

@@ -394,7 +394,8 @@ function createProtonHttpClient(
  */
 function createProtonAccount(
   session: Session,
-  cryptoModule: OpenPGPCryptoInterface
+  cryptoModule: OpenPGPCryptoInterface,
+  httpClient: ProtonHttpClient
 ): ProtonAccount {
   const decryptedKeysCache = new Map<string, openpgp.PrivateKey>();
 
@@ -448,13 +449,48 @@ function createProtonAccount(
       };
     },
 
-    async hasProtonAccount(_email: string): Promise<boolean> {
-      // Simplified implementation
-      return false;
+    async hasProtonAccount(email: string): Promise<boolean> {
+      // Query the key transparency endpoint to check if the email has a Proton account
+      try {
+        const response = await httpClient.fetchJson({
+          url: `core/v4/keys?Email=${encodeURIComponent(email)}`,
+          method: 'GET',
+          headers: new Headers(),
+          timeoutMs: 10000,
+        });
+        const json = (await response.json()) as Record<string, unknown> & { Keys?: unknown[] };
+        return json.Keys !== undefined && json.Keys.length > 0;
+      } catch {
+        return false;
+      }
     },
 
-    async getPublicKeys(_email: string): Promise<openpgp.PublicKey[]> {
-      return [];
+    async getPublicKeys(email: string): Promise<openpgp.PublicKey[]> {
+      try {
+        const response = await httpClient.fetchJson({
+          url: `core/v4/keys?Email=${encodeURIComponent(email)}`,
+          method: 'GET',
+          headers: new Headers(),
+          timeoutMs: 10000,
+        });
+        interface KeysResponse {
+          Keys?: Array<{ PublicKey: string }>;
+        }
+        const json = (await response.json()) as Record<string, unknown> & KeysResponse;
+
+        const keys: openpgp.PublicKey[] = [];
+        for (const keyData of json.Keys || []) {
+          try {
+            const key = await openpgp.readKey({ armoredKey: keyData.PublicKey });
+            keys.push(key);
+          } catch {
+            // Skip invalid keys
+          }
+        }
+        return keys;
+      } catch {
+        return [];
+      }
     },
   };
 }
@@ -919,6 +955,7 @@ export class DriveClientManager {
   private client: ProtonDriveClient | null = null;
   private username: string | null = null;
   private rootFolderUid: string | null = null;
+  private httpClient: ProtonHttpClient | null = null;
 
   /**
    * Initialize the client from stored credentials
@@ -963,17 +1000,23 @@ export class DriveClientManager {
 
     const cryptoModule = createOpenPGPCrypto();
     const httpClient = createProtonHttpClient(this.session, async () => {
-      await this.auth!.refreshToken();
+      if (!this.auth || !this.username) {
+        throw new Error('Auth or username not initialized');
+      }
+      await this.auth.refreshToken();
       // Update stored credentials
-      const newCreds = this.auth!.getReusableCredentials();
+      const newCreds = this.auth.getReusableCredentials();
       const storedCreds: StoredCredentials = {
         ...newCreds,
-        username: this.username!,
+        username: this.username,
       };
       await storeCredentials(storedCreds);
     });
 
-    const account = createProtonAccount(this.session, cryptoModule);
+    // Store httpClient for direct API calls (pagination workaround)
+    this.httpClient = httpClient;
+
+    const account = createProtonAccount(this.session, cryptoModule, httpClient);
     const srpModule = createSrpModule();
 
     // Create telemetry with appropriate log level
@@ -1040,11 +1083,89 @@ export class DriveClientManager {
 
   /**
    * List contents of a folder
+   * Uses direct API with PageSize parameter to match WebClients implementation
+   * and overcome SDK pagination limitation (default ~300-350 items per page)
    */
   async listFolder(folderUid: string): Promise<DriveNode[]> {
     const client = this.getClient();
     const nodes: DriveNode[] = [];
 
+    // Use direct API call with explicit PageSize to get all children
+    // This matches the WebClients pattern from packages/shared/lib/api/drive/folder.ts
+    if (this.httpClient && folderUid.includes('~')) {
+      try {
+        const [volumeId, nodeId] = folderUid.split('~');
+        const allChildUids: string[] = [];
+        let anchor = '';
+        const pageSize = 500; // Larger than WebClients' 150 for better performance
+
+        // Fetch all child UIDs using pagination with PageSize
+        while (true) {
+          const queryParams = new URLSearchParams();
+          queryParams.set('PageSize', pageSize.toString());
+          if (anchor) {
+            queryParams.set('AnchorID', anchor);
+          }
+
+          //   TODO: Switch to the SDK's built-in method once pagination limit is configurable
+          const url = `drive/v2/volumes/${volumeId}/folders/${nodeId}/children?${queryParams.toString()}`;
+
+          const response = await this.httpClient.fetchJson({
+            url,
+            method: 'GET',
+            headers: new Headers(),
+            timeoutMs: 30000,
+          });
+
+          if (!response.ok) {
+            throw new Error(`API request failed: ${response.status}`);
+          }
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const data = (await response.json()) as any;
+
+          if (data.LinkIDs && Array.isArray(data.LinkIDs)) {
+            allChildUids.push(...data.LinkIDs);
+          }
+
+          if (!data.More || !data.AnchorID) {
+            break;
+          }
+          anchor = data.AnchorID;
+        }
+
+        logger.debug(
+          `Fetched ${allChildUids.length} child UIDs via direct API for folder ${nodeId}`
+        );
+
+        // Fetch full node details from SDK (which has caching and decryption)
+        const uidSet = new Set(allChildUids);
+        for await (const result of client.iterateFolderChildren(folderUid)) {
+          if (result.ok && result.value) {
+            const node = result.value;
+            const nodeId = node.uid.split('~')[1] || node.uid;
+            if (uidSet.has(nodeId)) {
+              nodes.push({
+                uid: node.uid,
+                name: node.name,
+                type: node.type === 'folder' ? 'folder' : 'file',
+                size: node.size || 0,
+                mimeType: node.mimeType || 'application/octet-stream',
+                createdTime: node.createTime || new Date(),
+                modifiedTime: node.modifyTime || new Date(),
+                parentUid: folderUid,
+              });
+            }
+          }
+        }
+
+        return nodes;
+      } catch (error) {
+        logger.warn(`Direct API pagination failed, falling back to SDK: ${error}`);
+      }
+    }
+
+    // Fallback to SDK iteration (original behavior with default pagination limit)
     for await (const result of client.iterateFolderChildren(folderUid)) {
       if (result.ok && result.value) {
         const node = result.value;

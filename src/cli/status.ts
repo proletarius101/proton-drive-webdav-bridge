@@ -60,7 +60,7 @@ export function registerStatusCommand(program: Command): void {
         if (pid && isProcessRunning(pid)) {
           status.server.running = true;
           status.server.pid = pid;
-          
+
           const config = status.config;
           const protocol = config.webdav.https ? 'https' : 'http';
           status.server.url = `${protocol}://${config.webdav.host}:${config.webdav.port}`;

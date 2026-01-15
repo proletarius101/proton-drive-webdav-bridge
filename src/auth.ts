@@ -899,9 +899,7 @@ export class ProtonAuth {
             });
             addressKeyPassword = decryptedToken.data as string;
           } else if (key.Token && passwordMode === 2) {
-            throw new Error(
-              `Address key ${key.ID} has Token but primary key is not available.`
-            );
+            throw new Error(`Address key ${key.ID} has Token but primary key is not available.`);
           } else if (password) {
             const keySalt = keySalts.find((s) => s.ID === key.ID);
             if (keySalt?.KeySalt) {

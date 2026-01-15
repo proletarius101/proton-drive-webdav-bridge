@@ -11,9 +11,7 @@ import { updateConfig, loadConfig, getConfigFilePath, validateWebDAVConfig } fro
 import { logger } from '../logger.js';
 
 export function registerConfigCommand(program: Command): void {
-  const configCmd = program
-    .command('config')
-    .description('Manage configuration settings');
+  const configCmd = program.command('config').description('Manage configuration settings');
 
   // Show current config
   configCmd
@@ -100,7 +98,6 @@ export function registerConfigCommand(program: Command): void {
         updateConfig(config);
         console.log(`✓ Set ${key} = ${value}`);
         logger.info(`Config updated: ${key} = ${value}`);
-
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error(`✗ Failed to set config: ${message}`);
@@ -121,14 +118,17 @@ export function registerConfigCommand(program: Command): void {
         // WebDAV settings
         console.log('WebDAV Server Settings:');
 
-        config.webdav.port = parseInt(await input({
-          message: 'Port:',
-          default: String(config.webdav.port),
-          validate: (val) => {
-            const port = parseInt(val, 10);
-            return (port >= 1 && port <= 65535) || 'Port must be between 1 and 65535';
-          },
-        }), 10);
+        config.webdav.port = parseInt(
+          await input({
+            message: 'Port:',
+            default: String(config.webdav.port),
+            validate: (val) => {
+              const port = parseInt(val, 10);
+              return (port >= 1 && port <= 65535) || 'Port must be between 1 and 65535';
+            },
+          }),
+          10
+        );
 
         config.webdav.host = await input({
           message: 'Host to bind to:',
@@ -137,7 +137,9 @@ export function registerConfigCommand(program: Command): void {
 
         // Security warning for non-localhost
         if (config.webdav.host !== '127.0.0.1' && config.webdav.host !== 'localhost') {
-          console.log('\n⚠ Warning: Binding to a non-localhost address exposes the server to the network.');
+          console.log(
+            '\n⚠ Warning: Binding to a non-localhost address exposes the server to the network.'
+          );
           console.log('  Make sure to enable HTTPS and authentication for security.\n');
         }
 
@@ -205,12 +207,12 @@ export function registerConfigCommand(program: Command): void {
           for (const err of errors) {
             console.log(`  - ${err}`);
           }
-          
+
           const proceed = await confirm({
             message: 'Save configuration anyway?',
             default: false,
           });
-          
+
           if (!proceed) {
             console.log('Configuration cancelled.');
             return;
@@ -222,7 +224,6 @@ export function registerConfigCommand(program: Command): void {
         console.log(`Config file: ${getConfigFilePath()}`);
 
         logger.info('Configuration updated via setup wizard');
-
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error(`\n✗ Setup failed: ${message}`);
@@ -248,15 +249,14 @@ export function registerConfigCommand(program: Command): void {
       try {
         const { existsSync, unlinkSync } = await import('fs');
         const configPath = getConfigFilePath();
-        
+
         if (existsSync(configPath)) {
           unlinkSync(configPath);
         }
-        
+
         loadConfig(); // This will create default config
         console.log('✓ Configuration reset to defaults.');
         logger.info('Configuration reset to defaults');
-
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error(`✗ Reset failed: ${message}`);

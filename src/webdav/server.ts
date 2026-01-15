@@ -59,7 +59,11 @@ class ProtonDriveFileSystem extends webdav.FileSystem {
     const simpleSerializer: webdav.FileSystemSerializer = {
       uid: () => 'proton-drive-fs',
       serialize: (_fs, callback) => callback(undefined, {}),
-      unserialize: (_data, callback) => callback(new Error('Cannot unserialize ProtonDriveFileSystem'), undefined as unknown as webdav.FileSystem),
+      unserialize: (_data, callback) =>
+        callback(
+          new Error('Cannot unserialize ProtonDriveFileSystem'),
+          undefined as unknown as webdav.FileSystem
+        ),
     };
     super(simpleSerializer);
     this._lockMgr = new webdav.LocalLockManager();
@@ -282,9 +286,7 @@ class ProtonDriveFileSystem extends webdav.FileSystem {
 
       final: (cb) => {
         passThrough.end();
-        uploadPromise
-          .then(() => cb())
-          .catch((error) => cb(error as Error));
+        uploadPromise.then(() => cb()).catch((error) => cb(error as Error));
       },
 
       destroy: (error, cb) => {
@@ -405,11 +407,7 @@ class ProtonDriveFileSystem extends webdav.FileSystem {
       });
   }
 
-  _size(
-    path: webdav.Path,
-    _ctx: webdav.SizeInfo,
-    callback: webdav.ReturnCallback<number>
-  ): void {
+  _size(path: webdav.Path, _ctx: webdav.SizeInfo, callback: webdav.ReturnCallback<number>): void {
     const pathStr = this.normalizePath(path);
 
     this.resolveNode(pathStr)

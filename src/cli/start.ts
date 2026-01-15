@@ -93,7 +93,7 @@ export function registerStartCommand(program: Command): void {
 
         // Load config
         const config = loadConfig();
-        
+
         if (config.debug) {
           setDebugMode(true);
         }
