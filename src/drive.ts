@@ -174,14 +174,98 @@ interface SRPModuleInterface {
 }
 
 interface OpenPGPCryptoInterface {
+  // Key and passphrase generation
   generatePassphrase(): string;
-  generateSessionKey(encryptionKeys: openpgp.PrivateKey[]): Promise<SessionKey>;
+  generateKey(passphrase: string): Promise<openpgp.PrivateKey>;
+  generateSessionKey(encryptionKeys: openpgp.PublicKey[]): Promise<SessionKey>;
+
+  // Session key operations
   encryptSessionKey(
     sessionKey: SessionKey,
     encryptionKeys: openpgp.PublicKey | openpgp.PublicKey[]
   ): Promise<{ keyPacket: Uint8Array }>;
+  encryptSessionKeyWithPassword(sessionKey: SessionKey, password: string): Promise<Uint8Array>;
+  decryptSessionKey(
+    keyPacket: Uint8Array,
+    decryptionKeys: openpgp.PrivateKey | openpgp.PrivateKey[]
+  ): Promise<SessionKey>;
+  decryptArmoredSessionKey(
+    armoredData: string,
+    decryptionKeys: openpgp.PrivateKey | openpgp.PrivateKey[]
+  ): Promise<SessionKey>;
+
+  // Key decryption
   decryptKey(armoredKey: string, passphrase: string): Promise<openpgp.PrivateKey>;
-  // ... other methods as needed
+
+  // Encryption operations
+  encryptArmored(
+    data: Uint8Array,
+    encryptionKeys: openpgp.PublicKey[],
+    sessionKey?: SessionKey
+  ): Promise<{ armoredData: string }>;
+  encryptAndSignArmored(
+    data: Uint8Array,
+    sessionKey: SessionKey | undefined,
+    encryptionKeys: openpgp.PublicKey[],
+    signingKey: openpgp.PrivateKey
+  ): Promise<{ armoredData: string }>;
+  encryptAndSign(
+    data: Uint8Array,
+    sessionKey: SessionKey,
+    encryptionKeys: openpgp.PublicKey[],
+    signingKey: openpgp.PrivateKey
+  ): Promise<{ encryptedData: Uint8Array }>;
+  encryptAndSignDetached(
+    data: Uint8Array,
+    sessionKey: SessionKey,
+    encryptionKeys: openpgp.PublicKey[],
+    signingKey: openpgp.PrivateKey
+  ): Promise<{ encryptedData: Uint8Array; signature: Uint8Array }>;
+  encryptAndSignDetachedArmored(
+    data: Uint8Array,
+    sessionKey: SessionKey | undefined,
+    encryptionKeys: openpgp.PublicKey[],
+    signingKey: openpgp.PrivateKey
+  ): Promise<{ armoredData: string; armoredSignature: string }>;
+
+  // Decryption operations
+  decryptArmored(armoredData: string, decryptionKeys: openpgp.PrivateKey[]): Promise<Uint8Array>;
+  decryptArmoredWithPassword(armoredData: string, password: string): Promise<Uint8Array>;
+  decryptArmoredAndVerify(
+    armoredData: string,
+    decryptionKeys: openpgp.PrivateKey[],
+    verificationKeys: openpgp.PublicKey[]
+  ): Promise<{ data: Uint8Array; verified: number; verificationErrors?: Error[] }>;
+  decryptArmoredAndVerifyDetached(
+    armoredData: string,
+    armoredSignature: string,
+    sessionKey: SessionKey,
+    verificationKeys: openpgp.PublicKey[]
+  ): Promise<{ data: Uint8Array; verified: number; verificationErrors?: Error[] }>;
+  decryptAndVerify(
+    encryptedData: Uint8Array,
+    sessionKey: SessionKey,
+    verificationKeys: openpgp.PublicKey[]
+  ): Promise<{ data: Uint8Array; verified: number; verificationErrors?: Error[] }>;
+
+  // Signing operations
+  sign(
+    data: Uint8Array,
+    signingKey: openpgp.PrivateKey | openpgp.PrivateKey[],
+    context?: string
+  ): Promise<{ signature: Uint8Array }>;
+  signArmored(
+    data: Uint8Array,
+    signingKey: openpgp.PrivateKey | openpgp.PrivateKey[]
+  ): Promise<{ signature: string }>;
+
+  // Verification operations
+  verifyArmored(
+    data: Uint8Array,
+    armoredSignature: string,
+    verificationKeys: openpgp.PublicKey[],
+    context?: string
+  ): Promise<{ verified: number; verificationErrors?: Error[] }>;
 }
 
 // ============================================================================
@@ -384,16 +468,35 @@ function createOpenPGPCrypto(): OpenPGPCryptoInterface {
   }
 
   return {
+    // ========================================================================
+    // Key and passphrase generation
+    // ========================================================================
+
     generatePassphrase(): string {
       const bytes = crypto.getRandomValues(new Uint8Array(32));
       return base64Encode(bytes);
     },
 
-    async generateSessionKey(encryptionKeys: openpgp.PrivateKey[]): Promise<SessionKey> {
+    async generateKey(passphrase: string): Promise<openpgp.PrivateKey> {
+      const { privateKey } = await openpgp.generateKey({
+        type: 'ecc',
+        curve: 'curve25519Legacy',
+        userIDs: [{ name: 'Proton Drive', email: 'drive@proton.me' }],
+        passphrase,
+        format: 'object',
+      });
+      return privateKey;
+    },
+
+    async generateSessionKey(encryptionKeys: openpgp.PublicKey[]): Promise<SessionKey> {
       return (await openpgp.generateSessionKey({
         encryptionKeys: toArray(encryptionKeys),
       })) as SessionKey;
     },
+
+    // ========================================================================
+    // Session key operations
+    // ========================================================================
 
     async encryptSessionKey(
       sessionKey: SessionKey,
@@ -408,9 +511,372 @@ function createOpenPGPCrypto(): OpenPGPCryptoInterface {
       return { keyPacket: result as Uint8Array };
     },
 
+    async encryptSessionKeyWithPassword(
+      sessionKey: SessionKey,
+      password: string
+    ): Promise<Uint8Array> {
+      const result = await openpgp.encryptSessionKey({
+        data: sessionKey.data,
+        algorithm: sessionKey.algorithm,
+        passwords: [password],
+        format: 'binary',
+      });
+      return result as Uint8Array;
+    },
+
+    async decryptSessionKey(
+      keyPacket: Uint8Array,
+      decryptionKeys: openpgp.PrivateKey | openpgp.PrivateKey[]
+    ): Promise<SessionKey> {
+      const message = await openpgp.readMessage({ binaryMessage: keyPacket });
+      const result = await openpgp.decryptSessionKeys({
+        message,
+        decryptionKeys: toArray(decryptionKeys),
+      });
+      if (!result || result.length === 0) {
+        throw new Error('Could not decrypt session key');
+      }
+      return result[0] as SessionKey;
+    },
+
+    async decryptArmoredSessionKey(
+      armoredData: string,
+      decryptionKeys: openpgp.PrivateKey | openpgp.PrivateKey[]
+    ): Promise<SessionKey> {
+      const message = await openpgp.readMessage({ armoredMessage: armoredData });
+      const result = await openpgp.decryptSessionKeys({
+        message,
+        decryptionKeys: toArray(decryptionKeys),
+      });
+
+      if (!result || result.length === 0) {
+        throw new Error('Could not decrypt session key');
+      }
+
+      return result[0] as SessionKey;
+    },
+
+    // ========================================================================
+    // Key decryption
+    // ========================================================================
+
     async decryptKey(armoredKey: string, passphrase: string): Promise<openpgp.PrivateKey> {
       const privateKey = await openpgp.readPrivateKey({ armoredKey });
       return openpgp.decryptKey({ privateKey, passphrase });
+    },
+
+    // ========================================================================
+    // Encryption operations
+    // ========================================================================
+
+    async encryptArmored(
+      data: Uint8Array,
+      encryptionKeys: openpgp.PublicKey[],
+      sessionKey?: SessionKey
+    ): Promise<{ armoredData: string }> {
+      const message = await openpgp.createMessage({ binary: data });
+      const encrypted = await openpgp.encrypt({
+        message,
+        encryptionKeys,
+        sessionKey: sessionKey
+          ? {
+              data: sessionKey.data,
+              algorithm: sessionKey.algorithm,
+            }
+          : undefined,
+        format: 'armored',
+      });
+      return { armoredData: encrypted as string };
+    },
+
+    async encryptAndSignArmored(
+      data: Uint8Array,
+      sessionKey: SessionKey | undefined,
+      encryptionKeys: openpgp.PublicKey[],
+      signingKey: openpgp.PrivateKey
+    ): Promise<{ armoredData: string }> {
+      const message = await openpgp.createMessage({ binary: data });
+      const encrypted = await openpgp.encrypt({
+        message,
+        encryptionKeys,
+        signingKeys: [signingKey],
+        sessionKey: sessionKey
+          ? {
+              data: sessionKey.data,
+              algorithm: sessionKey.algorithm,
+            }
+          : undefined,
+        format: 'armored',
+      });
+      return { armoredData: encrypted as string };
+    },
+
+    async encryptAndSign(
+      data: Uint8Array,
+      sessionKey: SessionKey,
+      encryptionKeys: openpgp.PublicKey[],
+      signingKey: openpgp.PrivateKey
+    ): Promise<{ encryptedData: Uint8Array }> {
+      const message = await openpgp.createMessage({ binary: data });
+      const encrypted = await openpgp.encrypt({
+        message,
+        encryptionKeys,
+        signingKeys: [signingKey],
+        sessionKey: {
+          data: sessionKey.data,
+          algorithm: sessionKey.algorithm,
+        },
+        format: 'binary',
+      });
+      return { encryptedData: encrypted as Uint8Array };
+    },
+
+    async encryptAndSignDetached(
+      data: Uint8Array,
+      sessionKey: SessionKey,
+      encryptionKeys: openpgp.PublicKey[],
+      signingKey: openpgp.PrivateKey
+    ): Promise<{ encryptedData: Uint8Array; signature: Uint8Array }> {
+      const message = await openpgp.createMessage({ binary: data });
+      const [encrypted, signature] = await Promise.all([
+        openpgp.encrypt({
+          message,
+          encryptionKeys,
+          sessionKey: {
+            data: sessionKey.data,
+            algorithm: sessionKey.algorithm,
+          },
+          format: 'binary',
+        }),
+        openpgp.sign({
+          message,
+          signingKeys: [signingKey],
+          format: 'binary',
+          detached: true,
+        }),
+      ]);
+      return { encryptedData: encrypted as Uint8Array, signature: signature as Uint8Array };
+    },
+
+    async encryptAndSignDetachedArmored(
+      data: Uint8Array,
+      sessionKey: SessionKey | undefined,
+      encryptionKeys: openpgp.PublicKey[],
+      signingKey: openpgp.PrivateKey
+    ): Promise<{ armoredData: string; armoredSignature: string }> {
+      const message = await openpgp.createMessage({ binary: data });
+      const [encrypted, signature] = await Promise.all([
+        openpgp.encrypt({
+          message,
+          encryptionKeys,
+          sessionKey: sessionKey
+            ? {
+                data: sessionKey.data,
+                algorithm: sessionKey.algorithm,
+              }
+            : undefined,
+          format: 'armored',
+        }),
+        openpgp.sign({
+          message,
+          signingKeys: [signingKey],
+          format: 'armored',
+          detached: true,
+        }),
+      ]);
+      return { armoredData: encrypted as string, armoredSignature: signature as string };
+    },
+
+    // ========================================================================
+    // Decryption operations
+    // ========================================================================
+
+    async decryptArmored(
+      armoredData: string,
+      decryptionKeys: openpgp.PrivateKey[]
+    ): Promise<Uint8Array> {
+      const message = await openpgp.readMessage({ armoredMessage: armoredData });
+      const { data } = await openpgp.decrypt({
+        message,
+        decryptionKeys,
+        format: 'binary',
+      });
+      return data as Uint8Array;
+    },
+
+    async decryptArmoredWithPassword(armoredData: string, password: string): Promise<Uint8Array> {
+      const message = await openpgp.readMessage({ armoredMessage: armoredData });
+      const { data } = await openpgp.decrypt({
+        message,
+        passwords: [password],
+        format: 'binary',
+      });
+      return data as Uint8Array;
+    },
+
+    async decryptArmoredAndVerify(
+      armoredData: string,
+      decryptionKeys: openpgp.PrivateKey[],
+      verificationKeys: openpgp.PublicKey[]
+    ): Promise<{ data: Uint8Array; verified: number; verificationErrors?: Error[] }> {
+      const message = await openpgp.readMessage({ armoredMessage: armoredData });
+      const result = await openpgp.decrypt({
+        message,
+        decryptionKeys,
+        verificationKeys: verificationKeys.length > 0 ? verificationKeys : undefined,
+        format: 'binary',
+      });
+
+      let verified = 0;
+      if (result.signatures?.length > 0) {
+        const sigVerified = await result.signatures[0].verified.catch(() => false);
+        verified = sigVerified ? 1 : 0;
+      }
+
+      return {
+        data: result.data as Uint8Array,
+        verified,
+        verificationErrors: verified ? undefined : [new Error('Signature verification failed')],
+      };
+    },
+
+    async decryptArmoredAndVerifyDetached(
+      armoredData: string,
+      armoredSignature: string,
+      sessionKey: SessionKey,
+      verificationKeys: openpgp.PublicKey[]
+    ): Promise<{ data: Uint8Array; verified: number; verificationErrors?: Error[] }> {
+      // Decrypt without verification first
+      const message = await openpgp.readMessage({ armoredMessage: armoredData });
+      const result = await openpgp.decrypt({
+        message,
+        sessionKeys: [
+          {
+            data: sessionKey.data,
+            algorithm: sessionKey.algorithm,
+          },
+        ],
+        format: 'binary',
+      });
+
+      // Then verify signature separately if provided
+      let verified = 0;
+      let verificationErrors: Error[] | undefined;
+      if (armoredSignature && verificationKeys.length > 0) {
+        try {
+          const signature = await openpgp.readSignature({ armoredSignature });
+          const verifyResult = await openpgp.verify({
+            message: await openpgp.createMessage({ binary: result.data as Uint8Array }),
+            signature,
+            verificationKeys,
+          });
+          const sigVerified = await verifyResult.signatures[0]?.verified.catch(() => false);
+          verified = sigVerified ? 1 : 0;
+        } catch (error) {
+          verified = 0;
+          verificationErrors = [error as Error];
+        }
+      }
+
+      return {
+        data: result.data as Uint8Array,
+        verified,
+        verificationErrors,
+      };
+    },
+
+    async decryptAndVerify(
+      encryptedData: Uint8Array,
+      sessionKey: SessionKey,
+      verificationKeys: openpgp.PublicKey[]
+    ): Promise<{ data: Uint8Array; verified: number; verificationErrors?: Error[] }> {
+      const message = await openpgp.readMessage({ binaryMessage: encryptedData });
+      const result = await openpgp.decrypt({
+        message,
+        sessionKeys: [
+          {
+            data: sessionKey.data,
+            algorithm: sessionKey.algorithm,
+          },
+        ],
+        verificationKeys: verificationKeys.length > 0 ? verificationKeys : undefined,
+        format: 'binary',
+      });
+
+      let verified = 0;
+      if (result.signatures?.length > 0) {
+        const sigVerified = await result.signatures[0].verified.catch(() => false);
+        verified = sigVerified ? 1 : 0;
+      }
+
+      return {
+        data: result.data as Uint8Array,
+        verified,
+        verificationErrors: verified ? undefined : [new Error('Signature verification failed')],
+      };
+    },
+
+    // ========================================================================
+    // Signing operations
+    // ========================================================================
+
+    async sign(
+      data: Uint8Array,
+      signingKey: openpgp.PrivateKey | openpgp.PrivateKey[],
+      _context?: string
+    ): Promise<{ signature: Uint8Array }> {
+      const message = await openpgp.createMessage({ binary: data });
+      const signature = await openpgp.sign({
+        message,
+        signingKeys: toArray(signingKey),
+        format: 'binary',
+        detached: true,
+        // context: context ? { value: context, critical: true } : undefined,
+      });
+      return { signature: signature as Uint8Array };
+    },
+
+    async signArmored(
+      data: Uint8Array,
+      signingKey: openpgp.PrivateKey | openpgp.PrivateKey[]
+    ): Promise<{ signature: string }> {
+      const message = await openpgp.createMessage({ binary: data });
+      const signature = await openpgp.sign({
+        message,
+        signingKeys: toArray(signingKey),
+        format: 'armored',
+        detached: true,
+      });
+      return { signature: signature as string };
+    },
+
+    // ========================================================================
+    // Verification operations
+    // ========================================================================
+
+    async verifyArmored(
+      data: Uint8Array,
+      armoredSignature: string,
+      verificationKeys: openpgp.PublicKey[],
+      _context?: string
+    ): Promise<{ verified: number; verificationErrors?: Error[] }> {
+      const [message, signature] = await Promise.all([
+        openpgp.createMessage({ binary: data }),
+        openpgp.readSignature({ armoredSignature }),
+      ]);
+
+      const result = await openpgp.verify({
+        message,
+        signature,
+        verificationKeys,
+        // context: context ? { value: context, critical: true } : undefined,
+      });
+
+      const verified = (await result.signatures?.[0]?.verified) ? 1 : 0;
+      return {
+        verified,
+        verificationErrors: verified ? undefined : [new Error('Signature verification failed')],
+      };
     },
   };
 }
