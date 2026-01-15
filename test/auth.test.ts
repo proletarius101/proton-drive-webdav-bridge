@@ -191,6 +191,75 @@ describe('ProtonAuth - Session Restoration', () => {
 
     await expect(auth.restoreSession(credentials)).rejects.toThrow('Failed to restore session');
   });
+
+  test('restoreSession should properly set UserID from credentials', async () => {
+    // Regression test: Previously, UserID wasn't being extracted from stored credentials
+    // during session restoration, causing "No user ID available" error when calling
+    // getReusableCredentials() after restoring a session.
+    // This test verifies that UserID is properly set on both session and parentSession.
+    
+    // Mock successful API responses
+    global.fetch = mock(async (url: string) => {
+      const urlStr = url.toString();
+      
+      if (urlStr.includes('/users')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            Code: 1000,
+            User: {
+              ID: 'user-123',
+              Name: 'test@proton.me',
+              Keys: [],
+            },
+          }),
+        };
+      }
+      
+      if (urlStr.includes('/addresses')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            Code: 1000,
+            Addresses: [],
+          }),
+        };
+      }
+      
+      return {
+        ok: false,
+        status: 404,
+        json: async () => ({ Code: 404, Error: 'Not found' }),
+      };
+    }) as unknown as typeof fetch;
+
+    const auth = new ProtonAuth();
+    const credentials = {
+      parentUID: 'parent-uid',
+      parentAccessToken: 'valid-token',
+      parentRefreshToken: 'valid-refresh',
+      childUID: 'child-uid',
+      childAccessToken: 'valid-child-token',
+      childRefreshToken: 'valid-child-refresh',
+      SaltedKeyPass: 'test-key-pass',
+      UserID: 'user-123',
+      passwordMode: 1 as const,
+    };
+
+    const session = await auth.restoreSession(credentials);
+
+    // Verify UserID is set on the session
+    expect(session.UserID).toBe('user-123');
+    
+    // Verify getReusableCredentials doesn't throw "No user ID available" error
+    expect(() => auth.getReusableCredentials()).not.toThrow('No user ID available');
+    
+    // Verify the returned credentials include UserID
+    const reusableCreds = auth.getReusableCredentials();
+    expect(reusableCreds.UserID).toBe('user-123');
+  });
 });
 
 describe('ProtonAuth - Logout', () => {
