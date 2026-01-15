@@ -1065,6 +1065,22 @@ export class ProtonAuth {
     };
 
     try {
+      // Proactively refresh parent session tokens before making API calls
+      // This prevents failures when resuming sessions with expired tokens
+      try {
+        await this.refreshParentToken();
+      } catch (error) {
+        // If parent refresh fails, try to fork a new child session instead
+        if (this.isInvalidRefreshTokenError(error)) {
+          logger.info(
+            'Parent session refresh token expired during restore, forking new session...'
+          );
+          await this.forkNewChildSession();
+        } else {
+          throw error;
+        }
+      }
+
       const userResponse = await this.apiRequestWithRefresh<ApiResponse & { User: User }>(
         'GET',
         'core/v4/users'
@@ -1153,6 +1169,25 @@ export class ProtonAuth {
       return error.message.includes('INVALID_REFRESH_TOKEN');
     }
     return false;
+  }
+
+  private async refreshParentToken(): Promise<void> {
+    if (!this.parentSession?.RefreshToken) {
+      throw new Error('No parent refresh token available');
+    }
+    try {
+      const tokens = await this._refreshSessionTokens(
+        this.parentSession.UID,
+        this.parentSession.RefreshToken
+      );
+      this.parentSession.AccessToken = tokens.accessToken;
+      this.parentSession.RefreshToken = tokens.refreshToken;
+    } catch (error) {
+      if (this.isInvalidRefreshTokenError(error)) {
+        throw new Error('Parent session expired - re-authentication required');
+      }
+      throw error;
+    }
   }
 
   private async attemptForkRecovery(): Promise<Session> {
@@ -1382,7 +1417,11 @@ export async function authenticateAndStore(
   await storeCredentials(storedCreds);
   logger.info(`Credentials stored for ${username}`);
 
-  return auth.getSession()!;
+  const session = auth.getSession();
+  if (!session) {
+    throw new Error('Failed to complete authentication');
+  }
+  return session;
 }
 
 /**
