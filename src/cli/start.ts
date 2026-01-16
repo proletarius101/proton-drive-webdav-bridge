@@ -28,7 +28,7 @@ export function registerStartCommand(program: Command): void {
       try {
         // Check if already logged in
         if (!(await hasStoredCredentials())) {
-          console.error('✗ Not logged in. Run "proton-drive-bridge auth login" first.');
+          console.error('✗ Not logged in. Run "proton-drive-webdav-bridge auth login" first.');
           process.exit(1);
         }
 
@@ -36,7 +36,7 @@ export function registerStartCommand(program: Command): void {
         const existingPid = readPidFile();
         if (existingPid && isProcessRunning(existingPid)) {
           console.error(`✗ Server already running (PID: ${existingPid})`);
-          console.error('Use "proton-drive-bridge stop" to stop it first.');
+          console.error('Use "proton-drive-webdav-bridge stop" to stop it first.');
           process.exit(1);
         }
 
@@ -130,8 +130,8 @@ async function spawnDaemon(options: Record<string, unknown>): Promise<void> {
   const pidFromFile = readPidFile();
   if (pidFromFile && isProcessRunning(pidFromFile)) {
     console.log(`✓ Server started in background (PID: ${pidFromFile})`);
-    console.log('Use "proton-drive-bridge status" to check server status.');
-    console.log('Use "proton-drive-bridge stop" to stop the server.');
+    console.log('Use "proton-drive-webdav-bridge status" to check server status.');
+    console.log('Use "proton-drive-webdav-bridge stop" to stop the server.');
   } else {
     console.error('✗ Failed to start daemon. Check logs for details.');
     process.exit(1);

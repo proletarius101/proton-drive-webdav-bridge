@@ -15,11 +15,11 @@ let pathsBase = DEFAULT_PATHS_BASE;
 
 mock.module('env-paths', () => ({
   default: () => ({
-    config: join(pathsBase, 'config', 'proton-drive-bridge'),
-    data: join(pathsBase, 'data', 'proton-drive-bridge'),
-    log: join(pathsBase, 'log', 'proton-drive-bridge'),
-    temp: join(pathsBase, 'temp', 'proton-drive-bridge'),
-    cache: join(pathsBase, 'cache', 'proton-drive-bridge'),
+    config: join(pathsBase, 'config', 'proton-drive-webdav-bridge'),
+    data: join(pathsBase, 'data', 'proton-drive-webdav-bridge'),
+    log: join(pathsBase, 'log', 'proton-drive-webdav-bridge'),
+    temp: join(pathsBase, 'temp', 'proton-drive-webdav-bridge'),
+    cache: join(pathsBase, 'cache', 'proton-drive-webdav-bridge'),
   }),
 }));
 

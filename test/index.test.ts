@@ -11,7 +11,7 @@
 import { describe, test, expect } from 'bun:test';
 
 describe('CLI Entry Point - Program Structure', () => {
-  test('should have program name proton-drive-bridge', async () => {
+  test('should have program name proton-drive-webdav-bridge', async () => {
     // The index.ts sets up the commander program
     // We test it by checking if the module imports successfully
     const indexModule = await import('../src/index.js');

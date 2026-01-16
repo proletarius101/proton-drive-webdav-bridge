@@ -1,16 +1,16 @@
 {
-  "name": "proton-drive-bridge",
+  "name": "proton-drive-webdav-bridge",
   "version": "0.1.0",
   "description": "WebDAV bridge for Proton Drive - access your Proton Drive files via WebDAV protocol",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "proton-drive-bridge": "./dist/index.js"
+    "proton-drive-webdav-bridge": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc",
     "build:check": "tsc --noEmit",
-    "build:bin": "bun build --target=bun --compile --minify ./src/index.ts --outfile ./dist/proton-drive-bridge",
+    "build:bin": "bun build --target=bun --compile --minify ./src/index.ts --outfile ./dist/proton-drive-webdav-bridge",
     "start": "bun run src/index.ts",
     "dev": "bun --watch run src/index.ts",
     "lint": "eslint 'src/**/*.ts'",

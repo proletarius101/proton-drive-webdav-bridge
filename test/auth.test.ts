@@ -30,11 +30,11 @@ let pathsBase: string = join(tmpdir(), 'pdb-auth-default');
 
 mock.module('env-paths', () => ({
   default: () => ({
-    config: mkdirSync(join(pathsBase, 'config', 'proton-drive-bridge'), { recursive: true }),
-    data: mkdirSync(join(pathsBase, 'data', 'proton-drive-bridge'), { recursive: true }),
-    log: mkdirSync(join(pathsBase, 'log', 'proton-drive-bridge'), { recursive: true }),
-    temp: mkdirSync(join(pathsBase, 'temp', 'proton-drive-bridge'), { recursive: true }),
-    cache: mkdirSync(join(pathsBase, 'cache', 'proton-drive-bridge'), { recursive: true }),
+    config: mkdirSync(join(pathsBase, 'config', 'proton-drive-webdav-bridge'), { recursive: true }),
+    data: mkdirSync(join(pathsBase, 'data', 'proton-drive-webdav-bridge'), { recursive: true }),
+    log: mkdirSync(join(pathsBase, 'log', 'proton-drive-webdav-bridge'), { recursive: true }),
+    temp: mkdirSync(join(pathsBase, 'temp', 'proton-drive-webdav-bridge'), { recursive: true }),
+    cache: mkdirSync(join(pathsBase, 'cache', 'proton-drive-webdav-bridge'), { recursive: true }),
   }),
 }));
 

@@ -19,8 +19,8 @@ An unofficial WebDAV bridge for Proton Drive, allowing you to access your Proton
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/proton-drive-bridge.git
-cd proton-drive-bridge
+git clone https://github.com/yourusername/proton-drive-webdav-bridge.git
+cd proton-drive-webdav-bridge
 
 # Install dependencies
 bun install
@@ -51,7 +51,7 @@ sudo pacman -S libsecret
 1. **Login to your Proton account:**
 
    ```bash
-   proton-drive-bridge auth login
+   proton-drive-webdav-bridge auth login
    ```
 
    Enter your Proton credentials (supports 2FA and two-password mode).
@@ -59,7 +59,7 @@ sudo pacman -S libsecret
 2. **Start the WebDAV server:**
 
    ```bash
-   proton-drive-bridge start
+   proton-drive-webdav-bridge start
    ```
 
 3. **Connect with your file manager:**
@@ -74,73 +74,73 @@ sudo pacman -S libsecret
 
 ```bash
 # Login to Proton account
-proton-drive-bridge auth login
+proton-drive-webdav-bridge auth login
 
 # Check authentication status
-proton-drive-bridge auth status
+proton-drive-webdav-bridge auth status
 
 # Logout and remove credentials
-proton-drive-bridge auth logout
+proton-drive-webdav-bridge auth logout
 ```
 
 ### Server Management
 
 ```bash
 # Start WebDAV server
-proton-drive-bridge start
+proton-drive-webdav-bridge start
 
 # Start in background (daemon mode)
-proton-drive-bridge start --daemon
+proton-drive-webdav-bridge start --daemon
 
 # Start with custom port
-proton-drive-bridge start --port 9000
+proton-drive-webdav-bridge start --port 9000
 
 # Stop the server
-proton-drive-bridge stop
+proton-drive-webdav-bridge stop
 
 # Force stop
-proton-drive-bridge stop --force
+proton-drive-webdav-bridge stop --force
 
 # Check server status
-proton-drive-bridge status
+proton-drive-webdav-bridge status
 
 # Status as JSON
-proton-drive-bridge status --json
+proton-drive-webdav-bridge status --json
 ```
 
 ### Configuration
 
 ```bash
 # Show current configuration
-proton-drive-bridge config show
+proton-drive-webdav-bridge config show
 
 # Interactive configuration wizard
-proton-drive-bridge config setup
+proton-drive-webdav-bridge config setup
 
 # Set individual values
-proton-drive-bridge config set webdav.port 9000
-proton-drive-bridge config set webdav.host 0.0.0.0
-proton-drive-bridge config set webdav.requireAuth true
-proton-drive-bridge config set debug true
+proton-drive-webdav-bridge config set webdav.port 9000
+proton-drive-webdav-bridge config set webdav.host 0.0.0.0
+proton-drive-webdav-bridge config set webdav.requireAuth true
+proton-drive-webdav-bridge config set debug true
 
 # Reset to defaults
-proton-drive-bridge config reset
+proton-drive-webdav-bridge config reset
 ```
 
 ### Global Options
 
 ```bash
 # Enable debug logging
-proton-drive-bridge --debug <command>
+proton-drive-webdav-bridge --debug <command>
 ```
 
 ## Configuration
 
 Configuration is stored in:
 
-- **Linux**: `~/.config/proton-drive-bridge/config.json`
-- **macOS**: `~/Library/Application Support/proton-drive-bridge/config.json`
-- **Windows**: `%APPDATA%/proton-drive-bridge/config.json`
+- **Linux**: `~/.config/proton-drive-webdav-bridge/config.json`
+- **macOS**: `~/Library/Application Support/proton-drive-webdav-bridge/config.json`
+- **Windows**: `%APPDATA%/proton-drive-webdav-bridge/config.json`
 
 ### Configuration Options
 
@@ -196,7 +196,7 @@ On headless Linux systems without a graphical keychain, an encrypted fallback fi
 ## Architecture
 
 ```
-proton-drive-bridge/
+proton-drive-webdav-bridge/
 ├── src/
 │   ├── index.ts          # CLI entry point
 │   ├── auth.ts           # Proton SRP authentication
@@ -257,16 +257,16 @@ gnome-keyring-daemon --start --components=secrets
 If you see session-related errors, try logging in again:
 
 ```bash
-proton-drive-bridge auth logout
-proton-drive-bridge auth login
+proton-drive-webdav-bridge auth logout
+proton-drive-webdav-bridge auth login
 ```
 
 ### WebDAV connection issues
 
-1. Check the server is running: `proton-drive-bridge status`
+1. Check the server is running: `proton-drive-webdav-bridge status`
 2. Verify the port is not blocked by firewall
 3. For macOS/Windows, try different WebDAV paths in the URL
-4. Enable debug mode: `proton-drive-bridge --debug start`
+4. Enable debug mode: `proton-drive-webdav-bridge --debug start`
 
 ## License
 

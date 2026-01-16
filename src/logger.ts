@@ -59,7 +59,7 @@ const consoleTransport = new winston.transports.Console({
 
 const fileTransport = new DailyRotateFile({
   dirname: LOG_DIR,
-  filename: 'proton-drive-bridge-%DATE%.log',
+  filename: 'proton-drive-webdav-bridge-%DATE%.log',
   datePattern: 'YYYY-MM-DD',
   maxSize: '20m',
   maxFiles: '14d',
@@ -69,7 +69,7 @@ const fileTransport = new DailyRotateFile({
 
 const errorFileTransport = new DailyRotateFile({
   dirname: LOG_DIR,
-  filename: 'proton-drive-bridge-error-%DATE%.log',
+  filename: 'proton-drive-webdav-bridge-error-%DATE%.log',
   datePattern: 'YYYY-MM-DD',
   maxSize: '20m',
   maxFiles: '30d',
@@ -113,7 +113,7 @@ export function isDebugMode(): boolean {
  */
 export function getLogFilePath(): string {
   const date = new Date().toISOString().split('T')[0];
-  return join(LOG_DIR, `proton-drive-bridge-${date}.log`);
+  return join(LOG_DIR, `proton-drive-webdav-bridge-${date}.log`);
 }
 
 export default logger;

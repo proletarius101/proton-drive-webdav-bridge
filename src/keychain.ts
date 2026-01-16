@@ -24,9 +24,9 @@ import { getCredentialsFilePath } from './paths.js';
 // Constants
 // ============================================================================
 
-const SERVICE_NAME = 'proton-drive-bridge';
-const ACCOUNT_NAME = 'proton-drive-bridge:credentials';
-const DEFAULT_KEYRING_PASSWORD = 'proton-drive-bridge-default';
+const SERVICE_NAME = 'proton-drive-webdav-bridge';
+const ACCOUNT_NAME = 'proton-drive-webdav-bridge:credentials';
+const DEFAULT_KEYRING_PASSWORD = 'proton-drive-webdav-bridge-default';
 
 // Encryption constants
 const SALT_LENGTH = 32;

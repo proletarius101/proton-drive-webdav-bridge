@@ -16,11 +16,11 @@ const loadPaths = async () =>
 
 mock.module('env-paths', () => ({
   default: () => ({
-    config: join(tempBase, 'config', 'proton-drive-bridge'),
-    data: join(tempBase, 'data', 'proton-drive-bridge'),
-    log: join(tempBase, 'log', 'proton-drive-bridge'),
-    temp: join(tempBase, 'temp', 'proton-drive-bridge'),
-    cache: join(tempBase, 'cache', 'proton-drive-bridge'),
+    config: join(tempBase, 'config', 'proton-drive-webdav-bridge'),
+    data: join(tempBase, 'data', 'proton-drive-webdav-bridge'),
+    log: join(tempBase, 'log', 'proton-drive-webdav-bridge'),
+    temp: join(tempBase, 'temp', 'proton-drive-webdav-bridge'),
+    cache: join(tempBase, 'cache', 'proton-drive-webdav-bridge'),
   }),
 }));
 
@@ -202,15 +202,15 @@ describe('Paths - Platform Compliance', () => {
     rmSync(tempBase, { recursive: true, force: true });
   });
 
-  test('paths should contain app name proton-drive-bridge', async () => {
+  test('paths should contain app name proton-drive-webdav-bridge', async () => {
     const { getConfigDir, getDataDir, getLogDir } = await loadPaths();
     const configDir = getConfigDir();
     const dataDir = getDataDir();
     const logDir = getLogDir();
 
-    expect(configDir).toContain('proton-drive-bridge');
-    expect(dataDir).toContain('proton-drive-bridge');
-    expect(logDir).toContain('proton-drive-bridge');
+    expect(configDir).toContain('proton-drive-webdav-bridge');
+    expect(dataDir).toContain('proton-drive-webdav-bridge');
+    expect(logDir).toContain('proton-drive-webdav-bridge');
   });
 
   test('config and data paths should respect XDG on Linux', async () => {

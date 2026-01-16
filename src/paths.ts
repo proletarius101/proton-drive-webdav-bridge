@@ -22,9 +22,9 @@ const ensureDir = (dirPath: string): string => {
 
 /**
  * Get the configuration directory path.
- * - Linux: ~/.config/proton-drive-bridge
- * - macOS: ~/Library/Application Support/proton-drive-bridge
- * - Windows: %APPDATA%/proton-drive-bridge
+ * - Linux: ~/.config/proton-drive-webdav-bridge
+ * - macOS: ~/Library/Application Support/proton-drive-webdav-bridge
+ * - Windows: %APPDATA%/proton-drive-webdav-bridge
  */
 export function getConfigDir(): string {
   return ensureDir(paths.config);
@@ -32,9 +32,9 @@ export function getConfigDir(): string {
 
 /**
  * Get the data directory path (for databases, cache, etc.)
- * - Linux: ~/.local/share/proton-drive-bridge
- * - macOS: ~/Library/Application Support/proton-drive-bridge
- * - Windows: %LOCALAPPDATA%/proton-drive-bridge
+ * - Linux: ~/.local/share/proton-drive-webdav-bridge
+ * - macOS: ~/Library/Application Support/proton-drive-webdav-bridge
+ * - Windows: %LOCALAPPDATA%/proton-drive-webdav-bridge
  */
 export function getDataDir(): string {
   return ensureDir(paths.data);
@@ -42,9 +42,9 @@ export function getDataDir(): string {
 
 /**
  * Get the log directory path.
- * - Linux: ~/.local/state/proton-drive-bridge/logs
- * - macOS: ~/Library/Logs/proton-drive-bridge
- * - Windows: %LOCALAPPDATA%/proton-drive-bridge/logs
+ * - Linux: ~/.local/state/proton-drive-webdav-bridge/logs
+ * - macOS: ~/Library/Logs/proton-drive-webdav-bridge
+ * - Windows: %LOCALAPPDATA%/proton-drive-webdav-bridge/logs
  */
 export function getLogDir(): string {
   return ensureDir(paths.log);
@@ -52,9 +52,9 @@ export function getLogDir(): string {
 
 /**
  * Get the runtime directory (for sockets, PID files, etc.)
- * - Linux: /run/user/$UID/proton-drive-bridge or /tmp/proton-drive-bridge-$UID
- * - macOS: /tmp/proton-drive-bridge-$UID
- * - Windows: %TEMP%/proton-drive-bridge
+ * - Linux: /run/user/$UID/proton-drive-webdav-bridge or /tmp/proton-drive-webdav-bridge-$UID
+ * - macOS: /tmp/proton-drive-webdav-bridge-$UID
+ * - Windows: %TEMP%/proton-drive-webdav-bridge
  */
 export function getRuntimeDir(): string {
   const baseRuntime = join(paths.temp, APP_NAME);

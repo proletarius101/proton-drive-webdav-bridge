@@ -20,7 +20,7 @@ loadConfig();
 
 // Program setup
 program
-  .name('proton-drive-bridge')
+  .name('proton-drive-webdav-bridge')
   .description('WebDAV bridge for Proton Drive - access your files via WebDAV protocol')
   .version('0.1.0')
   .option('--debug', 'Enable debug logging')
