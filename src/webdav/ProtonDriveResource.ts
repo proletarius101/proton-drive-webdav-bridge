@@ -14,7 +14,7 @@ import {
   ForbiddenError,
   ResourceNotFoundError,
 } from 'nephele';
-import { driveClient, type DriveNode } from '../drive.js';
+import { type DriveNode } from '../drive.js';
 import { logger } from '../logger.js';
 import type ProtonDriveAdapter from './ProtonDriveAdapter.js';
 import ProtonDriveLock from './ProtonDriveLock.js';
@@ -62,7 +62,7 @@ export default class ProtonDriveResource implements ResourceInterface {
     // Root folder
     if (this.path === '' || this.path === '/') {
       this._node = {
-        uid: driveClient.getRootFolderUid(),
+        uid: this.adapter.driveClient.getRootFolderUid(),
         name: '',
         type: 'folder',
         size: 0,
@@ -76,11 +76,11 @@ export default class ProtonDriveResource implements ResourceInterface {
 
     // Traverse path
     const parts = this.path.split('/').filter((p) => p.length > 0);
-    let currentUid = driveClient.getRootFolderUid();
+    let currentUid = this.adapter.driveClient.getRootFolderUid();
     let currentNode: DriveNode | null = null;
 
     for (const part of parts) {
-      const nodes = await driveClient.listFolder(currentUid);
+      const nodes = await this.adapter.driveClient.listFolder(currentUid);
       currentNode = nodes.find((n) => n.name === part) || null;
 
       if (!currentNode) {
@@ -246,7 +246,7 @@ export default class ProtonDriveResource implements ResourceInterface {
       return Readable.from([]);
     }
 
-    const data = await driveClient.downloadFile(node.uid);
+    const data = await this.adapter.driveClient.downloadFile(node.uid);
 
     if (data instanceof ReadableStream) {
       return Readable.fromWeb(data as ReadableStream);
@@ -274,7 +274,7 @@ export default class ProtonDriveResource implements ResourceInterface {
 
       if (!parentNode || parentNode.type !== 'folder') {
         throw new ResourceTreeNotCompleteError(
-          'One or more intermediate collections must be created before this resource.'
+          'One or more intermediate collections must be created before this resource (missing parent directory or incomplete tree).'
         );
       }
 
@@ -283,7 +283,7 @@ export default class ProtonDriveResource implements ResourceInterface {
       }
 
       // Upload file
-      await driveClient.uploadFile(
+      await this.adapter.driveClient.uploadFile(
         parentNode.uid,
         name,
         Readable.toWeb(input) as ReadableStream,
@@ -321,16 +321,16 @@ export default class ProtonDriveResource implements ResourceInterface {
 
       if (!parentNode || parentNode.type !== 'folder') {
         throw new ResourceTreeNotCompleteError(
-          'One or more intermediate collections must be created before this resource.'
+          'One or more intermediate collections must be created before this resource (missing parent directory or incomplete tree).'
         );
       }
 
       if (this.collection) {
-        await driveClient.createFolder(parentNode.uid, name);
+        await this.adapter.driveClient.createFolder(parentNode.uid, name);
       } else {
         // Create empty file
         const emptyStream = Readable.from([Buffer.from([])]);
-        await driveClient.uploadFile(
+        await this.adapter.driveClient.uploadFile(
           parentNode.uid,
           name,
           Readable.toWeb(emptyStream) as ReadableStream,
@@ -360,7 +360,7 @@ export default class ProtonDriveResource implements ResourceInterface {
     }
 
     logger.debug(`Deleting node uid=${node.uid} name=${node.name} path=${this.path}`);
-    await driveClient.deleteNode(node.uid);
+    await this.adapter.driveClient.deleteNode(node.uid);
     logger.debug(`Deleted node uid=${node.uid} path=${this.path}`);
 
     // Remove any locks on this resource
@@ -396,7 +396,7 @@ export default class ProtonDriveResource implements ResourceInterface {
     // Validate destination parent exists
     if (!(await this.resourceTreeExists(destPath))) {
       throw new ResourceTreeNotCompleteError(
-        'One or more intermediate collections must be created before this resource.'
+        'One or more intermediate collections must be created before this resource (missing parent directory or incomplete tree).'
       );
     }
 
@@ -442,15 +442,26 @@ export default class ProtonDriveResource implements ResourceInterface {
       await this.copyDirectory(node, destParentNode.uid, destName, user);
     } else {
       // Copy file
-      const fileData = await driveClient.downloadFile(node.uid);
-      await driveClient.uploadFile(
-        destParentNode.uid,
-        destName,
-        fileData instanceof ReadableStream
-          ? fileData
-          : (Readable.toWeb(Readable.from([fileData])) as ReadableStream),
-        { size: node.size }
-      );
+      const fileData = await this.adapter.driveClient.downloadFile(node.uid);
+      let uploadData: Buffer | Uint8Array | ReadableStream;
+
+      if (fileData instanceof ReadableStream) {
+        // Convert ReadableStream to Buffer for simpler upload semantics in tests & backends
+        const chunks: Buffer[] = [];
+        const reader = fileData.getReader();
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(Buffer.from(value));
+        }
+        uploadData = Buffer.concat(chunks);
+      } else {
+        uploadData = fileData as Buffer | Uint8Array;
+      }
+
+      await this.adapter.driveClient.uploadFile(destParentNode.uid, destName, uploadData, {
+        size: node.size,
+      });
     }
 
     logger.debug(`Copied ${this.path} to ${destPath}`);
@@ -463,16 +474,16 @@ export default class ProtonDriveResource implements ResourceInterface {
     user: User
   ): Promise<void> {
     // Create destination directory
-    const createdFolderUid = await driveClient.createFolder(destParentUid, destName);
+    const createdFolderUid = await this.adapter.driveClient.createFolder(destParentUid, destName);
 
     // Copy all children
-    const children = await driveClient.listFolder(sourceNode.uid);
+    const children = await this.adapter.driveClient.listFolder(sourceNode.uid);
     for (const child of children) {
       if (child.type === 'folder') {
         await this.copyDirectory(child, createdFolderUid, child.name, user);
       } else {
-        const fileData = await driveClient.downloadFile(child.uid);
-        await driveClient.uploadFile(
+        const fileData = await this.adapter.driveClient.downloadFile(child.uid);
+        await this.adapter.driveClient.uploadFile(
           createdFolderUid,
           child.name,
           fileData instanceof ReadableStream
@@ -515,7 +526,7 @@ export default class ProtonDriveResource implements ResourceInterface {
     // Validate destination tree exists
     if (!(await this.resourceTreeExists(destPath))) {
       throw new ResourceTreeNotCompleteError(
-        'One or more intermediate collections must be created before this resource.'
+        'One or more intermediate collections must be created before this resource (missing parent directory or incomplete tree).'
       );
     }
 
@@ -556,12 +567,12 @@ export default class ProtonDriveResource implements ResourceInterface {
     // Move to different folder if needed
     const currentParentPath = this.getParentPath();
     if (currentParentPath !== destParentPath) {
-      await driveClient.moveNode(node.uid, destParentNode.uid);
+      await this.adapter.driveClient.moveNode(node.uid, destParentNode.uid);
     }
 
     // Rename if needed
     if (node.name !== destName) {
-      await driveClient.renameNode(node.uid, destName);
+      await this.adapter.driveClient.renameNode(node.uid, destName);
     }
 
     logger.debug(`Moved ${this.path} to ${destPath}`);
@@ -651,7 +662,7 @@ export default class ProtonDriveResource implements ResourceInterface {
       return [];
     }
 
-    const children = await driveClient.listFolder(node.uid);
+    const children = await this.adapter.driveClient.listFolder(node.uid);
     return children.map((child) => {
       const childPath =
         this.path === '' || this.path === '/' ? `/${child.name}` : `${this.path}/${child.name}`;
@@ -699,7 +710,7 @@ export default class ProtonDriveResource implements ResourceInterface {
       return true;
     }
 
-    const children = await driveClient.listFolder(node.uid);
+    const children = await this.adapter.driveClient.listFolder(node.uid);
     return children.length === 0;
   }
 
@@ -711,15 +722,32 @@ export default class ProtonDriveResource implements ResourceInterface {
       return true; // Root always exists
     }
 
-    // Check that all parent directories exist
+    // Normalize paths to compare
+    const normalize = (p: string) =>
+      '/' +
+      p
+        .split('/')
+        .filter((x) => x.length > 0)
+        .join('/');
+    const normalizedPath = normalize(path);
+    const normalizedThis = normalize(this.path || '');
+
+    // Split parts once
     const parts = path.split('/').filter((p) => p.length > 0);
-    let currentUid = driveClient.getRootFolderUid();
 
     try {
+      // If the requested path is inside this resource's path, only verify this resource's path exists
+      if (normalizedThis !== '/' && normalizedPath.startsWith(normalizedThis)) {
+        const thisNode = await this.resolveNode();
+        return !!(thisNode && thisNode.type === 'folder');
+      }
+
+      let currentUid = this.adapter.driveClient.getRootFolderUid();
+
       // Validate all parents except the last part (the resource itself)
       for (let i = 0; i < parts.length - 1; i++) {
         const part = parts[i];
-        const nodes = await driveClient.listFolder(currentUid);
+        const nodes = await this.adapter.driveClient.listFolder(currentUid);
         const foundNode = nodes.find((n) => n.name === part);
 
         if (!foundNode || foundNode.type !== 'folder') {

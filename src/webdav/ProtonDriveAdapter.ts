@@ -15,6 +15,7 @@ import {
 } from 'nephele';
 import { logger } from '../logger.js';
 import ProtonDriveResource from './ProtonDriveResource.js';
+import { driveClient as globalDriveClient, type DriveClientManager } from '../drive.js';
 
 // ============================================================================
 // Adapter Configuration
@@ -23,6 +24,8 @@ import ProtonDriveResource from './ProtonDriveResource.js';
 export interface ProtonDriveAdapterConfig {
   /** TTL for cache entries in milliseconds (default: 60000) */
   cacheTTL?: number;
+  /** Optional drive client to use (injected for testing or custom clients) */
+  driveClient?: DriveClientManager;
 }
 
 // ============================================================================
@@ -34,9 +37,12 @@ export interface ProtonDriveAdapterConfig {
  */
 export default class ProtonDriveAdapter implements AdapterInterface {
   cacheTTL: number;
+  /** The Drive client instance used by resources. Defaults to the module singleton. */
+  driveClient: DriveClientManager;
 
-  constructor({ cacheTTL = 60000 }: ProtonDriveAdapterConfig = {}) {
+  constructor({ cacheTTL = 60000, driveClient }: ProtonDriveAdapterConfig = {}) {
     this.cacheTTL = cacheTTL;
+    this.driveClient = driveClient ?? globalDriveClient;
     logger.debug('ProtonDriveAdapter initialized');
   }
 
