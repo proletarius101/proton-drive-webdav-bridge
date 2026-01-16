@@ -316,6 +316,9 @@ export async function hasStoredCredentials(): Promise<boolean> {
   return creds !== null;
 }
 
+// Re-export getCredentialsFilePath for testing purposes
+export { getCredentialsFilePath };
+
 export default {
   storeCredentials,
   getStoredCredentials,

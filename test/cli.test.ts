@@ -58,6 +58,29 @@ mock.module('../src/auth.js', () => ({
     submit2FA = mockSubmit2FA;
     submitMailboxPassword = mockSubmitMailboxPassword;
     getReusableCredentials = mockGetReusableCredentials;
+    getSession = mock(() => null);
+    refreshToken = mock(() =>
+      Promise.resolve({
+        UID: 'user-123',
+        AccessToken: 'token',
+        RefreshToken: 'refresh',
+      })
+    );
+    forkNewChildSession = mock(() =>
+      Promise.resolve({
+        UID: 'user-123',
+        AccessToken: 'token',
+        RefreshToken: 'refresh',
+      })
+    );
+    restoreSession = mock(() =>
+      Promise.resolve({
+        UID: 'user-123',
+        AccessToken: 'token',
+        RefreshToken: 'refresh',
+      })
+    );
+    logout = mock(() => Promise.resolve());
   },
   restoreSessionFromStorage: mock(() => Promise.resolve({ username: 'testuser' })),
 }));
@@ -197,7 +220,7 @@ describe('CLI - Auth Commands', () => {
 
     expect(mockLogin).toHaveBeenCalled();
     expect(mockStoreCredentials).toHaveBeenCalled();
-    const call = mockStoreCredentials.mock.calls[0][0] as { username: string };
+    const call = mockStoreCredentials.mock.calls.at(0)?.at(0) as unknown as { username: string };
     expect(call.username).toBe('user@example.com');
   });
 
