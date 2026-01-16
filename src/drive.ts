@@ -599,13 +599,6 @@ function createOpenPGPCrypto(): OpenPGPCryptoInterface {
     async decryptKey(armoredKey: string, passphrase: string): Promise<openpgp.PrivateKey> {
       const privateKey = await openpgp.readPrivateKey({ armoredKey });
       const decrypted = await openpgp.decryptKey({ privateKey, passphrase });
-      // Log key structure to debug getPrimarySelfSignature issue
-      console.debug('Decrypted key type:', typeof decrypted);
-      console.debug(
-        'Decrypted key has getPrimarySelfSignature:',
-        'getPrimarySelfSignature' in decrypted
-      );
-      console.debug('Decrypted key constructor:', decrypted.constructor.name);
       return decrypted;
     },
 
