@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsc",
     "build:check": "tsc --noEmit",
-    "build:bin": "bun build --compile --minify --sourcemap ./src/index.ts --outfile ./dist/proton-drive-bridge",
+    "build:bin": "bun build --target=bun --compile --minify ./src/index.ts --outfile ./dist/proton-drive-bridge",
     "start": "bun run src/index.ts",
     "dev": "bun --watch run src/index.ts",
     "lint": "eslint 'src/**/*.ts'",
