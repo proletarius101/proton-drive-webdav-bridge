@@ -12,10 +12,15 @@
  * Based on the proton-drive-sync authentication flow.
  */
 
-import * as openpgp from 'openpgp';
 import bcrypt from 'bcryptjs';
+import * as openpgp from 'openpgp';
+import {
+  deleteStoredCredentials,
+  getStoredCredentials,
+  storeCredentials,
+  type StoredCredentials
+} from './keychain.js';
 import { logger } from './logger.js';
-import { storeCredentials, getStoredCredentials, type StoredCredentials } from './keychain.js';
 
 // ============================================================================
 // Types
@@ -198,6 +203,12 @@ const CHILD_CLIENT_ID = PLATFORM === 'macos' ? 'macOSDrive' : 'windowsDrive';
 const FORK_PAYLOAD_IV_LENGTH = 16;
 const FORK_PAYLOAD_KEY_LENGTH = 32;
 const FORK_PAYLOAD_AAD = 'fork';
+const AUTH_REQUIRED_ERROR = 'AUTHENTICATION_REQUIRED';
+
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 
 // SRP Modulus verification key
 const SRP_MODULUS_KEY = `-----BEGIN PGP PUBLIC KEY BLOCK-----
@@ -1065,22 +1076,8 @@ export class ProtonAuth {
     };
 
     try {
-      // Proactively refresh parent session tokens before making API calls
-      // This prevents failures when resuming sessions with expired tokens
-      try {
-        await this.refreshParentToken();
-      } catch (error) {
-        // If parent refresh fails, try to fork a new child session instead
-        if (this.isInvalidRefreshTokenError(error)) {
-          logger.info(
-            'Parent session refresh token expired during restore, forking new session...'
-          );
-          await this.forkNewChildSession();
-        } else {
-          throw error;
-        }
-      }
-
+      // Verify the session is still valid by fetching user info
+      // If tokens are expired, apiRequestWithRefresh will handle token refresh automatically
       const userResponse = await this.apiRequestWithRefresh<ApiResponse & { User: User }>(
         'GET',
         'core/v4/users'
@@ -1130,38 +1127,57 @@ export class ProtonAuth {
     uid: string,
     refreshToken: string
   ): Promise<{ accessToken: string; refreshToken: string }> {
-    const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-pm-appversion': APP_VERSION,
-        'x-pm-uid': uid,
-      },
-      body: JSON.stringify({
-        ResponseType: 'token',
-        GrantType: 'refresh_token',
-        RefreshToken: refreshToken,
-        RedirectURI: 'https://protonmail.com',
-      }),
-    });
+    let attempts = 3;
+    while (attempts > 0) {
+      attempts -= 1;
+      const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-pm-appversion': APP_VERSION,
+          'x-pm-uid': uid,
+        },
+        body: JSON.stringify({
+          ResponseType: 'token',
+          GrantType: 'refresh_token',
+          RefreshToken: refreshToken,
+          RedirectURI: 'https://protonmail.com',
+        }),
+      });
 
-    const json = (await response.json()) as ApiResponse & {
-      AccessToken?: string;
-      RefreshToken?: string;
-    };
+      const json = (await response.json()) as ApiResponse & {
+        AccessToken?: string;
+        RefreshToken?: string;
+      };
 
-    if (!response.ok || json.Code !== 1000) {
-      if (json.Code === INVALID_REFRESH_TOKEN_CODE) {
-        throw new Error('INVALID_REFRESH_TOKEN');
+      if (response.ok && json.Code === 1000) {
+        if (!json.AccessToken || !json.RefreshToken) {
+          throw new Error('Token refresh response missing tokens');
+        }
+        return { accessToken: json.AccessToken, refreshToken: json.RefreshToken };
       }
+
+      if (response.status === 409) {
+        continue;
+      }
+
+      if (response.status === 429 || response.status === 503) {
+        await sleep(500 * (4 - attempts));
+        continue;
+      }
+
+      if (
+        response.status === 400 ||
+        response.status === 422 ||
+        json.Code === INVALID_REFRESH_TOKEN_CODE
+      ) {
+        throw new Error(AUTH_REQUIRED_ERROR);
+      }
+
       throw new Error(json.Error || 'Token refresh failed');
     }
 
-    if (!json.AccessToken || !json.RefreshToken) {
-      throw new Error('Token refresh response missing tokens');
-    }
-
-    return { accessToken: json.AccessToken, refreshToken: json.RefreshToken };
+    throw new Error('Token refresh failed');
   }
 
   private isInvalidRefreshTokenError(error: unknown): boolean {
@@ -1169,6 +1185,18 @@ export class ProtonAuth {
       return error.message.includes('INVALID_REFRESH_TOKEN');
     }
     return false;
+  }
+
+  private isAuthRequiredError(error: unknown): boolean {
+    if (error instanceof Error) {
+      return error.message.includes(AUTH_REQUIRED_ERROR);
+    }
+    return false;
+  }
+
+  private clearSessionData(): void {
+    this.session = null;
+    this.parentSession = null;
   }
 
   private async refreshParentToken(): Promise<void> {
@@ -1183,18 +1211,11 @@ export class ProtonAuth {
       this.parentSession.AccessToken = tokens.accessToken;
       this.parentSession.RefreshToken = tokens.refreshToken;
     } catch (error) {
-      if (this.isInvalidRefreshTokenError(error)) {
+      if (this.isAuthRequiredError(error) || this.isInvalidRefreshTokenError(error)) {
         throw new Error('Parent session expired - re-authentication required');
       }
       throw error;
     }
-  }
-
-  private async attemptForkRecovery(): Promise<Session> {
-    if (!this.parentSession) {
-      throw new Error('Parent session expired - re-authentication required');
-    }
-    return await this.forkNewChildSession();
   }
 
   async refreshToken(): Promise<Session> {
@@ -1208,11 +1229,9 @@ export class ProtonAuth {
       this.session.RefreshToken = tokens.refreshToken;
       return this.session;
     } catch (error) {
-      if (this.isInvalidRefreshTokenError(error)) {
-        logger.info(
-          'Child session refresh token expired, attempting to fork new session from parent...'
-        );
-        return await this.attemptForkRecovery();
+      if (this.isAuthRequiredError(error) || this.isInvalidRefreshTokenError(error)) {
+        this.clearSessionData();
+        throw new Error('Authentication required');
       }
       throw error;
     }
@@ -1239,8 +1258,6 @@ export class ProtonAuth {
         ChildClientID: CHILD_CLIENT_ID,
         Independent: 1,
         Payload: blob,
-        PayloadVersion: 2,
-        PayloadType: 'default',
       }),
     });
 
@@ -1438,7 +1455,20 @@ export async function restoreSessionFromStorage(): Promise<{
   }
 
   const auth = new ProtonAuth();
-  const session = await auth.restoreSession(storedCreds);
+  let session: Session;
+  try {
+    session = await auth.restoreSession(storedCreds);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (
+      message.includes('Authentication required') ||
+      message.includes('Parent session expired') ||
+      message.includes('INVALID_REFRESH_TOKEN')
+    ) {
+      await deleteStoredCredentials();
+    }
+    throw error;
+  }
 
   // Update stored credentials with refreshed tokens
   const newCreds = auth.getReusableCredentials();

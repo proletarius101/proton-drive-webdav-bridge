@@ -205,8 +205,15 @@ function deleteCredentialsFile(): void {
 async function storeCredentialsToKeyring(credentials: StoredCredentials): Promise<void> {
   const entry = new Entry(SERVICE_NAME, ACCOUNT_NAME);
   const jsonData = JSON.stringify(credentials);
-  entry.setPassword(jsonData);
-  logger.debug('Stored credentials to native keyring');
+  try {
+    entry.setPassword(jsonData);
+    logger.info(
+      `Stored credentials to native keyring (service: ${SERVICE_NAME}, account: ${ACCOUNT_NAME})`
+    );
+  } catch (error) {
+    logger.error(`Failed to store credentials to keyring: ${error}`);
+    throw error;
+  }
 }
 
 /**
@@ -216,8 +223,15 @@ function getCredentialsFromKeyring(): StoredCredentials | null {
   try {
     const entry = new Entry(SERVICE_NAME, ACCOUNT_NAME);
     const password = entry.getPassword();
-    if (!password) return null;
-    return JSON.parse(password) as StoredCredentials;
+    if (!password) {
+      logger.debug('No credentials found in keyring');
+      return null;
+    }
+    const creds = JSON.parse(password) as StoredCredentials;
+    logger.info(
+      `Loaded credentials from keyring (parentUID: ${creds.parentUID}, childUID: ${creds.childUID})`
+    );
+    return creds;
   } catch (error) {
     // Entry not found or access denied
     logger.debug(`Failed to get credentials from keyring: ${error}`);

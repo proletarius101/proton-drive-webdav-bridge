@@ -7,7 +7,7 @@
 
 import { ProtonAuth, restoreSessionFromStorage, type Session, openpgp } from './auth.js';
 import { logger } from './logger.js';
-import { storeCredentials, type StoredCredentials } from './keychain.js';
+import { deleteStoredCredentials, storeCredentials, type StoredCredentials } from './keychain.js';
 
 // ============================================================================
 // Types
@@ -598,7 +598,15 @@ function createOpenPGPCrypto(): OpenPGPCryptoInterface {
 
     async decryptKey(armoredKey: string, passphrase: string): Promise<openpgp.PrivateKey> {
       const privateKey = await openpgp.readPrivateKey({ armoredKey });
-      return openpgp.decryptKey({ privateKey, passphrase });
+      const decrypted = await openpgp.decryptKey({ privateKey, passphrase });
+      // Log key structure to debug getPrimarySelfSignature issue
+      console.debug('Decrypted key type:', typeof decrypted);
+      console.debug(
+        'Decrypted key has getPrimarySelfSignature:',
+        'getPrimarySelfSignature' in decrypted
+      );
+      console.debug('Decrypted key constructor:', decrypted.constructor.name);
+      return decrypted;
     },
 
     // ========================================================================
@@ -1003,14 +1011,22 @@ export class DriveClientManager {
       if (!this.auth || !this.username) {
         throw new Error('Auth or username not initialized');
       }
-      await this.auth.refreshToken();
-      // Update stored credentials
-      const newCreds = this.auth.getReusableCredentials();
-      const storedCreds: StoredCredentials = {
-        ...newCreds,
-        username: this.username,
-      };
-      await storeCredentials(storedCreds);
+      try {
+        await this.auth.refreshToken();
+        // Update stored credentials
+        const newCreds = this.auth.getReusableCredentials();
+        const storedCreds: StoredCredentials = {
+          ...newCreds,
+          username: this.username,
+        };
+        await storeCredentials(storedCreds);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.includes('Authentication required')) {
+          await deleteStoredCredentials();
+        }
+        throw error;
+      }
     });
 
     // Store httpClient for direct API calls (pagination workaround)
