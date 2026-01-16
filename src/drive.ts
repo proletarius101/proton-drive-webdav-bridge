@@ -1193,10 +1193,15 @@ export class DriveClientManager {
     const client = this.getClient();
     const nodes: DriveNode[] = [];
 
+    logger.debug(`listFolder called with folderUid: ${folderUid}`);
+    const hasTilde = folderUid.includes('~');
+    logger.debug(`httpClient available: ${!!this.httpClient}, contains '~': ${hasTilde}`);
+
     // Use direct API call with explicit PageSize to get all children
     // This matches the WebClients pattern from packages/shared/lib/api/drive/folder.ts
     if (this.httpClient && folderUid.includes('~')) {
       try {
+        logger.debug(`Using direct API pagination path for folderUid: ${folderUid}`);
         const [volumeId, nodeId] = folderUid.split('~');
         const allChildUids: string[] = [];
         let anchor = '';
@@ -1230,6 +1235,10 @@ export class DriveClientManager {
           if (data.LinkIDs && Array.isArray(data.LinkIDs)) {
             allChildUids.push(...data.LinkIDs);
           }
+
+          logger.debug(
+            `Direct API response: got ${data.LinkIDs?.length ?? 0} items in this page, total so far: ${allChildUids.length}, more: ${data.More}`
+          );
 
           if (!data.More || !data.AnchorID) {
             break;
@@ -1274,13 +1283,20 @@ export class DriveClientManager {
           }
         }
 
+        logger.debug(`Direct API path completed: returned ${nodes.length} nodes`);
         return nodes;
       } catch (error) {
         logger.warn(`Direct API pagination failed, falling back to SDK: ${error}`);
       }
+    } else {
+      logger.debug(
+        `Skipping direct API path: httpClient=${!!this.httpClient}, contains ~=${folderUid.includes('~')}`
+      );
     }
 
     // Fallback to SDK iteration (original behavior with default pagination limit)
+    logger.debug(`Using SDK fallback path for folderUid: ${folderUid}`);
+    let sdkItemCount = 0;
     for await (const result of client.iterateFolderChildren(folderUid)) {
       if (result.ok && result.value) {
         const node = result.value;
@@ -1304,9 +1320,13 @@ export class DriveClientManager {
           modifiedTime,
           parentUid: folderUid,
         });
+        sdkItemCount++;
       }
     }
 
+    logger.debug(
+      `SDK fallback path completed: returned ${sdkItemCount} nodes (total: ${nodes.length})`
+    );
     return nodes;
   }
 
