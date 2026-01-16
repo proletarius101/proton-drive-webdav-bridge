@@ -1055,6 +1055,22 @@ export class DriveClientManager {
   }
 
   /**
+   * Get a single node from the SDK (returns parsed node value or null)
+   */
+  async getNode(nodeUid: string): Promise<any | null> {
+    const client = this.getClient();
+    try {
+      const result = await (client as any).getNode(nodeUid);
+      if (result && result.ok && result.value) return result.value;
+      if (result && result.node) return result.node; // fallback shape
+      return null;
+    } catch (e) {
+      logger.debug(`getNode failed for ${nodeUid}: ${e}`);
+      return null;
+    }
+  }
+
+  /**
    * Get username
    */
   getUsername(): string | null {

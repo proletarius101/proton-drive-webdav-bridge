@@ -19,6 +19,7 @@ import { logger } from '../logger.js';
 import type ProtonDriveAdapter from './ProtonDriveAdapter.js';
 import ProtonDriveLock from './ProtonDriveLock.js';
 import ProtonDriveProperties from './ProtonDriveProperties.js';
+import MetadataManager from './MetadataManager.js';
 import { LockManager } from './LockManager.js';
 
 // ============================================================================
@@ -32,6 +33,10 @@ export default class ProtonDriveResource implements ResourceInterface {
   collection: boolean | undefined;
   private _node: DriveNode | null | undefined;
   private lockManager: LockManager;
+
+  // Metadata cache / hydration
+  private _metaReady: Promise<void> | null = null;
+  private _cachedProps: { [k: string]: unknown } | null = null;
 
   constructor({
     adapter,
@@ -239,6 +244,73 @@ export default class ProtonDriveResource implements ResourceInterface {
     return props;
   }
 
+  // Metadata persistence helpers (backed by MetadataManager)
+  private async ensureMetadataLoaded(): Promise<void> {
+    if (this._metaReady) return this._metaReady;
+    this._metaReady = (async () => {
+      const node = await this.resolveNode();
+      if (!node) {
+        this._cachedProps = null;
+        return;
+      }
+
+      const mm = MetadataManager.getInstance();
+
+      // If we already have stored metadata, use it
+      const stored = mm.get(node.uid);
+      if (stored && stored.props) {
+        this._cachedProps = stored.props as { [k: string]: unknown };
+        return;
+      }
+
+      // Try hydrating from SDK node extended attributes
+      try {
+        const sdkNode = await this.adapter.driveClient.getNode(node.uid);
+        if (sdkNode) {
+          // Files: parsed extended attributes may appear on activeRevision
+          const claimed =
+            sdkNode.activeRevision?.value?.claimedAdditionalMetadata ||
+            sdkNode.activeRevision?.claimedAdditionalMetadata ||
+            sdkNode.claimedAdditionalMetadata;
+
+          if (claimed && typeof claimed === 'object') {
+            logger.debug(`Hydrating metadata for node ${node.uid}: ${JSON.stringify(claimed)}`);
+            mm.save(node.uid, { props: claimed });
+            this._cachedProps = claimed as { [k: string]: unknown };
+            return;
+          }
+
+          // Folders: not storing arbitrary key:value metadata for folders yet
+        }
+      } catch (e) {
+        logger.debug(`Failed to hydrate metadata from SDK for node ${node.uid}: ${e}`);
+      }
+
+      // Nothing found
+      this._cachedProps = null;
+    })();
+
+    return this._metaReady;
+  }
+
+  async getMetadata(): Promise<{ props?: { [k: string]: unknown } } | null> {
+    await this.ensureMetadataLoaded();
+    const node = await this.resolveNode();
+    if (!node) return null;
+    return this._cachedProps ? { props: this._cachedProps } : null;
+  }
+
+  async saveMetadata(meta: { props?: { [k: string]: unknown } }): Promise<void> {
+    const node = await this.resolveNode();
+    if (!node) throw new Error('Resource not found');
+    const mm = MetadataManager.getInstance();
+    mm.save(node.uid, meta);
+
+    // Update cache
+    this._cachedProps = meta.props ? meta.props : null;
+    this._metaReady = Promise.resolve();
+  }
+
   async getStream(_range?: { start: number; end: number }): Promise<Readable> {
     const node = await this.resolveNode();
 
@@ -290,8 +362,10 @@ export default class ProtonDriveResource implements ResourceInterface {
         {}
       );
 
-      // Invalidate cache
+      // Invalidate node + metadata cache
       this._node = undefined;
+      this._metaReady = null;
+      this._cachedProps = null;
     } catch (error) {
       logger.error(
         `setStream failed for path ${this.path}: ${
@@ -339,6 +413,8 @@ export default class ProtonDriveResource implements ResourceInterface {
       }
 
       this._node = undefined;
+      this._metaReady = null;
+      this._cachedProps = null;
     } catch (error) {
       logger.error(
         `create failed for path ${this.path}: ${
@@ -366,7 +442,18 @@ export default class ProtonDriveResource implements ResourceInterface {
     // Remove any locks on this resource
     this.lockManager.deleteLocksForPath(this.path);
 
+    // Remove persisted metadata for this node
+    try {
+      MetadataManager.getInstance().delete(node.uid);
+    } catch (e) {
+      // Don't fail delete on metadata cleanup error
+      logger.error(`Failed to delete metadata for node ${node.uid}: ${e}`);
+    }
+
+    // Clear caches
     this._node = null;
+    this._metaReady = null;
+    this._cachedProps = null;
   }
 
   async copy(destination: URL, baseUrl: URL, user: User, lockToken?: string): Promise<void> {
