@@ -113,17 +113,13 @@ export class WebDAVServer {
       next();
     });
 
-    // DEBUG: log PROPFIND headers/body (avoid consuming body when empty)
+    // DEBUG: log PROPFIND headers only (do not consume body to avoid interfering with Nephele)
     this.app.use((req, _res, next) => {
       if (req.method === 'PROPFIND') {
         logger.debug(`PROPFIND headers: ${JSON.stringify(req.headers)}`);
         const contentLength = Number(req.headers['content-length'] ?? 0);
         if (contentLength > 0) {
-          let body = '';
-          req.on('data', (chunk) => {
-            body += chunk.toString();
-          });
-          req.on('end', () => logger.debug(`PROPFIND body: ${body || '<empty>'}`));
+          logger.debug(`PROPFIND body length: ${contentLength} (not read)`);
         } else {
           logger.debug('PROPFIND body: <empty>');
         }
