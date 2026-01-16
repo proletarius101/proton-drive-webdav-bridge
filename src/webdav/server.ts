@@ -585,7 +585,7 @@ export class WebDAVServer {
   }
 
   async start(): Promise<void> {
-    // Initialize drive client first
+    // Initialize drive client
     await driveClient.initialize();
 
     // Mount Proton Drive filesystem

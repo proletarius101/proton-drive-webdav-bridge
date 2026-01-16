@@ -18,7 +18,7 @@ import {
   deleteStoredCredentials,
   getStoredCredentials,
   storeCredentials,
-  type StoredCredentials
+  type StoredCredentials,
 } from './keychain.js';
 import { logger } from './logger.js';
 
@@ -1481,5 +1481,4 @@ export async function restoreSessionFromStorage(): Promise<{
   return { auth, session, username: storedCreds.username };
 }
 
-export { openpgp };
 export default ProtonAuth;

@@ -5,10 +5,9 @@
  * Handles authentication, file listing, reading, writing, and deletion.
  */
 
-import { ProtonAuth, restoreSessionFromStorage, type Session } from './auth.js';
+import { ProtonAuth, restoreSessionFromStorage, type Session, openpgp } from './auth.js';
 import { logger } from './logger.js';
 import { deleteStoredCredentials, storeCredentials, type StoredCredentials } from './keychain.js';
-import * as openpgp from 'openpgp';
 
 // ============================================================================
 // Types
@@ -184,18 +183,15 @@ interface SRPModuleInterface {
 interface OpenPGPCryptoInterface {
   // Key and passphrase generation
   generatePassphrase(): string;
-  generateKey(passphrase: string): Promise<{ privateKey: openpgp.PrivateKey; armoredKey: string }>;
-  generateSessionKey(encryptionKeys: openpgp.PrivateKey[]): Promise<SessionKey>;
+  generateKey(passphrase: string): Promise<openpgp.PrivateKey>;
+  generateSessionKey(encryptionKeys: openpgp.PublicKey[]): Promise<SessionKey>;
 
   // Session key operations
   encryptSessionKey(
     sessionKey: SessionKey,
     encryptionKeys: openpgp.PublicKey | openpgp.PublicKey[]
   ): Promise<{ keyPacket: Uint8Array }>;
-  encryptSessionKeyWithPassword(
-    sessionKey: SessionKey,
-    password: string
-  ): Promise<{ keyPacket: Uint8Array }>;
+  encryptSessionKeyWithPassword(sessionKey: SessionKey, password: string): Promise<Uint8Array>;
   decryptSessionKey(
     keyPacket: Uint8Array,
     decryptionKeys: openpgp.PrivateKey | openpgp.PrivateKey[]
@@ -211,55 +207,52 @@ interface OpenPGPCryptoInterface {
   // Encryption operations
   encryptArmored(
     data: Uint8Array,
-    encryptionKeys: openpgp.PrivateKey[],
+    encryptionKeys: openpgp.PublicKey[],
     sessionKey?: SessionKey
   ): Promise<{ armoredData: string }>;
   encryptAndSignArmored(
     data: Uint8Array,
     sessionKey: SessionKey | undefined,
-    encryptionKeys: openpgp.PrivateKey[],
+    encryptionKeys: openpgp.PublicKey[],
     signingKey: openpgp.PrivateKey
   ): Promise<{ armoredData: string }>;
   encryptAndSign(
     data: Uint8Array,
     sessionKey: SessionKey,
-    encryptionKeys: openpgp.PrivateKey[],
+    encryptionKeys: openpgp.PublicKey[],
     signingKey: openpgp.PrivateKey
   ): Promise<{ encryptedData: Uint8Array }>;
   encryptAndSignDetached(
     data: Uint8Array,
     sessionKey: SessionKey,
-    encryptionKeys: openpgp.PrivateKey[],
+    encryptionKeys: openpgp.PublicKey[],
     signingKey: openpgp.PrivateKey
   ): Promise<{ encryptedData: Uint8Array; signature: Uint8Array }>;
   encryptAndSignDetachedArmored(
     data: Uint8Array,
     sessionKey: SessionKey | undefined,
-    encryptionKeys: openpgp.PrivateKey[],
+    encryptionKeys: openpgp.PublicKey[],
     signingKey: openpgp.PrivateKey
   ): Promise<{ armoredData: string; armoredSignature: string }>;
 
   // Decryption operations
-  decryptArmored(
-    armoredData: string,
-    decryptionKeys: openpgp.PrivateKey | openpgp.PrivateKey[]
-  ): Promise<Uint8Array>;
+  decryptArmored(armoredData: string, decryptionKeys: openpgp.PrivateKey[]): Promise<Uint8Array>;
   decryptArmoredWithPassword(armoredData: string, password: string): Promise<Uint8Array>;
   decryptArmoredAndVerify(
     armoredData: string,
-    decryptionKeys: openpgp.PrivateKey | openpgp.PrivateKey[],
-    verificationKeys: openpgp.PublicKey | openpgp.PublicKey[]
+    decryptionKeys: openpgp.PrivateKey[],
+    verificationKeys: openpgp.PublicKey[]
   ): Promise<{ data: Uint8Array; verified: number; verificationErrors?: Error[] }>;
   decryptArmoredAndVerifyDetached(
     armoredData: string,
-    armoredSignature: string | undefined,
+    armoredSignature: string,
     sessionKey: SessionKey,
-    verificationKeys: openpgp.PublicKey | openpgp.PublicKey[]
+    verificationKeys: openpgp.PublicKey[]
   ): Promise<{ data: Uint8Array; verified: number; verificationErrors?: Error[] }>;
   decryptAndVerify(
     encryptedData: Uint8Array,
     sessionKey: SessionKey,
-    verificationKeys: openpgp.PublicKey | openpgp.PublicKey[]
+    verificationKeys: openpgp.PublicKey[]
   ): Promise<{ data: Uint8Array; verified: number; verificationErrors?: Error[] }>;
 
   // Signing operations
@@ -274,23 +267,12 @@ interface OpenPGPCryptoInterface {
   ): Promise<{ signature: string }>;
 
   // Verification operations
-  verify(
-    data: Uint8Array,
-    signature: Uint8Array,
-    verificationKeys: openpgp.PublicKey | openpgp.PublicKey[]
-  ): Promise<{ verified: number; verificationErrors?: Error[] }>;
   verifyArmored(
     data: Uint8Array,
     armoredSignature: string,
-    verificationKeys: openpgp.PublicKey | openpgp.PublicKey[],
+    verificationKeys: openpgp.PublicKey[],
     context?: string
   ): Promise<{ verified: number; verificationErrors?: Error[] }>;
-  decryptAndVerifyDetached(
-    data: Uint8Array,
-    signature: Uint8Array | undefined,
-    sessionKey: SessionKey,
-    verificationKeys?: openpgp.PublicKey | openpgp.PublicKey[]
-  ): Promise<{ data: Uint8Array; verified: number; verificationErrors?: Error[] }>;
 }
 
 // ============================================================================
@@ -538,27 +520,18 @@ function createOpenPGPCrypto(): OpenPGPCryptoInterface {
       return base64Encode(bytes);
     },
 
-    async generateKey(
-      passphrase: string
-    ): Promise<{ privateKey: openpgp.PrivateKey; armoredKey: string }> {
-      // Generate an unencrypted key first
-      const { privateKey: decryptedKey } = await openpgp.generateKey({
+    async generateKey(passphrase: string): Promise<openpgp.PrivateKey> {
+      const { privateKey } = await openpgp.generateKey({
         type: 'ecc',
-        curve: 'curve25519' as openpgp.EllipticCurveName,
-        userIDs: [{ name: 'Drive', email: 'drive@proton.me' }],
+        curve: 'curve25519Legacy',
+        userIDs: [{ name: 'Proton Drive', email: 'drive@proton.me' }],
+        passphrase,
         format: 'object',
       });
-      // Encrypt the key with the passphrase for storage
-      const encryptedKey = await openpgp.encryptKey({
-        privateKey: decryptedKey,
-        passphrase,
-      });
-      const armoredKey = encryptedKey.armor();
-      // Return the DECRYPTED key for immediate use, and the ENCRYPTED armored key for storage
-      return { privateKey: decryptedKey, armoredKey };
+      return privateKey;
     },
 
-    async generateSessionKey(encryptionKeys: openpgp.PrivateKey[]): Promise<SessionKey> {
+    async generateSessionKey(encryptionKeys: openpgp.PublicKey[]): Promise<SessionKey> {
       return (await openpgp.generateSessionKey({
         encryptionKeys: toArray(encryptionKeys),
       })) as SessionKey;
@@ -584,14 +557,14 @@ function createOpenPGPCrypto(): OpenPGPCryptoInterface {
     async encryptSessionKeyWithPassword(
       sessionKey: SessionKey,
       password: string
-    ): Promise<{ keyPacket: Uint8Array }> {
+    ): Promise<Uint8Array> {
       const result = await openpgp.encryptSessionKey({
         data: sessionKey.data,
         algorithm: sessionKey.algorithm,
         passwords: [password],
         format: 'binary',
       });
-      return { keyPacket: result as Uint8Array };
+      return result as Uint8Array;
     },
 
     async decryptSessionKey(
@@ -642,7 +615,7 @@ function createOpenPGPCrypto(): OpenPGPCryptoInterface {
 
     async encryptArmored(
       data: Uint8Array,
-      encryptionKeys: openpgp.PrivateKey[],
+      encryptionKeys: openpgp.PublicKey[],
       sessionKey?: SessionKey
     ): Promise<{ armoredData: string }> {
       const message = await openpgp.createMessage({ binary: data });
@@ -663,7 +636,7 @@ function createOpenPGPCrypto(): OpenPGPCryptoInterface {
     async encryptAndSignArmored(
       data: Uint8Array,
       sessionKey: SessionKey | undefined,
-      encryptionKeys: openpgp.PrivateKey[],
+      encryptionKeys: openpgp.PublicKey[],
       signingKey: openpgp.PrivateKey
     ): Promise<{ armoredData: string }> {
       const message = await openpgp.createMessage({ binary: data });
@@ -685,7 +658,7 @@ function createOpenPGPCrypto(): OpenPGPCryptoInterface {
     async encryptAndSign(
       data: Uint8Array,
       sessionKey: SessionKey,
-      encryptionKeys: openpgp.PrivateKey[],
+      encryptionKeys: openpgp.PublicKey[],
       signingKey: openpgp.PrivateKey
     ): Promise<{ encryptedData: Uint8Array }> {
       const message = await openpgp.createMessage({ binary: data });
@@ -705,7 +678,7 @@ function createOpenPGPCrypto(): OpenPGPCryptoInterface {
     async encryptAndSignDetached(
       data: Uint8Array,
       sessionKey: SessionKey,
-      encryptionKeys: openpgp.PrivateKey[],
+      encryptionKeys: openpgp.PublicKey[],
       signingKey: openpgp.PrivateKey
     ): Promise<{ encryptedData: Uint8Array; signature: Uint8Array }> {
       const message = await openpgp.createMessage({ binary: data });
@@ -732,7 +705,7 @@ function createOpenPGPCrypto(): OpenPGPCryptoInterface {
     async encryptAndSignDetachedArmored(
       data: Uint8Array,
       sessionKey: SessionKey | undefined,
-      encryptionKeys: openpgp.PrivateKey[],
+      encryptionKeys: openpgp.PublicKey[],
       signingKey: openpgp.PrivateKey
     ): Promise<{ armoredData: string; armoredSignature: string }> {
       const message = await openpgp.createMessage({ binary: data });
@@ -928,7 +901,7 @@ function createOpenPGPCrypto(): OpenPGPCryptoInterface {
     async verifyArmored(
       data: Uint8Array,
       armoredSignature: string,
-      verificationKeys: openpgp.PublicKey | openpgp.PublicKey[],
+      verificationKeys: openpgp.PublicKey[],
       _context?: string
     ): Promise<{ verified: number; verificationErrors?: Error[] }> {
       const [message, signature] = await Promise.all([
@@ -939,7 +912,7 @@ function createOpenPGPCrypto(): OpenPGPCryptoInterface {
       const result = await openpgp.verify({
         message,
         signature,
-        verificationKeys: toArray(verificationKeys),
+        verificationKeys,
         // context: context ? { value: context, critical: true } : undefined,
       });
 
@@ -947,68 +920,6 @@ function createOpenPGPCrypto(): OpenPGPCryptoInterface {
       return {
         verified,
         verificationErrors: verified ? undefined : [new Error('Signature verification failed')],
-      };
-    },
-
-    async verify(
-      data: Uint8Array,
-      signature: Uint8Array,
-      verificationKeys: openpgp.PublicKey | openpgp.PublicKey[]
-    ): Promise<{ verified: number; verificationErrors?: Error[] }> {
-      try {
-        const message = await openpgp.createMessage({ binary: data });
-        const sig = await openpgp.readSignature({ binarySignature: signature });
-        const result = await openpgp.verify({
-          message,
-          signature: sig,
-          verificationKeys: toArray(verificationKeys),
-        });
-
-        const verified = (await result.signatures[0]?.verified) ? 1 : 0;
-        return { verified };
-      } catch (error) {
-        return {
-          verified: 2,
-          verificationErrors: [error as Error],
-        };
-      }
-    },
-
-    async decryptAndVerifyDetached(
-      data: Uint8Array,
-      signature: Uint8Array | undefined,
-      sessionKey: SessionKey,
-      verificationKeys?: openpgp.PublicKey | openpgp.PublicKey[]
-    ): Promise<{ data: Uint8Array; verified: number; verificationErrors?: Error[] }> {
-      const message = await openpgp.readMessage({ binaryMessage: data });
-      const result = await openpgp.decrypt({
-        message,
-        sessionKeys: [sessionKey],
-        format: 'binary',
-      });
-
-      let verified = 0;
-      let verificationErrors: Error[] | undefined;
-
-      if (signature && verificationKeys) {
-        try {
-          const sig = await openpgp.readSignature({ binarySignature: signature });
-          const verifyResult = await openpgp.verify({
-            message: await openpgp.createMessage({ binary: result.data as Uint8Array }),
-            signature: sig,
-            verificationKeys: toArray(verificationKeys),
-          });
-          verified = (await verifyResult.signatures[0]?.verified) ? 1 : 2;
-        } catch (error) {
-          verified = 2;
-          verificationErrors = [error as Error];
-        }
-      }
-
-      return {
-        data: result.data as Uint8Array,
-        verified,
-        verificationErrors,
       };
     },
   };
@@ -1137,7 +1048,9 @@ export class DriveClientManager {
       httpClient,
       entitiesCache: new sdk.MemoryCache(),
       cryptoCache: new sdk.MemoryCache(),
+      // @ts-expect-error - PrivateKey types differ between openpgp imports
       account,
+      // @ts-expect-error - PrivateKey types differ between openpgp imports
       openPGPCryptoModule: cryptoModule,
       srpModule,
       telemetry,
