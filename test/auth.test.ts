@@ -394,13 +394,9 @@ describe('ProtonAuth - Credential Storage Integration', () => {
       // Missing other required fields
     } as unknown as TestReusableCredentials;
 
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (auth as any).restoreSession(invalidCredentials);
-      expect(true).toBe(false); // Should not reach here
-    } catch (error) {
-      expect(error).toBeDefined();
-    }
+    // Expect runtime validation to reject incomplete credentials
+    // @ts-expect-error: intentionally passing incomplete credentials to test runtime validation
+    await expect(auth.restoreSession(invalidCredentials)).rejects.toThrow();
   });
 });
 
