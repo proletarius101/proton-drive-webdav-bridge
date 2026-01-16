@@ -30,10 +30,17 @@ export interface NodeResult {
     uid: string;
     name: string;
     type: string;
-    size?: number;
-    mimeType?: string;
-    createTime?: Date;
-    modifyTime?: Date;
+    mediaType?: string;
+    creationTime: Date;
+    modificationTime: Date;
+    activeRevision?: {
+      claimedSize?: number;
+      storageSize: number;
+      claimedModificationTime?: Date;
+    };
+    folder?: {
+      claimedModificationTime?: Date;
+    };
   };
   error?: unknown;
 }
@@ -1154,14 +1161,26 @@ export class DriveClientManager {
             const node = result.value;
             const nodeId = node.uid.split('~')[1] || node.uid;
             if (uidSet.has(nodeId)) {
+              const isFolder = node.type === 'folder';
+              const size = isFolder
+                ? 0
+                : (node.activeRevision?.claimedSize ?? node.activeRevision?.storageSize ?? 0);
+              const modifiedTime = isFolder
+                ? (node.folder?.claimedModificationTime ??
+                  node.modificationTime ??
+                  node.creationTime)
+                : (node.activeRevision?.claimedModificationTime ??
+                  node.modificationTime ??
+                  node.creationTime);
+
               nodes.push({
                 uid: node.uid,
                 name: node.name,
-                type: node.type === 'folder' ? 'folder' : 'file',
-                size: node.size || 0,
-                mimeType: node.mimeType || 'application/octet-stream',
-                createdTime: node.createTime || new Date(),
-                modifiedTime: node.modifyTime || new Date(),
+                type: isFolder ? 'folder' : 'file',
+                size,
+                mimeType: node.mediaType || 'application/octet-stream',
+                createdTime: node.creationTime,
+                modifiedTime,
                 parentUid: folderUid,
               });
             }
@@ -1178,14 +1197,24 @@ export class DriveClientManager {
     for await (const result of client.iterateFolderChildren(folderUid)) {
       if (result.ok && result.value) {
         const node = result.value;
+        const isFolder = node.type === 'folder';
+        const size = isFolder
+          ? 0
+          : (node.activeRevision?.claimedSize ?? node.activeRevision?.storageSize ?? 0);
+        const modifiedTime = isFolder
+          ? (node.folder?.claimedModificationTime ?? node.modificationTime ?? node.creationTime)
+          : (node.activeRevision?.claimedModificationTime ??
+            node.modificationTime ??
+            node.creationTime);
+
         nodes.push({
           uid: node.uid,
           name: node.name,
-          type: node.type === 'folder' ? 'folder' : 'file',
-          size: node.size || 0,
-          mimeType: node.mimeType || 'application/octet-stream',
-          createdTime: node.createTime || new Date(),
-          modifiedTime: node.modifyTime || new Date(),
+          type: isFolder ? 'folder' : 'file',
+          size,
+          mimeType: node.mediaType || 'application/octet-stream',
+          createdTime: node.creationTime,
+          modifiedTime,
           parentUid: folderUid,
         });
       }
