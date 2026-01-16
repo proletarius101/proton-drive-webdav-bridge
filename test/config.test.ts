@@ -4,31 +4,54 @@
  * Tests config loading, saving, updates, validation, file watching, and callbacks.
  */
 
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test, mock } from 'bun:test';
+
+const DEFAULT_PATHS_BASE = join(tmpdir(), 'pdb-config-default');
+let pathsBase = DEFAULT_PATHS_BASE;
+
+mock.module('env-paths', () => ({
+  default: () => {
+    const paths = {
+      config: join(pathsBase, 'config', 'proton-drive-bridge'),
+      data: join(pathsBase, 'data', 'proton-drive-bridge'),
+      log: join(pathsBase, 'log', 'proton-drive-bridge'),
+      temp: join(pathsBase, 'temp', 'proton-drive-bridge'),
+      cache: join(pathsBase, 'cache', 'proton-drive-bridge'),
+    };
+
+    // Create directories on access
+    Object.values(paths).forEach((path) => mkdirSync(path, { recursive: true }));
+
+    return paths;
+  },
+}));
 
 describe('Config - Initialization and Defaults', () => {
   let baseDir: string;
 
   beforeEach(() => {
     baseDir = mkdtempSync(join(tmpdir(), 'pdb-config-'));
-    process.env.XDG_CONFIG_HOME = baseDir;
+    pathsBase = baseDir;
   });
 
   afterEach(() => {
     rmSync(baseDir, { recursive: true, force: true });
-    delete process.env.XDG_CONFIG_HOME;
+    pathsBase = DEFAULT_PATHS_BASE;
   });
 
   test('creates default config when missing', async () => {
-    const { loadConfig, getConfigFilePath } = await import(
-      `../src/config.ts?cache=${Date.now()}`
-    );
+    const { loadConfig, getConfigFilePath } = await import(`../src/config.ts?cache=${Date.now()}`);
+
+    const configPath = getConfigFilePath();
+    // Ensure no config exists before test
+    if (existsSync(configPath)) {
+      rmSync(configPath);
+    }
 
     const config = loadConfig();
-    const configPath = getConfigFilePath();
 
     // Verify defaults
     expect(config.webdav.host).toBe('127.0.0.1');
@@ -50,9 +73,7 @@ describe('Config - Initialization and Defaults', () => {
   });
 
   test('loads existing config from file', async () => {
-    const { loadConfig, getConfigFilePath } = await import(
-      `../src/config.ts?cache=${Date.now()}`
-    );
+    const { loadConfig, getConfigFilePath } = await import(`../src/config.ts?cache=${Date.now()}`);
     const { getConfigDir } = await import(`../src/paths.ts?cache=${Date.now()}`);
 
     // Create custom config
@@ -78,9 +99,7 @@ describe('Config - Initialization and Defaults', () => {
   });
 
   test('merges partial config with defaults', async () => {
-    const { loadConfig, getConfigFilePath } = await import(
-      `../src/config.ts?cache=${Date.now()}`
-    );
+    const { loadConfig, getConfigFilePath } = await import(`../src/config.ts?cache=${Date.now()}`);
     const { getConfigDir } = await import(`../src/paths.ts?cache=${Date.now()}`);
 
     const configPath = getConfigFilePath();
@@ -96,9 +115,7 @@ describe('Config - Initialization and Defaults', () => {
   });
 
   test('handles invalid JSON gracefully', async () => {
-    const { loadConfig, getConfigFilePath } = await import(
-      `../src/config.ts?cache=${Date.now()}`
-    );
+    const { loadConfig, getConfigFilePath } = await import(`../src/config.ts?cache=${Date.now()}`);
     const { getConfigDir } = await import(`../src/paths.ts?cache=${Date.now()}`);
 
     const configPath = getConfigFilePath();
@@ -117,12 +134,12 @@ describe('Config - Updates and Persistence', () => {
 
   beforeEach(() => {
     baseDir = mkdtempSync(join(tmpdir(), 'pdb-config-'));
-    process.env.XDG_CONFIG_HOME = baseDir;
+    pathsBase = baseDir;
   });
 
   afterEach(() => {
     rmSync(baseDir, { recursive: true, force: true });
-    delete process.env.XDG_CONFIG_HOME;
+    pathsBase = DEFAULT_PATHS_BASE;
   });
 
   test('updates and persists config', async () => {
@@ -186,12 +203,12 @@ describe('Config - Change Callbacks', () => {
 
   beforeEach(() => {
     baseDir = mkdtempSync(join(tmpdir(), 'pdb-config-'));
-    process.env.XDG_CONFIG_HOME = baseDir;
+    pathsBase = baseDir;
   });
 
   afterEach(() => {
     rmSync(baseDir, { recursive: true, force: true });
-    delete process.env.XDG_CONFIG_HOME;
+    pathsBase = DEFAULT_PATHS_BASE;
   });
 
   test('onConfigChange callback is invoked on update', async () => {
@@ -202,8 +219,9 @@ describe('Config - Change Callbacks', () => {
     loadConfig();
 
     let callbackInvoked = false;
-    let callbackConfig = null;
-    onConfigChange((config) => {
+    type ConfigType = ReturnType<typeof loadConfig>;
+    let callbackConfig: ConfigType | null = null;
+    onConfigChange((config: ConfigType) => {
       callbackInvoked = true;
       callbackConfig = config;
     });
@@ -212,7 +230,7 @@ describe('Config - Change Callbacks', () => {
 
     expect(callbackInvoked).toBe(true);
     expect(callbackConfig).not.toBeNull();
-    expect((callbackConfig as typeof DEFAULT_CONFIG).debug).toBe(true);
+    expect(callbackConfig?.debug).toBe(true);
   });
 
   test('onConfigChange returns unsubscribe function', async () => {
@@ -268,7 +286,7 @@ describe('Config - Validation', () => {
 
     const errors = validateWebDAVConfig(invalidConfig);
     expect(errors.length).toBeGreaterThan(0);
-    expect(errors.some((e) => e.includes('Port'))).toBe(true);
+    expect(errors.some((e: string) => e.includes('Port'))).toBe(true);
   });
 
   test('validateWebDAVConfig requires auth credentials when enabled', async () => {
@@ -283,7 +301,7 @@ describe('Config - Validation', () => {
 
     const errors = validateWebDAVConfig(config);
     expect(errors.length).toBeGreaterThan(0);
-    expect(errors.some((e) => e.includes('Username'))).toBe(true);
+    expect(errors.some((e: string) => e.includes('Username'))).toBe(true);
   });
 
   test('validateWebDAVConfig requires cert/key for HTTPS', async () => {
@@ -298,8 +316,8 @@ describe('Config - Validation', () => {
 
     const errors = validateWebDAVConfig(config);
     expect(errors.length).toBeGreaterThan(0);
-    expect(errors.some((e) => e.includes('Certificate'))).toBe(true);
-    expect(errors.some((e) => e.includes('Key'))).toBe(true);
+    expect(errors.some((e: string) => e.includes('Certificate'))).toBe(true);
+    expect(errors.some((e: string) => e.includes('Key'))).toBe(true);
   });
 
   test('validateWebDAVConfig accepts valid config', async () => {
@@ -322,12 +340,12 @@ describe('Config - File Watching', () => {
 
   beforeEach(() => {
     baseDir = mkdtempSync(join(tmpdir(), 'pdb-config-'));
-    process.env.XDG_CONFIG_HOME = baseDir;
+    pathsBase = baseDir;
   });
 
   afterEach(() => {
     rmSync(baseDir, { recursive: true, force: true });
-    delete process.env.XDG_CONFIG_HOME;
+    pathsBase = DEFAULT_PATHS_BASE;
   });
 
   test('watchConfigFile and unwatchConfigFile execute without error', async () => {

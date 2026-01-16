@@ -1,56 +1,36 @@
 /**
  * Integration Tests - Paths Module
  *
- * Tests path resolution and directory creation following XDG specification.
+ * Tests path resolution and directory creation using env-paths.
  */
 
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test, mock } from 'bun:test';
 import { existsSync, mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-
-const originalEnv = {
-  XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
-  XDG_DATA_HOME: process.env.XDG_DATA_HOME,
-  XDG_STATE_HOME: process.env.XDG_STATE_HOME,
-};
 
 let tempBase: string;
 
 const loadPaths = async () =>
   import(`../src/paths.js?cache=${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
-const restoreEnv = () => {
-  if (originalEnv.XDG_CONFIG_HOME === undefined) {
-    delete process.env.XDG_CONFIG_HOME;
-  } else {
-    process.env.XDG_CONFIG_HOME = originalEnv.XDG_CONFIG_HOME;
-  }
-
-  if (originalEnv.XDG_DATA_HOME === undefined) {
-    delete process.env.XDG_DATA_HOME;
-  } else {
-    process.env.XDG_DATA_HOME = originalEnv.XDG_DATA_HOME;
-  }
-
-  if (originalEnv.XDG_STATE_HOME === undefined) {
-    delete process.env.XDG_STATE_HOME;
-  } else {
-    process.env.XDG_STATE_HOME = originalEnv.XDG_STATE_HOME;
-  }
-};
+mock.module('env-paths', () => ({
+  default: () => ({
+    config: join(tempBase, 'config', 'proton-drive-bridge'),
+    data: join(tempBase, 'data', 'proton-drive-bridge'),
+    log: join(tempBase, 'log', 'proton-drive-bridge'),
+    temp: join(tempBase, 'temp', 'proton-drive-bridge'),
+    cache: join(tempBase, 'cache', 'proton-drive-bridge'),
+  }),
+}));
 
 describe('Paths - Directory Functions Availability', () => {
   beforeEach(() => {
     tempBase = mkdtempSync(join(tmpdir(), 'pdb-paths-'));
-    process.env.XDG_CONFIG_HOME = join(tempBase, 'config');
-    process.env.XDG_DATA_HOME = join(tempBase, 'data');
-    process.env.XDG_STATE_HOME = join(tempBase, 'state');
   });
 
   afterEach(() => {
     rmSync(tempBase, { recursive: true, force: true });
-    restoreEnv();
   });
 
   test('should have getConfigDir function', async () => {
@@ -72,14 +52,10 @@ describe('Paths - Directory Functions Availability', () => {
 describe('Paths - Directory Paths Return Values', () => {
   beforeEach(() => {
     tempBase = mkdtempSync(join(tmpdir(), 'pdb-paths-'));
-    process.env.XDG_CONFIG_HOME = join(tempBase, 'config');
-    process.env.XDG_DATA_HOME = join(tempBase, 'data');
-    process.env.XDG_STATE_HOME = join(tempBase, 'state');
   });
 
   afterEach(() => {
     rmSync(tempBase, { recursive: true, force: true });
-    restoreEnv();
   });
 
   test('getConfigDir should return non-empty string', async () => {
@@ -107,14 +83,10 @@ describe('Paths - Directory Paths Return Values', () => {
 describe('Paths - Path Properties', () => {
   beforeEach(() => {
     tempBase = mkdtempSync(join(tmpdir(), 'pdb-paths-'));
-    process.env.XDG_CONFIG_HOME = join(tempBase, 'config');
-    process.env.XDG_DATA_HOME = join(tempBase, 'data');
-    process.env.XDG_STATE_HOME = join(tempBase, 'state');
   });
 
   afterEach(() => {
     rmSync(tempBase, { recursive: true, force: true });
-    restoreEnv();
   });
 
   test('getConfigDir should return absolute path', async () => {
@@ -139,14 +111,10 @@ describe('Paths - Path Properties', () => {
 describe('Paths - Directory Creation', () => {
   beforeEach(() => {
     tempBase = mkdtempSync(join(tmpdir(), 'pdb-paths-'));
-    process.env.XDG_CONFIG_HOME = join(tempBase, 'config');
-    process.env.XDG_DATA_HOME = join(tempBase, 'data');
-    process.env.XDG_STATE_HOME = join(tempBase, 'state');
   });
 
   afterEach(() => {
     rmSync(tempBase, { recursive: true, force: true });
-    restoreEnv();
   });
 
   test('getConfigDir should create directory', async () => {
@@ -171,14 +139,10 @@ describe('Paths - Directory Creation', () => {
 describe('Paths - Directory Idempotency', () => {
   beforeEach(() => {
     tempBase = mkdtempSync(join(tmpdir(), 'pdb-paths-'));
-    process.env.XDG_CONFIG_HOME = join(tempBase, 'config');
-    process.env.XDG_DATA_HOME = join(tempBase, 'data');
-    process.env.XDG_STATE_HOME = join(tempBase, 'state');
   });
 
   afterEach(() => {
     rmSync(tempBase, { recursive: true, force: true });
-    restoreEnv();
   });
 
   test('getConfigDir should return same path on multiple calls', async () => {
@@ -203,17 +167,39 @@ describe('Paths - Directory Idempotency', () => {
   });
 });
 
-describe('Paths - Platform Compliance', () => {
+describe('Paths - Runtime Directory', () => {
   beforeEach(() => {
     tempBase = mkdtempSync(join(tmpdir(), 'pdb-paths-'));
-    process.env.XDG_CONFIG_HOME = join(tempBase, 'config');
-    process.env.XDG_DATA_HOME = join(tempBase, 'data');
-    process.env.XDG_STATE_HOME = join(tempBase, 'state');
   });
 
   afterEach(() => {
     rmSync(tempBase, { recursive: true, force: true });
-    restoreEnv();
+  });
+
+  test('getRuntimeDir should return absolute path and create directory', async () => {
+    const { getRuntimeDir } = await loadPaths();
+    const runtimeDir = getRuntimeDir();
+
+    expect(runtimeDir.startsWith('/')).toBe(true);
+    expect(existsSync(runtimeDir)).toBe(true);
+  });
+
+  test('getRuntimeDir should remain stable across calls', async () => {
+    const { getRuntimeDir } = await loadPaths();
+    const dir1 = getRuntimeDir();
+    const dir2 = getRuntimeDir();
+
+    expect(dir1).toBe(dir2);
+  });
+});
+
+describe('Paths - Platform Compliance', () => {
+  beforeEach(() => {
+    tempBase = mkdtempSync(join(tmpdir(), 'pdb-paths-'));
+  });
+
+  afterEach(() => {
+    rmSync(tempBase, { recursive: true, force: true });
   });
 
   test('paths should contain app name proton-drive-bridge', async () => {

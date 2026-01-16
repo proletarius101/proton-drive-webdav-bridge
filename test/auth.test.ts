@@ -15,7 +15,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
-import { mkdtempSync, rmSync } from 'fs';
+import { mkdtempSync, rmSync, mkdirSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
@@ -25,6 +25,48 @@ import {
   authenticateAndStore,
   restoreSessionFromStorage,
 } from '../src/auth.js';
+
+let pathsBase: string = join(tmpdir(), 'pdb-auth-default');
+
+mock.module('env-paths', () => ({
+  default: () => ({
+    config: mkdirSync(join(pathsBase, 'config', 'proton-drive-bridge'), { recursive: true }),
+    data: mkdirSync(join(pathsBase, 'data', 'proton-drive-bridge'), { recursive: true }),
+    log: mkdirSync(join(pathsBase, 'log', 'proton-drive-bridge'), { recursive: true }),
+    temp: mkdirSync(join(pathsBase, 'temp', 'proton-drive-bridge'), { recursive: true }),
+    cache: mkdirSync(join(pathsBase, 'cache', 'proton-drive-bridge'), { recursive: true }),
+  }),
+}));
+
+const keyringStore = new Map<string, string>();
+
+mock.module('@napi-rs/keyring', () => {
+  class Entry {
+    private key: string;
+    constructor(
+      private readonly service: string,
+      private readonly username: string
+    ) {
+      this.key = `${service}:${username}`;
+    }
+
+    setPassword(password: string) {
+      keyringStore.set(this.key, password);
+    }
+
+    getPassword() {
+      return keyringStore.get(this.key) ?? null;
+    }
+
+    deletePassword() {
+      keyringStore.delete(this.key);
+    }
+  }
+
+  class AsyncEntry extends Entry {}
+
+  return { Entry, AsyncEntry };
+});
 
 describe('ProtonAuth - Initialization', () => {
   test('should instantiate ProtonAuth with all required methods', () => {
@@ -279,7 +321,7 @@ describe('ProtonAuth - Session State Management', () => {
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'pdb-auth-state-'));
-    process.env.XDG_DATA_HOME = tempDir;
+    pathsBase = tempDir;
     process.env.KEYRING_PASSWORD = 'test-password';
     originalFetch = global.fetch;
   });
@@ -287,7 +329,7 @@ describe('ProtonAuth - Session State Management', () => {
   afterEach(() => {
     rmSync(tempDir, { recursive: true, force: true });
     delete process.env.KEYRING_PASSWORD;
-    delete process.env.XDG_DATA_HOME;
+    pathsBase = join(tmpdir(), 'pdb-auth-default');
     global.fetch = originalFetch;
   });
 
@@ -313,14 +355,14 @@ describe('ProtonAuth - Credential Storage Integration', () => {
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'pdb-auth-storage-'));
-    process.env.XDG_DATA_HOME = tempDir;
+    pathsBase = tempDir;
     process.env.KEYRING_PASSWORD = 'test-password';
   });
 
   afterEach(() => {
     rmSync(tempDir, { recursive: true, force: true });
     delete process.env.KEYRING_PASSWORD;
-    delete process.env.XDG_DATA_HOME;
+    pathsBase = join(tmpdir(), 'pdb-auth-default');
   });
 
   test('should store and retrieve reusable credentials structure', async () => {
@@ -356,7 +398,7 @@ describe('ProtonAuth - Credential Storage Integration', () => {
       parentUID: 'uid',
       parentAccessToken: 'token',
       // Missing other required fields
-    } as any;
+    } as unknown as Parameters<ProtonAuth['restoreSession']>[0];
 
     try {
       await auth.restoreSession(invalidCredentials);
@@ -431,8 +473,6 @@ describe('ProtonAuth - Session Object Structure', () => {
 
 describe('ProtonAuth - ReusableCredentials Structure', () => {
   test('should include both parent and child session tokens', () => {
-    const auth = new ProtonAuth();
-
     // The getReusableCredentials method should return structure with both sessions
     // This verifies the actual data structure used for session persistence
     const expectedStructure = {
@@ -559,14 +599,14 @@ describe('ProtonAuth - Helper Functions Integration', () => {
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'pdb-auth-helpers-'));
-    process.env.XDG_DATA_HOME = tempDir;
+    pathsBase = tempDir;
     process.env.KEYRING_PASSWORD = 'test-password';
   });
 
   afterEach(() => {
     rmSync(tempDir, { recursive: true, force: true });
     delete process.env.KEYRING_PASSWORD;
-    delete process.env.XDG_DATA_HOME;
+    pathsBase = join(tmpdir(), 'pdb-auth-default');
   });
 
   test('authenticateAndStore should be a function', () => {
@@ -578,6 +618,8 @@ describe('ProtonAuth - Helper Functions Integration', () => {
   });
 
   test('restoreSessionFromStorage should throw when no credentials stored', async () => {
+    const { deleteStoredCredentials } = await import(`../src/keychain.ts?cache=${Date.now()}`);
+    await deleteStoredCredentials();
     await expect(restoreSessionFromStorage()).rejects.toThrow('No stored credentials found');
   });
 });

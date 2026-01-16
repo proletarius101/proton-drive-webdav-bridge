@@ -63,7 +63,6 @@ sudo pacman -S libsecret
    ```
 
 3. **Connect with your file manager:**
-
    - **macOS**: Finder → Go → Connect to Server → `http://127.0.0.1:8080`
    - **Linux (GNOME Files)**: Other Locations → Connect to Server → `dav://127.0.0.1:8080`
    - **Linux (davfs2)**: `sudo mount -t davfs http://127.0.0.1:8080 /mnt/proton`
@@ -138,6 +137,7 @@ proton-drive-bridge --debug <command>
 ## Configuration
 
 Configuration is stored in:
+
 - **Linux**: `~/.config/proton-drive-bridge/config.json`
 - **macOS**: `~/Library/Application Support/proton-drive-bridge/config.json`
 - **Windows**: `%APPDATA%/proton-drive-bridge/config.json`
@@ -179,6 +179,7 @@ Configuration is stored in:
 ### Credential Storage
 
 Credentials are stored using the native OS keychain:
+
 - **macOS**: Keychain Access
 - **Windows**: Windows Credential Manager
 - **Linux**: Secret Service API (GNOME Keyring, KDE Wallet, etc.)
@@ -242,6 +243,7 @@ bun run format
 On Linux without a graphical session, the Secret Service may not be available. The application will fall back to encrypted file storage, but you'll need to enter your password on each login.
 
 To use a graphical keychain in headless mode:
+
 ```bash
 # Start a D-Bus session
 eval $(dbus-launch --sh-syntax)
@@ -253,6 +255,7 @@ gnome-keyring-daemon --start --components=secrets
 ### "Session expired"
 
 If you see session-related errors, try logging in again:
+
 ```bash
 proton-drive-bridge auth logout
 proton-drive-bridge auth login

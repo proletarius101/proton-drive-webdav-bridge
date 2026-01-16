@@ -581,6 +581,7 @@ export class WebDAVServer {
     }
 
     this.server = new webdav.WebDAVServer(serverOptions);
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     serverInstance = this;
   }
 

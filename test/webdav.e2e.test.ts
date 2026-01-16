@@ -1,8 +1,23 @@
 import { createHash } from 'crypto';
-import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { mkdtempSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test';
 
 import { WebDAVServer } from '../src/webdav/server.ts';
 import { driveClient } from '../src/drive.ts';
+
+// Mock env-paths to avoid auth attempts
+const pathsBase = mkdtempSync(join(tmpdir(), 'pdb-webdav-e2e-'));
+mock.module('env-paths', () => ({
+  default: () => ({
+    config: join(pathsBase, 'config'),
+    data: join(pathsBase, 'data'),
+    log: join(pathsBase, 'log'),
+    temp: join(pathsBase, 'temp'),
+    cache: join(pathsBase, 'cache'),
+  }),
+}));
 
 interface InMemoryNode {
   uid: string;
@@ -205,6 +220,7 @@ describe('webdav e2e', () => {
     driveClient.downloadFile = originalMethods.downloadFile;
     driveClient.renameNode = originalMethods.renameNode;
     driveClient.moveNode = originalMethods.moveNode;
+    rmSync(pathsBase, { recursive: true, force: true });
   });
 
   it('supports PUT/GET/DELETE', async () => {

@@ -4,11 +4,24 @@
  * Tests logger with real file I/O, log file creation, and format validation.
  */
 
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { mkdtempSync, rmSync, readdirSync, readFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { logger, setDebugMode } from '../src/logger.js';
+
+const DEFAULT_PATHS_BASE = join(tmpdir(), 'pdb-logger-default');
+let pathsBase = DEFAULT_PATHS_BASE;
+
+mock.module('env-paths', () => ({
+  default: () => ({
+    config: join(pathsBase, 'config', 'proton-drive-bridge'),
+    data: join(pathsBase, 'data', 'proton-drive-bridge'),
+    log: join(pathsBase, 'log', 'proton-drive-bridge'),
+    temp: join(pathsBase, 'temp', 'proton-drive-bridge'),
+    cache: join(pathsBase, 'cache', 'proton-drive-bridge'),
+  }),
+}));
 
 describe('Logger - Instance Methods', () => {
   test('should have info method', () => {
@@ -132,12 +145,12 @@ describe('Logger - File Transports', () => {
 
   beforeEach(() => {
     logDir = mkdtempSync(join(tmpdir(), 'pdb-logger-'));
-    process.env.XDG_STATE_HOME = logDir;
+    pathsBase = logDir;
   });
 
   afterEach(() => {
     rmSync(logDir, { recursive: true, force: true });
-    delete process.env.XDG_STATE_HOME;
+    pathsBase = DEFAULT_PATHS_BASE;
   });
 
   test('should create log directory', async () => {

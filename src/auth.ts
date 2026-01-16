@@ -1199,25 +1199,6 @@ export class ProtonAuth {
     this.parentSession = null;
   }
 
-  private async refreshParentToken(): Promise<void> {
-    if (!this.parentSession?.RefreshToken) {
-      throw new Error('No parent refresh token available');
-    }
-    try {
-      const tokens = await this._refreshSessionTokens(
-        this.parentSession.UID,
-        this.parentSession.RefreshToken
-      );
-      this.parentSession.AccessToken = tokens.accessToken;
-      this.parentSession.RefreshToken = tokens.refreshToken;
-    } catch (error) {
-      if (this.isAuthRequiredError(error) || this.isInvalidRefreshTokenError(error)) {
-        throw new Error('Parent session expired - re-authentication required');
-      }
-      throw error;
-    }
-  }
-
   async refreshToken(): Promise<Session> {
     if (!this.session?.RefreshToken) {
       throw new Error('No refresh token available');

@@ -9,10 +9,23 @@
  * - URL generation
  */
 
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+
+const DEFAULT_PATHS_BASE = join(tmpdir(), 'pdb-webdav-default');
+let pathsBase = DEFAULT_PATHS_BASE;
+
+mock.module('env-paths', () => ({
+  default: () => ({
+    config: join(pathsBase, 'config', 'proton-drive-bridge'),
+    data: join(pathsBase, 'data', 'proton-drive-bridge'),
+    log: join(pathsBase, 'log', 'proton-drive-bridge'),
+    temp: join(pathsBase, 'temp', 'proton-drive-bridge'),
+    cache: join(pathsBase, 'cache', 'proton-drive-bridge'),
+  }),
+}));
 
 describe('WebDAV Server - Initialization', () => {
   test('should import WebDAV server module', async () => {
@@ -32,14 +45,12 @@ describe('WebDAV Server - Lifecycle', () => {
 
   beforeEach(() => {
     baseDir = mkdtempSync(join(tmpdir(), 'pdb-webdav-'));
-    process.env.XDG_CONFIG_HOME = baseDir;
-    process.env.XDG_DATA_HOME = baseDir;
+    pathsBase = baseDir;
   });
 
   afterEach(() => {
     rmSync(baseDir, { recursive: true, force: true });
-    delete process.env.XDG_CONFIG_HOME;
-    delete process.env.XDG_DATA_HOME;
+    pathsBase = DEFAULT_PATHS_BASE;
   });
 
   test('should instantiate WebDAVServer', async () => {
@@ -80,12 +91,12 @@ describe('WebDAV Server - Configuration', () => {
 
   beforeEach(() => {
     baseDir = mkdtempSync(join(tmpdir(), 'pdb-webdav-'));
-    process.env.XDG_CONFIG_HOME = baseDir;
+    pathsBase = baseDir;
   });
 
   afterEach(() => {
     rmSync(baseDir, { recursive: true, force: true });
-    delete process.env.XDG_CONFIG_HOME;
+    pathsBase = DEFAULT_PATHS_BASE;
   });
 
   test('should accept custom configuration', async () => {
@@ -114,12 +125,12 @@ describe('WebDAV Server - Error Handling', () => {
 
   beforeEach(() => {
     baseDir = mkdtempSync(join(tmpdir(), 'pdb-webdav-'));
-    process.env.XDG_DATA_HOME = baseDir;
+    pathsBase = baseDir;
   });
 
   afterEach(() => {
     rmSync(baseDir, { recursive: true, force: true });
-    delete process.env.XDG_DATA_HOME;
+    pathsBase = DEFAULT_PATHS_BASE;
   });
 
   test('stop should not throw when server not running', async () => {
@@ -151,14 +162,12 @@ describe('WebDAV Server - Configuration Integration', () => {
 
   beforeEach(() => {
     baseDir = mkdtempSync(join(tmpdir(), 'pdb-webdav-config-'));
-    process.env.XDG_CONFIG_HOME = baseDir;
-    process.env.XDG_DATA_HOME = baseDir;
+    pathsBase = baseDir;
   });
 
   afterEach(() => {
     rmSync(baseDir, { recursive: true, force: true });
-    delete process.env.XDG_CONFIG_HOME;
-    delete process.env.XDG_DATA_HOME;
+    pathsBase = DEFAULT_PATHS_BASE;
   });
 
   test('should apply host configuration correctly', async () => {

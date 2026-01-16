@@ -46,11 +46,11 @@
     "@protontech/drive-sdk": "^0.7.0",
     "bcryptjs": "^3.0.3",
     "commander": "^14.0.2",
+    "env-paths": "^3.0.0",
     "openpgp": "^6.2.2",
     "webdav-server": "^2.6.2",
     "winston": "^3.18.3",
-    "winston-daily-rotate-file": "^5.0.0",
-    "xdg-basedir": "^5.1.0"
+    "winston-daily-rotate-file": "^5.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
@@ -73,7 +73,10 @@
       "category": "public.app-category.utilities"
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "category": "Utility"
     },
     "win": {
