@@ -5,7 +5,13 @@
  * Handles authentication, file listing, reading, writing, and deletion.
  */
 
-import type { ProtonDriveAccount, ProtonDriveAccountAddress } from '@protontech/drive-sdk';
+import type {
+  ProtonDriveAccount,
+  ProtonDriveAccountAddress,
+  MaybeNode,
+  NodeEntity,
+  DegradedNode,
+} from '@protontech/drive-sdk';
 import type {
   OpenPGPCrypto,
   PrivateKey as SDKPrivateKey,
@@ -108,6 +114,10 @@ export interface FileDownloader {
 // SDK client interface
 export interface ProtonDriveClient {
   iterateFolderChildren(folderUid: string): AsyncIterable<NodeResult>;
+  /**
+   * Get a node by UID (SDK MaybeNode result)
+   */
+  getNode(nodeUid: string): Promise<MaybeNode>;
   getMyFilesRootFolder(): Promise<RootFolderResult>;
   createFolder(
     parentNodeUid: string,
@@ -1055,14 +1065,25 @@ export class DriveClientManager {
   }
 
   /**
-   * Get a single node from the SDK (returns parsed node value or null)
+   * Get a single node from the SDK (returns NodeEntity or DegradedNode, or null)
    */
-  async getNode(nodeUid: string): Promise<any | null> {
+  async getNode(nodeUid: string): Promise<NodeEntity | DegradedNode | null> {
     const client = this.getClient();
     try {
-      const result = await (client as any).getNode(nodeUid);
-      if (result && result.ok && result.value) return result.value;
-      if (result && result.node) return result.node; // fallback shape
+      const result = await client.getNode(nodeUid);
+
+      if (!result) return null;
+
+      if (result.ok && result.value) return result.value;
+
+      // When the SDK cannot fully decrypt the node, it returns a DegradedNode as the error
+      if (!result.ok && result.error) return result.error;
+
+      // Fallback: some older shapes may include `node` directly
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const fallback = (result as any).node;
+      if (fallback) return fallback as NodeEntity;
+
       return null;
     } catch (e) {
       logger.debug(`getNode failed for ${nodeUid}: ${e}`);
