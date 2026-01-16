@@ -14,16 +14,16 @@
  * integration with keychain storage.
  */
 
-import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
-import { mkdtempSync, rmSync, mkdirSync } from 'fs';
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
+  authenticateAndStore,
   ProtonAuth,
+  restoreSessionFromStorage,
   type ApiError,
   type Session,
-  authenticateAndStore,
-  restoreSessionFromStorage,
 } from '../src/auth.js';
 
 let pathsBase: string = join(tmpdir(), 'pdb-auth-default');
@@ -239,11 +239,11 @@ describe('ProtonAuth - Session Restoration', () => {
     // during session restoration, causing "No user ID available" error when calling
     // getReusableCredentials() after restoring a session.
     // This test verifies that UserID is properly set on both session and parentSession.
-    
+
     // Mock successful API responses
     global.fetch = mock(async (url: string) => {
       const urlStr = url.toString();
-      
+
       if (urlStr.includes('/users')) {
         return {
           ok: true,
@@ -258,7 +258,7 @@ describe('ProtonAuth - Session Restoration', () => {
           }),
         };
       }
-      
+
       if (urlStr.includes('/addresses')) {
         return {
           ok: true,
@@ -269,7 +269,7 @@ describe('ProtonAuth - Session Restoration', () => {
           }),
         };
       }
-      
+
       return {
         ok: false,
         status: 404,
@@ -294,10 +294,10 @@ describe('ProtonAuth - Session Restoration', () => {
 
     // Verify UserID is set on the session
     expect(session.UserID).toBe('user-123');
-    
+
     // Verify getReusableCredentials doesn't throw "No user ID available" error
     expect(() => auth.getReusableCredentials()).not.toThrow('No user ID available');
-    
+
     // Verify the returned credentials include UserID
     const reusableCreds = auth.getReusableCredentials();
     expect(reusableCreds.UserID).toBe('user-123');

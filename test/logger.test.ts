@@ -4,8 +4,8 @@
  * Tests logger with real file I/O, log file creation, and format validation.
  */
 
-import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
-import { mkdtempSync, rmSync, readdirSync, readFileSync } from 'fs';
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { logger, setDebugMode } from '../src/logger.js';

@@ -1396,18 +1396,38 @@ export class DriveClientManager {
   async deleteNode(nodeUid: string, permanent = false): Promise<void> {
     const client = this.getClient();
 
+    const runWithTimeout = async (fn: () => Promise<void>) => {
+      const timeoutMs = 15000;
+      let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          fn(),
+          new Promise<void>((_, reject) => {
+            timeoutHandle = setTimeout(() => reject(new Error('Delete timed out')), timeoutMs);
+          }),
+        ]);
+      } finally {
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle);
+        }
+      }
+    };
+
+    const consumeFirst = async (iterable: AsyncIterable<DeleteResult>, op: string) => {
+      const iterator = iterable[Symbol.asyncIterator]();
+      const { value, done } = await iterator.next();
+      if (done || !value) {
+        throw new Error(`No result returned while attempting to ${op}`);
+      }
+      if (!value.ok) {
+        throw new Error(`Failed to ${op}: ${value.error}`);
+      }
+    };
+
     if (permanent) {
-      for await (const result of client.deleteNodes([nodeUid])) {
-        if (!result.ok) {
-          throw new Error(`Failed to delete: ${result.error}`);
-        }
-      }
+      await runWithTimeout(() => consumeFirst(client.deleteNodes([nodeUid]), 'delete'));
     } else {
-      for await (const result of client.trashNodes([nodeUid])) {
-        if (!result.ok) {
-          throw new Error(`Failed to trash: ${result.error}`);
-        }
-      }
+      await runWithTimeout(() => consumeFirst(client.trashNodes([nodeUid]), 'trash'));
     }
   }
 

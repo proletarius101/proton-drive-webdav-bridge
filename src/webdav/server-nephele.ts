@@ -100,69 +100,10 @@ export class WebDAVServer {
 
     this.app = express();
 
-    // Log all incoming requests
-    this.app.use((req, res, next) => {
-      const startTime = Date.now();
-      logger.debug(`→ ${req.method} ${req.url}`);
-      
-      res.on('finish', () => {
-        const duration = Date.now() - startTime;
-        const level = res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info';
-        logger[level](`← ${req.method} ${req.url} -> ${res.statusCode} (${duration}ms)`);
-      });
-      next();
-    });
-
-    // DEBUG: log PROPFIND headers/body (avoid consuming body when empty)
-    this.app.use((req, _res, next) => {
-      if (req.method === 'PROPFIND') {
-        logger.debug(`PROPFIND headers: ${JSON.stringify(req.headers)}`);
-        const contentLength = Number(req.headers['content-length'] ?? 0);
-        if (contentLength > 0) {
-          let body = '';
-          req.on('data', (chunk) => {
-            body += chunk.toString();
-          });
-          req.on('end', () => logger.debug(`PROPFIND body: ${body || '<empty>'}`));
-        } else {
-          logger.debug('PROPFIND body: <empty>');
-        }
-      }
-      next();
-    });
-
     // Add authentication middleware if required
     if (this.options.requireAuth) {
       this.app.use(createAuthMiddleware(this.options.username, this.options.passwordHash));
     }
-
-    // Advertise WebDAV compliance via OPTIONS (RFC 4918)
-    this.app.use((req, res, next) => {
-      if (req.method === 'OPTIONS') {
-        // DAV header indicates supported DAV classes; class 1/2 covers core + locking
-        res.setHeader('DAV', '1,2');
-        // Allow header enumerates supported methods commonly used by WebDAV clients
-        res.setHeader(
-          'Allow',
-          [
-            'OPTIONS',
-            'PROPFIND',
-            'GET',
-            'HEAD',
-            'PUT',
-            'DELETE',
-            'MKCOL',
-            'COPY',
-            'MOVE',
-            'LOCK',
-            'UNLOCK',
-          ].join(', ')
-        );
-        // Some clients (MS Office) rely on this hint; harmless for others
-        res.setHeader('MS-Author-Via', 'DAV');
-      }
-      next();
-    });
 
     // Mount Nephele WebDAV handler
     this.app.use(
@@ -181,23 +122,15 @@ export class WebDAVServer {
       })
     );
 
-    // Error handler to log and surface WebDAV failures (log stack)
+    // Error handler to surface WebDAV failures during tests and runtime
     this.app.use(
-      (err: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+      (err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
         const status =
           typeof (err as { statusCode?: number }).statusCode === 'number'
             ? (err as { statusCode: number }).statusCode
             : 500;
         const message = err instanceof Error ? err.message : 'Internal Server Error';
-        const stack = err instanceof Error ? err.stack : String(err);
         logger.error(`WebDAV request failed: ${message}`);
-        logger.debug(`Error stack: ${stack}`);
-        // Also log request metadata for context
-        try {
-          logger.debug(`Request headers: ${JSON.stringify(req.headers)}`);
-        } catch {
-          // Ignore JSON serialization errors
-        }
 
         if (!res.headersSent) {
           res.status(status).send(message);

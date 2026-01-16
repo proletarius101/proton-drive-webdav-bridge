@@ -1,8 +1,7 @@
 /**
  * Proton Drive WebDAV Bridge - Logging
  *
- * Winston-based logging with console and file transports.
- * Supports daily log rotation.
+ * Winston-based logging with console and optional rotating file transports.
  */
 
 import winston from 'winston';
@@ -43,20 +42,24 @@ const logFormat = winston.format.combine(
 const consoleFormat = winston.format.combine(
   winston.format.colorize(),
   winston.format.timestamp({ format: 'HH:mm:ss' }),
-  winston.format.printf(({ level, message, timestamp }) => {
-    return `${timestamp} ${level}: ${message}`;
-  })
+  winston.format.printf(({ level, message, timestamp }) => `${timestamp} ${level}: ${message}`)
 );
 
 // ============================================================================
 // Transports
 // ============================================================================
 
+const isTestEnv =
+  process.env.NODE_ENV === 'test' || process.argv.some((arg) => arg.includes('test'));
+
 const consoleTransport = new winston.transports.Console({
   format: consoleFormat,
   level: 'info',
 });
 
+const transports: winston.transport[] = [consoleTransport];
+
+if (!isTestEnv) {
 const fileTransport = new DailyRotateFile({
   dirname: LOG_DIR,
   filename: 'proton-drive-webdav-bridge-%DATE%.log',
@@ -77,13 +80,16 @@ const errorFileTransport = new DailyRotateFile({
   level: 'error',
 });
 
+  transports.push(fileTransport, errorFileTransport);
+}
+
 // ============================================================================
 // Logger Instance
 // ============================================================================
 
 export const logger = winston.createLogger({
   level: 'debug',
-  transports: [consoleTransport, fileTransport, errorFileTransport],
+  transports,
 });
 
 // ============================================================================

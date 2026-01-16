@@ -162,7 +162,9 @@ export function registerAuthCommand(program: Command): void {
             console.log(error);
           }
         } else {
-          console.log('✗ Not logged in. Use "proton-drive-webdav-bridge auth login" to authenticate.');
+          console.log(
+            '✗ Not logged in. Use "proton-drive-webdav-bridge auth login" to authenticate.'
+          );
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
