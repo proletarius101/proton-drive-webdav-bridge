@@ -12,6 +12,7 @@ import {
   ResourceTreeNotCompleteError,
   MethodNotSupportedError,
   ForbiddenError,
+  ResourceNotFoundError,
 } from 'nephele';
 import { driveClient, type DriveNode } from '../drive.js';
 import { logger } from '../logger.js';
@@ -368,38 +369,44 @@ export default class ProtonDriveResource implements ResourceInterface {
     this._node = null;
   }
 
-  async copy(_destination: URL, _baseUrl: URL, _user: User): Promise<void> {
-    // Copy is not supported by Proton Drive SDK
-    throw new MethodNotSupportedError('Copy is not supported.');
-  }
-
-  async move(destination: URL, baseUrl: URL, user: User, lockToken?: string): Promise<void> {
-    // Check lock before moving
+  async copy(destination: URL, baseUrl: URL, user: User, lockToken?: string): Promise<void> {
+    // Check lock before copying
     this.checkLock(user, lockToken);
 
     const node = await this.resolveNode();
-
     if (!node) {
       throw new Error('Resource not found.');
     }
 
     const destPath = this.adapter.urlToRelativePath(destination, baseUrl);
-
     if (!destPath) {
-      throw new Error('Invalid destination path.');
+      throw new ForbiddenError('The destination URL is not under the namespace of this server.');
     }
 
-    logger.debug(`Moving ${this.path} to ${destPath}`);
+    // Prevent copying to self or into self (for collections)
+    if (
+      this.path === destPath ||
+      ((await this.isCollection()) && destPath.startsWith(this.path + '/'))
+    ) {
+      throw new ForbiddenError(
+        'The destination cannot be the same as or contained within the source.'
+      );
+    }
 
-    // Get parent path: handle root specially
+    // Validate destination parent exists
+    if (!(await this.resourceTreeExists(destPath))) {
+      throw new ResourceTreeNotCompleteError(
+        'One or more intermediate collections must be created before this resource.'
+      );
+    }
+
+    // Get destination parent and name
     let destParentPath = '/';
     const lastSlash = destPath.lastIndexOf('/');
     if (lastSlash > 0) {
       destParentPath = destPath.substring(0, lastSlash);
     }
     const destName = destPath.substring(lastSlash + 1);
-
-    logger.debug(`Destination parent: ${destParentPath}, name: ${destName}`);
 
     const destParentResource = new ProtonDriveResource({
       adapter: this.adapter,
@@ -408,13 +415,145 @@ export default class ProtonDriveResource implements ResourceInterface {
     });
 
     const destParentNode = await destParentResource.resolveNode();
-
     if (!destParentNode || destParentNode.type !== 'folder') {
-      logger.error(`Destination parent node not found: ${destParentPath}`);
       throw new ResourceTreeNotCompleteError('Destination parent folder not found.');
     }
 
-    // Move to different folder
+    // Handle destination overwrite
+    try {
+      const destResource = await this.adapter.getResource(destination, baseUrl);
+      if (await destResource.isCollection()) {
+        if (!(await destResource.isEmpty())) {
+          throw new ForbiddenError('Directory not empty.');
+        }
+        await destResource.delete(user);
+      } else {
+        await destResource.delete(user);
+      }
+    } catch (e) {
+      if (!(e instanceof ResourceNotFoundError)) {
+        throw e;
+      }
+    }
+
+    // Perform the copy operation
+    if (node.type === 'folder') {
+      // Recursively copy directory
+      await this.copyDirectory(node, destParentNode.uid, destName, user);
+    } else {
+      // Copy file
+      const fileData = await driveClient.downloadFile(node.uid);
+      await driveClient.uploadFile(
+        destParentNode.uid,
+        destName,
+        fileData instanceof ReadableStream
+          ? fileData
+          : (Readable.toWeb(Readable.from([fileData])) as ReadableStream),
+        { size: node.size }
+      );
+    }
+
+    logger.debug(`Copied ${this.path} to ${destPath}`);
+  }
+
+  private async copyDirectory(
+    sourceNode: DriveNode,
+    destParentUid: string,
+    destName: string,
+    user: User
+  ): Promise<void> {
+    // Create destination directory
+    const createdFolderUid = await driveClient.createFolder(destParentUid, destName);
+
+    // Copy all children
+    const children = await driveClient.listFolder(sourceNode.uid);
+    for (const child of children) {
+      if (child.type === 'folder') {
+        await this.copyDirectory(child, createdFolderUid, child.name, user);
+      } else {
+        const fileData = await driveClient.downloadFile(child.uid);
+        await driveClient.uploadFile(
+          createdFolderUid,
+          child.name,
+          fileData instanceof ReadableStream
+            ? fileData
+            : (Readable.toWeb(Readable.from([fileData])) as ReadableStream),
+          { size: child.size }
+        );
+      }
+    }
+  }
+
+  async move(destination: URL, baseUrl: URL, user: User, lockToken?: string): Promise<void> {
+    // Check lock before moving
+    this.checkLock(user, lockToken);
+
+    if (await this.isCollection()) {
+      throw new Error('Move called on a collection resource.');
+    }
+
+    const node = await this.resolveNode();
+    if (!node) {
+      throw new Error('Resource not found.');
+    }
+
+    const destPath = this.adapter.urlToRelativePath(destination, baseUrl);
+    if (!destPath) {
+      throw new ForbiddenError('The destination URL is not under the namespace of this server.');
+    }
+
+    // Prevent moving to self or into self
+    if (
+      this.path === destPath ||
+      ((await this.isCollection()) && destPath.startsWith(this.path + '/'))
+    ) {
+      throw new ForbiddenError(
+        'The destination cannot be the same as or contained within the source.'
+      );
+    }
+
+    // Validate destination tree exists
+    if (!(await this.resourceTreeExists(destPath))) {
+      throw new ResourceTreeNotCompleteError(
+        'One or more intermediate collections must be created before this resource.'
+      );
+    }
+
+    // Get destination parent and name
+    let destParentPath = '/';
+    const lastSlash = destPath.lastIndexOf('/');
+    if (lastSlash > 0) {
+      destParentPath = destPath.substring(0, lastSlash);
+    }
+    const destName = destPath.substring(lastSlash + 1);
+
+    const destParentResource = new ProtonDriveResource({
+      adapter: this.adapter,
+      baseUrl: baseUrl,
+      path: destParentPath,
+    });
+
+    const destParentNode = await destParentResource.resolveNode();
+    if (!destParentNode || destParentNode.type !== 'folder') {
+      throw new ResourceTreeNotCompleteError('Destination parent folder not found.');
+    }
+
+    // Handle destination overwrite
+    try {
+      const destResource = await this.adapter.getResource(destination, baseUrl);
+      if ((await destResource.isCollection()) && !(await destResource.isEmpty())) {
+        throw new ForbiddenError('The destination cannot be an existing non-empty directory.');
+      }
+    } catch (e) {
+      if (!(e instanceof ResourceNotFoundError)) {
+        throw e;
+      }
+    }
+
+    // Clear locks before moving (security - prevent lock hijacking)
+    this.lockManager.deleteLocksForPath(this.path);
+
+    // Move to different folder if needed
     const currentParentPath = this.getParentPath();
     if (currentParentPath !== destParentPath) {
       await driveClient.moveNode(node.uid, destParentNode.uid);
@@ -425,23 +564,7 @@ export default class ProtonDriveResource implements ResourceInterface {
       await driveClient.renameNode(node.uid, destName);
     }
 
-    // Move locks to new path
-    const locks = this.lockManager.getLocksForPath(this.path);
-    this.lockManager.deleteLocksForPath(this.path);
-
-    // Recreate locks at new path
-    for (const lock of locks) {
-      this.lockManager.createLock(
-        destPath,
-        { username: lock.username } as User,
-        lock.timeout,
-        lock.scope,
-        lock.depth,
-        lock.provisional,
-        lock.owner
-      );
-    }
-
+    logger.debug(`Moved ${this.path} to ${destPath}`);
     this._node = undefined;
   }
 
@@ -474,18 +597,34 @@ export default class ProtonDriveResource implements ResourceInterface {
   }
 
   async getCanonicalName(): Promise<string> {
+    if (this.path === '' || this.path === '/') {
+      return '/';
+    }
     const node = await this.resolveNode();
-    return node ? node.name : '';
+    if (!node) {
+      throw new Error('Resource not found.');
+    }
+    return node.name;
   }
 
   async getCanonicalPath(): Promise<string> {
-    return this.path;
+    if (await this.isCollection()) {
+      // Ensure collections have trailing slash
+      if (this.path === '') {
+        return '/';
+      }
+      return this.path.replace(/\/?$/, () => '/');
+    }
+    // Non-collections should not have trailing slash
+    return this.path.replace(/\/$/, '');
   }
 
   async getCanonicalUrl(): Promise<URL> {
+    const canonicalPath = await this.getCanonicalPath();
     return new URL(
-      this.path
+      canonicalPath
         .split('/')
+        .filter((part) => part.length > 0)
         .map((part) => encodeURIComponent(part))
         .join('/'),
       this.baseUrl
@@ -545,5 +684,55 @@ export default class ProtonDriveResource implements ResourceInterface {
     const node = await this.resolveNode();
     const date = node ? node.modifiedTime : new Date();
     return date.toUTCString();
+  }
+
+  /**
+   * Check if a collection is empty
+   */
+  async isEmpty(): Promise<boolean> {
+    if (!(await this.isCollection())) {
+      return false;
+    }
+
+    const node = await this.resolveNode();
+    if (!node || node.type !== 'folder') {
+      return true;
+    }
+
+    const children = await driveClient.listFolder(node.uid);
+    return children.length === 0;
+  }
+
+  /**
+   * Validate that all parent directories exist
+   */
+  async resourceTreeExists(path: string = this.path): Promise<boolean> {
+    if (path === '' || path === '/') {
+      return true; // Root always exists
+    }
+
+    // Check that all parent directories exist
+    const parts = path.split('/').filter((p) => p.length > 0);
+    let currentUid = driveClient.getRootFolderUid();
+
+    try {
+      // Validate all parents except the last part (the resource itself)
+      for (let i = 0; i < parts.length - 1; i++) {
+        const part = parts[i];
+        const nodes = await driveClient.listFolder(currentUid);
+        const foundNode = nodes.find((n) => n.name === part);
+
+        if (!foundNode || foundNode.type !== 'folder') {
+          logger.debug(`Parent directory not found: ${part}`);
+          return false;
+        }
+        currentUid = foundNode.uid;
+      }
+
+      return true;
+    } catch (error) {
+      logger.error(`Error checking resource tree: ${error}`);
+      return false;
+    }
   }
 }
