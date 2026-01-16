@@ -67,7 +67,7 @@
     "typescript-eslint": "^8.48.0"
   },
   "build": {
-    "appId": "io.proton.drive-bridge",
+    "appId": "io.github.proletarius101.proton-drive-webdav-bridge",
     "productName": "Proton Drive WebDAV Bridge",
     "mac": {
       "category": "public.app-category.utilities"
