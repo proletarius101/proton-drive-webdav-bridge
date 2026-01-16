@@ -690,6 +690,15 @@ async function apiRequest<T extends ApiResponse>(
   return json;
 }
 
+export type ApiRequester = <T extends ApiResponse>(
+  method: string,
+  endpoint: string,
+  data?: Record<string, unknown> | null,
+  session?: Session | null
+) => Promise<T>;
+
+export const defaultApiRequester: ApiRequester = apiRequest;
+
 // ============================================================================
 // ProtonAuth Class
 // ============================================================================
@@ -697,6 +706,8 @@ async function apiRequest<T extends ApiResponse>(
 export class ProtonAuth {
   private session: Session | null = null;
   private parentSession: Session | null = null;
+
+  constructor(private apiRequest: ApiRequester = defaultApiRequester) {}
 
   private async apiRequestWithRefresh<T extends ApiResponse>(
     method: string,
@@ -708,13 +719,13 @@ export class ProtonAuth {
     }
 
     try {
-      return await apiRequest<T>(method, endpoint, data, this.session);
+      return await this.apiRequest<T>(method, endpoint, data, this.session);
     } catch (error) {
       const apiError = error as ApiError;
       if (apiError.status === 401 && this.session?.RefreshToken) {
         logger.info('Access token expired, attempting refresh...');
         await this.refreshToken();
-        return await apiRequest<T>(method, endpoint, data, this.session);
+        return await this.apiRequest<T>(method, endpoint, data, this.session);
       }
       throw error;
     }
@@ -726,7 +737,7 @@ export class ProtonAuth {
     twoFactorCode: string | null = null
   ): Promise<Session> {
     // Get auth info
-    const authInfo = await apiRequest<AuthInfo & ApiResponse>('POST', 'core/v4/auth/info', {
+    const authInfo = await this.apiRequest<AuthInfo & ApiResponse>('POST', 'core/v4/auth/info', {
       Username: username,
     });
 
@@ -748,7 +759,7 @@ export class ProtonAuth {
       authData.TwoFactorCode = twoFactorCode;
     }
 
-    const authResponse = await apiRequest<AuthResponse>('POST', 'core/v4/auth', authData);
+    const authResponse = await this.apiRequest<AuthResponse>('POST', 'core/v4/auth', authData);
 
     // Verify server proof
     if (authResponse.ServerProof !== expectedServerProof) {
@@ -819,7 +830,7 @@ export class ProtonAuth {
       throw new Error('No pending 2FA authentication');
     }
 
-    const response = await apiRequest<
+    const response = await this.apiRequest<
       ApiResponse & { AccessToken?: string; RefreshToken?: string }
     >('POST', 'core/v4/auth/2fa', { TwoFactorCode: code }, this.session);
 
@@ -962,7 +973,7 @@ export class ProtonAuth {
       throw new Error('No session available');
     }
 
-    const userResponse = await apiRequest<ApiResponse & { User: User }>(
+    const userResponse = await this.apiRequest<ApiResponse & { User: User }>(
       'GET',
       'core/v4/users',
       null,
@@ -970,7 +981,7 @@ export class ProtonAuth {
     );
     this.session.user = userResponse.User;
 
-    const saltsResponse = await apiRequest<ApiResponse & { KeySalts?: KeySalt[] }>(
+    const saltsResponse = await this.apiRequest<ApiResponse & { KeySalts?: KeySalt[] }>(
       'GET',
       'core/v4/keys/salts',
       null,
@@ -978,7 +989,7 @@ export class ProtonAuth {
     );
     const keySalts = saltsResponse.KeySalts || [];
 
-    const addressesResponse = await apiRequest<ApiResponse & { Addresses?: Address[] }>(
+    const addressesResponse = await this.apiRequest<ApiResponse & { Addresses?: Address[] }>(
       'GET',
       'core/v4/addresses',
       null,
