@@ -5,34 +5,11 @@
  */
 
 import { Command } from 'commander';
-import { existsSync, readFileSync } from 'fs';
 import { hasStoredCredentials, getStoredCredentials } from '../keychain.js';
-import { getPidFilePath, getLogFilePath } from '../paths.js';
+import { getLogFilePath } from '../paths.js';
 import { getConfig } from '../config.js';
 import { logger } from '../logger.js';
-
-function readPidFile(): number | null {
-  const pidFile = getPidFilePath();
-  if (!existsSync(pidFile)) {
-    return null;
-  }
-  try {
-    const pid = parseInt(readFileSync(pidFile, 'utf-8').trim(), 10);
-    return isNaN(pid) ? null : pid;
-  } catch (error) {
-    logger.debug(`Failed to read PID file: ${error}`);
-    return null;
-  }
-}
-
-function isProcessRunning(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
+import { readPidFile, isProcessRunning } from './daemon-utils.js';
 
 export function registerStatusCommand(program: Command): void {
   program

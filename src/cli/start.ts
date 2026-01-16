@@ -5,51 +5,11 @@
  */
 
 import { Command } from 'commander';
-import { writeFileSync, unlinkSync, existsSync, readFileSync } from 'fs';
 import { logger, setDebugMode } from '../logger.js';
 import { loadConfig } from '../config.js';
 import { hasStoredCredentials } from '../keychain.js';
-import { getPidFilePath } from '../paths.js';
 import { WebDAVServer } from '../webdav/index.js';
-
-// ============================================================================
-// Daemon Management
-// ============================================================================
-
-function writePidFile(pid: number): void {
-  const pidFile = getPidFilePath();
-  writeFileSync(pidFile, pid.toString(), { mode: 0o644 });
-}
-
-function removePidFile(): void {
-  const pidFile = getPidFilePath();
-  if (existsSync(pidFile)) {
-    unlinkSync(pidFile);
-  }
-}
-
-function readPidFile(): number | null {
-  const pidFile = getPidFilePath();
-  if (!existsSync(pidFile)) {
-    return null;
-  }
-  try {
-    const pid = parseInt(readFileSync(pidFile, 'utf-8').trim(), 10);
-    return isNaN(pid) ? null : pid;
-  } catch (error) {
-    logger.debug(`Failed to read PID file: ${error}`);
-    return null;
-  }
-}
-
-function isProcessRunning(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
+import { writePidFile, removePidFile, readPidFile, isProcessRunning } from './daemon-utils.js';
 
 // ============================================================================
 // Command Registration

@@ -5,39 +5,8 @@
  */
 
 import { Command } from 'commander';
-import { existsSync, readFileSync, unlinkSync } from 'fs';
 import { logger } from '../logger.js';
-import { getPidFilePath } from '../paths.js';
-
-function readPidFile(): number | null {
-  const pidFile = getPidFilePath();
-  if (!existsSync(pidFile)) {
-    return null;
-  }
-  try {
-    const pid = parseInt(readFileSync(pidFile, 'utf-8').trim(), 10);
-    return isNaN(pid) ? null : pid;
-  } catch (error) {
-    logger.debug(`Failed to read PID file: ${error}`);
-    return null;
-  }
-}
-
-function removePidFile(): void {
-  const pidFile = getPidFilePath();
-  if (existsSync(pidFile)) {
-    unlinkSync(pidFile);
-  }
-}
-
-function isProcessRunning(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
+import { readPidFile, removePidFile, isProcessRunning } from './daemon-utils.js';
 
 export function registerStopCommand(program: Command): void {
   program
