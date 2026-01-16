@@ -1,5 +1,5 @@
 /**
- * Proton Drive Bridge - Drive Client
+ * Proton Drive WebDAV Bridge - Drive Client
  *
  * Wrapper for @protontech/drive-sdk providing file operations for the WebDAV server.
  * Handles authentication, file listing, reading, writing, and deletion.

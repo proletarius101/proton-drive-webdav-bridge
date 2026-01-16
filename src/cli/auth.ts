@@ -1,5 +1,5 @@
 /**
- * Proton Drive Bridge - Auth CLI Command
+ * Proton Drive WebDAV Bridge - Auth CLI Command
  *
  * Handles authentication with Proton account.
  */

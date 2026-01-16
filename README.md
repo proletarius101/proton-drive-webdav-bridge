@@ -1,6 +1,6 @@
-# Proton Drive Bridge
+# Proton Drive WebDAV Bridge
 
-A WebDAV bridge for Proton Drive, allowing you to access your Proton Drive files through the standard WebDAV protocol. Mount your encrypted cloud storage as a network drive on any operating system.
+An unofficial WebDAV bridge for Proton Drive, allowing you to access your Proton Drive files through the standard WebDAV protocol. Mount your encrypted cloud storage as a network drive on any operating system.
 
 ## Features
 

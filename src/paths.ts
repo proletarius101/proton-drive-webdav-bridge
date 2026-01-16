@@ -1,5 +1,5 @@
 /**
- * Proton Drive Bridge - XDG Paths
+ * Proton Drive WebDAV Bridge - XDG Paths
  *
  * Cross-platform path management following XDG Base Directory Specification.
  */

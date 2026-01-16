@@ -1,5 +1,5 @@
 /**
- * Proton Drive Bridge - Authentication
+ * Proton Drive WebDAV Bridge - Authentication
  *
  * Implements Proton SRP (Secure Remote Password) authentication compatible with
  * the Proton API, including:

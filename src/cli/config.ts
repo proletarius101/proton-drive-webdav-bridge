@@ -1,5 +1,5 @@
 /**
- * Proton Drive Bridge - Config CLI Command
+ * Proton Drive WebDAV Bridge - Config CLI Command
  *
  * Manage configuration settings.
  */
@@ -111,7 +111,7 @@ export function registerConfigCommand(program: Command): void {
     .description('Interactive configuration setup')
     .action(async () => {
       try {
-        console.log('Proton Drive Bridge Configuration\n');
+        console.log('Proton Drive WebDAV Bridge Configuration\n');
 
         const config = loadConfig();
 

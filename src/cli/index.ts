@@ -1,5 +1,5 @@
 /**
- * Proton Drive Bridge - CLI Module
+ * Proton Drive WebDAV Bridge - CLI Module
  *
  * Re-exports CLI command registration functions.
  */

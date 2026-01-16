@@ -1,5 +1,5 @@
 /**
- * Proton Drive Bridge - Proton Module
+ * Proton Drive WebDAV Bridge - Proton Module
  *
  * Re-exports Proton Drive related functionality.
  */

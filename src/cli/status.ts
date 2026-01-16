@@ -1,5 +1,5 @@
 /**
- * Proton Drive Bridge - Status CLI Command
+ * Proton Drive WebDAV Bridge - Status CLI Command
  *
  * Shows the status of the WebDAV server and authentication.
  */
@@ -82,7 +82,7 @@ export function registerStatusCommand(program: Command): void {
         if (options.json) {
           console.log(JSON.stringify(status, null, 2));
         } else {
-          console.log('Proton Drive Bridge Status');
+          console.log('Proton Drive WebDAV Bridge Status');
           console.log('==========================\n');
 
           // Server status

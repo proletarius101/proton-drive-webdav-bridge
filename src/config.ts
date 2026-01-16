@@ -1,5 +1,5 @@
 /**
- * Proton Drive Bridge - Configuration
+ * Proton Drive WebDAV Bridge - Configuration
  *
  * Manages application configuration including WebDAV server settings,
  * mount paths, and security options.

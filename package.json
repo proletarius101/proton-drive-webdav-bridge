@@ -68,7 +68,7 @@
   },
   "build": {
     "appId": "io.proton.drive-bridge",
-    "productName": "Proton Drive Bridge",
+    "productName": "Proton Drive WebDAV Bridge",
     "mac": {
       "category": "public.app-category.utilities"
     },

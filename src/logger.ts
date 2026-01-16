@@ -1,5 +1,5 @@
 /**
- * Proton Drive Bridge - Logging
+ * Proton Drive WebDAV Bridge - Logging
  *
  * Winston-based logging with console and file transports.
  * Supports daily log rotation.

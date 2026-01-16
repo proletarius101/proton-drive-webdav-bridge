@@ -1,5 +1,5 @@
 /**
- * Proton Drive Bridge - Auth Module (Barrel Export)
+ * Proton Drive WebDAV Bridge - Auth Module (Barrel Export)
  *
  * Re-exports authentication functionality for external use.
  */

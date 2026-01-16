@@ -1,5 +1,5 @@
 /**
- * Proton Drive Bridge - WebDAV Server
+ * Proton Drive WebDAV Bridge - WebDAV Server
  *
  * WebDAV server implementation using webdav-server library with Proton Drive backend.
  * Provides RFC 4918 compliant WebDAV access to Proton Drive files.

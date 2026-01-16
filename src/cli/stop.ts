@@ -1,5 +1,5 @@
 /**
- * Proton Drive Bridge - Stop CLI Command
+ * Proton Drive WebDAV Bridge - Stop CLI Command
  *
  * Stops the running WebDAV server daemon.
  */

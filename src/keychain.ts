@@ -1,5 +1,5 @@
 /**
- * Proton Drive Bridge - Secure Keychain
+ * Proton Drive WebDAV Bridge - Secure Keychain
  *
  * Cross-platform secure credential storage:
  * - macOS: Keychain via @napi-rs/keyring

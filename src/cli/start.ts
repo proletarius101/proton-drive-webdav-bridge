@@ -1,5 +1,5 @@
 /**
- * Proton Drive Bridge - Start CLI Command
+ * Proton Drive WebDAV Bridge - Start CLI Command
  *
  * Starts the WebDAV server.
  */

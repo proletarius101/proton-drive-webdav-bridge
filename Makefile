@@ -57,7 +57,7 @@ clean:
 
 ## help: Show this help message
 help:
-	@echo "Proton Drive Bridge - WebDAV bridge for Proton Drive"
+	@echo "Proton Drive WebDAV Bridge - WebDAV bridge for Proton Drive"
 	@echo ""
 	@echo "Usage: make <target>"
 	@echo ""

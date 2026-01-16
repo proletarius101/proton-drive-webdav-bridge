@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Proton Drive Bridge - CLI Entry Point
+ * Proton Drive WebDAV Bridge - CLI Entry Point
  *
  * Command-line interface for the Proton Drive WebDAV bridge.
  */
