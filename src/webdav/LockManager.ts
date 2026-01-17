@@ -151,10 +151,21 @@ export class LockManager {
     };
   }
 
+  private normalizeToken(token: string | null | undefined): string | null {
+    if (!token) return null;
+    // Remove surrounding angle brackets and whitespace if present
+    return token.trim().replace(/^<|>$/g, '');
+  }
+
   getLock(token: string): LockInfo | null {
     this.cleanupExpiredLocks();
 
-    const row = this.db.query<LockRow, [string]>('SELECT * FROM locks WHERE token = ?').get(token);
+    const normalized = this.normalizeToken(token);
+    if (!normalized) return null;
+
+    const row = this.db
+      .query<LockRow, [string]>('SELECT * FROM locks WHERE token = ?')
+      .get(normalized);
 
     if (!row) {
       return null;
@@ -192,7 +203,10 @@ export class LockManager {
   refreshLock(token: string, timeout: number): boolean {
     this.cleanupExpiredLocks();
 
-    const lock = this.getLock(token);
+    const normalized = this.normalizeToken(token);
+    if (!normalized) return false;
+
+    const lock = this.getLock(normalized);
     if (!lock) {
       return false;
     }
@@ -203,14 +217,16 @@ export class LockManager {
     const result = this.db.run('UPDATE locks SET expires_at = ?, timeout = ? WHERE token = ?', [
       expiresAt,
       timeout,
-      token,
+      normalized,
     ]);
 
     return result.changes > 0;
   }
 
   deleteLock(token: string): boolean {
-    const result = this.db.run('DELETE FROM locks WHERE token = ?', [token]);
+    const normalized = this.normalizeToken(token);
+    if (!normalized) return false;
+    const result = this.db.run('DELETE FROM locks WHERE token = ?', [normalized]);
     return result.changes > 0;
   }
 
@@ -243,8 +259,11 @@ export class LockManager {
       return !this.isLocked(path);
     }
 
+    const normalized = this.normalizeToken(token);
+    if (!normalized) return false;
+
     // Verify the token exists and matches the path
-    const lock = this.getLock(token);
+    const lock = this.getLock(normalized);
     if (!lock) {
       return false;
     }

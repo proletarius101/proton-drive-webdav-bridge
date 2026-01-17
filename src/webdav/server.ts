@@ -16,6 +16,7 @@ import { getConfig } from '../config.js';
 import { driveClient } from '../drive.js';
 import ProtonDriveAdapter from './ProtonDriveAdapter.js';
 import ProtonDriveAuthenticator from './ProtonDriveAuthenticator.js';
+import { LockManager } from './LockManager.js';
 
 // ============================================================================
 // Types
@@ -104,7 +105,7 @@ export class WebDAVServer {
     this.app.use((req, res, next) => {
       const startTime = Date.now();
       logger.debug(`→ ${req.method} ${req.url}`);
-      
+
       res.on('finish', () => {
         const duration = Date.now() - startTime;
         const level = res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info';
@@ -131,6 +132,33 @@ export class WebDAVServer {
     if (this.options.requireAuth) {
       this.app.use(createAuthMiddleware(this.options.username, this.options.passwordHash));
     }
+
+    // Provide a lightweight UNLOCK handler to ensure tokens are recognized
+    // (normalize angle-bracket tokens) before handing to Nephele. This mirrors
+    // expected behavior found in other Nephele adapters (S3 reference).
+    this.app.use((req, res, next) => {
+      if (req.method === 'UNLOCK') {
+        try {
+          const lockToken = req.get('Lock-Token') ?? '';
+          const normalized = lockToken.trim().replace(/^<|>$/g, '');
+          if (normalized) {
+            const lm = LockManager.getInstance();
+            const deleted = lm.deleteLock(normalized);
+            if (deleted) {
+              res.status(204).send();
+              return;
+            }
+          }
+          res.status(404).send('Lock not found');
+          return;
+        } catch (err) {
+          logger.error(`UNLOCK handler error: ${err}`);
+          res.status(500).send('Internal Server Error');
+          return;
+        }
+      }
+      next();
+    });
 
     // Advertise WebDAV compliance via OPTIONS (RFC 4918)
     this.app.use((req, res, next) => {

@@ -188,31 +188,19 @@ export default class ProtonDriveResource implements ResourceInterface {
     const provisional = false;
     const owner = { username: user.username };
 
-    try {
-      const lockInfo = this.lockManager.createLock(
-        this.path,
-        user,
-        timeout,
-        scope,
-        depth,
-        provisional,
-        owner
-      );
+    // Don't persist immediately here; let the Lock.save() call create the lock
+    const token = this.lockManager.generateToken();
 
-      return new ProtonDriveLock({
-        resource: this,
-        token: lockInfo.token,
-        date: lockInfo.createdAt,
-        timeout: lockInfo.timeout,
-        scope: lockInfo.scope,
-        depth: lockInfo.depth,
-        provisional: lockInfo.provisional,
-        owner: lockInfo.owner,
-      });
-    } catch (error) {
-      logger.error(`Failed to create lock: ${error}`);
-      throw new ForbiddenError('Resource is already locked');
-    }
+    return new ProtonDriveLock({
+      resource: this,
+      token,
+      date: new Date(),
+      timeout,
+      scope,
+      depth,
+      provisional,
+      owner,
+    });
   }
 
   async getProperties(): Promise<Properties> {

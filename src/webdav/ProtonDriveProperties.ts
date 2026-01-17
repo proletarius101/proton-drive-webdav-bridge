@@ -9,6 +9,12 @@ import type { Resource } from 'nephele';
 
 import MetadataManager from './MetadataManager.js';
 
+// Minimal local type for optional resource helpers used by properties
+type ResourceWithMeta = {
+  getMetadata?: () => Promise<{ props?: Record<string, unknown> } | null>;
+  resolveNode?: () => Promise<{ uid: string } | null>;
+};
+
 export default class ProtonDriveProperties implements PropertiesInterface {
   resource: Resource;
   private props: { [name: string]: string | object | object[] } = {};
@@ -21,12 +27,18 @@ export default class ProtonDriveProperties implements PropertiesInterface {
   private async ensureLoaded() {
     if (this.metaLoaded) return;
     try {
-      const meta = await (this.resource as any).getMetadata();
+      const r = this.resource as unknown as ResourceWithMeta;
+      const meta = (await r.getMetadata?.()) ?? null;
       if (meta && meta.props) {
-        this.props = { ...(meta.props as object) } as any;
+        this.props = { ...(meta.props as Record<string, string | object | object[]>) };
       }
-    } catch (e) {
-      // If metadata not available, continue with empty props
+    } catch (error) {
+      // If metadata not available, continue with empty props; log for debugging
+      // (preserve behavior but avoid uncaught errors when methods are missing)
+      console.debug(
+        'ProtonDriveProperties.ensureLoaded: failed to load metadata',
+        (error as Error).message
+      );
     }
     this.metaLoaded = true;
   }
@@ -54,7 +66,8 @@ export default class ProtonDriveProperties implements PropertiesInterface {
       this.props[name] = value;
       // persist only dead properties
       if (!(await this.isLiveProperty(name))) {
-        const node = await (this.resource as any).resolveNode();
+        const r = this.resource as unknown as ResourceWithMeta;
+        const node = (await r.resolveNode?.()) as { uid: string } | null;
         if (node) {
           const mm = MetadataManager.getInstance();
           const meta = (await mm.get(node.uid)) || {};
@@ -74,7 +87,8 @@ export default class ProtonDriveProperties implements PropertiesInterface {
     if (name in this.props) {
       delete this.props[name];
       // persist
-      const node = await (this.resource as any).resolveNode();
+      const r = this.resource as unknown as ResourceWithMeta;
+      const node = (await r.resolveNode?.()) as { uid: string } | null;
       if (node) {
         const mm = MetadataManager.getInstance();
         const meta = (await mm.get(node.uid)) || {};
@@ -107,7 +121,7 @@ export default class ProtonDriveProperties implements PropertiesInterface {
     return errors.length > 0 ? errors : undefined;
   }
 
-  async runInstructionsByUser(instructions: ['set' | 'remove', string, unknown][], user: User) {
+  async runInstructionsByUser(instructions: ['set' | 'remove', string, unknown][], _user: User) {
     return await this.runInstructions(instructions);
   }
 
