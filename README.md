@@ -276,7 +276,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 - [Proton](https://proton.me) for the Drive SDK
 - [@napi-rs/keyring](https://github.com/nicokosi/napi-rs-keyring) for native credential storage
-- [webdav-server](https://github.com/OpenMarshal/npm-WebDAV-Server) for the WebDAV implementation
+- [nephele](https://github.com/sciactive/nephele) for the WebDAV implementation
 
 ## Disclaimer
 
