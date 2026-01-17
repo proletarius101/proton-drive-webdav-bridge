@@ -12,7 +12,7 @@
 import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { afterEach, beforeEach, describe, expect, test, mock } from 'bun:test';
+import { afterEach, beforeEach, afterAll, describe, expect, test, mock } from 'bun:test';
 
 const DEFAULT_PATHS_BASE = join(tmpdir(), 'pdb-keychain-default');
 let pathsBase = DEFAULT_PATHS_BASE;
@@ -222,7 +222,7 @@ describe('Keychain - Encryption and Security', () => {
 
   test('uses default password when KEYRING_PASSWORD not set', async () => {
     delete process.env.KEYRING_PASSWORD;
-    const { storeCredentials, getStoredCredentials } = await import(
+    const { storeCredentials, getStoredCredentials, deleteStoredCredentials } = await import(
       `../src/keychain.ts?cache=${Date.now()}`
     );
 
@@ -231,10 +231,32 @@ describe('Keychain - Encryption and Security', () => {
 
     // Should still work with default password
     expect(stored).toEqual(sampleCredentials);
+
+    // Cleanup default stored credentials so they don't affect other tests
+    await deleteStoredCredentials();
   });
 });
 
 describe('Keychain - Platform Detection', () => {
+  // Ensure any stored credentials are removed between tests to avoid cross-test
+  // contamination that may cause network calls in other modules.
+  afterEach(async () => {
+    try {
+      const { deleteStoredCredentials } = await import(`../src/keychain.ts?cache=${Date.now()}`);
+      await deleteStoredCredentials();
+    } catch {
+      /* ignore cleanup errors */
+    }
+  });
+
+  afterAll(async () => {
+    try {
+      const { deleteStoredCredentials } = await import(`../src/keychain.ts?cache=${Date.now()}`);
+      await deleteStoredCredentials();
+    } catch {
+      /* ignore cleanup errors */
+    }
+  });
   let baseDir: string;
 
   beforeEach(() => {

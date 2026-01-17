@@ -116,6 +116,9 @@ mock.module('../src/webdav/index.js', () => ({
     start = mockStart;
     stop = mockStop;
     getUrl = () => 'http://127.0.0.1:8080';
+    getHttpServer = () => ({
+      address: () => ({ port: 8080 }),
+    });
   },
 }));
 

@@ -100,6 +100,11 @@ mock.module('@napi-rs/keyring', () => {
   return { Entry, AsyncEntry };
 });
 
+// Rejects immediately so tests never hit the real Proton API.
+const rejectedApiRequester = mock(async () => {
+  throw new Error('Mocked network call');
+}) as unknown as ApiRequester;
+
 describe('ProtonAuth - Initialization', () => {
   test('should instantiate ProtonAuth with all required methods', () => {
     const auth = new ProtonAuth();
@@ -373,7 +378,7 @@ describe('ProtonAuth - Credential Storage Integration', () => {
       passwordMode: 1 as const,
     };
 
-    const auth = new ProtonAuth();
+    const auth = new ProtonAuth(rejectedApiRequester);
 
     // Test that restoreSession expects this exact structure
     try {
@@ -385,7 +390,7 @@ describe('ProtonAuth - Credential Storage Integration', () => {
   });
 
   test('restoreSession should validate required credential fields', async () => {
-    const auth = new ProtonAuth();
+    const auth = new ProtonAuth(rejectedApiRequester);
 
     // Missing required fields should fail
     const invalidCredentials = {
@@ -508,9 +513,10 @@ describe('ProtonAuth - Password Mode Handling', () => {
 
 describe('ProtonAuth - Method Contracts', () => {
   test('login should return a Promise<Session>', async () => {
-    const auth = new ProtonAuth();
+    const auth = new ProtonAuth(rejectedApiRequester);
     const loginPromise = auth.login('user@proton.me', 'password');
     expect(loginPromise).toBeInstanceOf(Promise);
+    await expect(loginPromise).rejects.toThrow('Mocked network call');
   });
 
   test('submit2FA should return a Promise<Session>', async () => {
@@ -550,7 +556,7 @@ describe('ProtonAuth - Method Contracts', () => {
   });
 
   test('restoreSession should return a Promise<Session>', async () => {
-    const auth = new ProtonAuth();
+    const auth = new ProtonAuth(rejectedApiRequester);
     const mockCreds = {
       parentUID: 'p',
       parentAccessToken: 'p',
@@ -564,6 +570,7 @@ describe('ProtonAuth - Method Contracts', () => {
     };
     const promise = auth.restoreSession(mockCreds);
     expect(promise).toBeInstanceOf(Promise);
+    await expect(promise).rejects.toThrow();
   });
 
   test('forkNewChildSession should return a Promise<Session>', async () => {
