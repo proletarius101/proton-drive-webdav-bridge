@@ -36,7 +36,8 @@ beforeEach(() => {
   driveClient.listFolder = async () => [];
   driveClient.createFolder = async () => 'folder-uid';
   driveClient.deleteNode = async () => undefined;
-  driveClient.uploadFile = async () => undefined as any;
+  // Return a dummy node UID to satisfy the typed signature
+  driveClient.uploadFile = async () => 'test-file-uid';
   driveClient.downloadFile = async () => new ReadableStream({ start: (c) => c.close() });
   driveClient.renameNode = async () => undefined;
   driveClient.moveNode = async () => undefined;
@@ -51,7 +52,9 @@ afterEach(async () => {
     const lm = LockManager.getInstance();
     lm.deleteLocksForPath('/locktest.txt');
     lm.close();
-  } catch {}
+  } catch {
+    /* ignore cleanup errors */
+  }
 });
 
 describe('WebDAV LOCK/UNLOCK integration', () => {
@@ -59,8 +62,9 @@ describe('WebDAV LOCK/UNLOCK integration', () => {
     server = new WebDAVServer({ host: '127.0.0.1', port: 0, requireAuth: false });
     await server.start();
 
-    const httpServer = (server as any).httpServer;
-    const port = httpServer.address().port;
+    const httpServer = server?.getHttpServer();
+    if (!httpServer) throw new Error('HTTP server not available');
+    const port = (httpServer.address() as import('net').AddressInfo).port;
     const baseUrl = `http://127.0.0.1:${port}`;
 
     // Send LOCK request
@@ -107,8 +111,9 @@ describe('WebDAV LOCK/UNLOCK integration', () => {
     server = new WebDAVServer({ host: '127.0.0.1', port: 0, requireAuth: false });
     await server.start();
 
-    const httpServer = (server as any).httpServer;
-    const port = httpServer.address().port;
+    const httpServer = server?.getHttpServer();
+    if (!httpServer) throw new Error('HTTP server not available');
+    const port = (httpServer.address() as import('net').AddressInfo).port;
     const baseUrl = `http://127.0.0.1:${port}`;
 
     const lockBody = `<?xml version="1.0" encoding="utf-8" ?>\n<D:lockinfo xmlns:D="DAV:">\n  <D:lockscope><D:exclusive/></D:lockscope>\n  <D:locktype><D:write/></D:locktype>\n  <D:owner><D:href>user1</D:href></D:owner>\n</D:lockinfo>`;

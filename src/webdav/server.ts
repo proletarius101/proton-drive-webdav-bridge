@@ -276,6 +276,14 @@ export class WebDAVServer {
     serverInstance = null;
   }
 
+  /**
+   * Expose the underlying HTTP(S) server instance for testing and advanced use.
+   * Returns `null` if the server is not started.
+   */
+  public getHttpServer(): HttpServer | HttpsServer | null {
+    return this.httpServer;
+  }
+
   getUrl(): string {
     const protocol = this.options.https ? 'https' : 'http';
     return `${protocol}://${this.options.host}:${this.options.port}`;
