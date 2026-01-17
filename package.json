@@ -17,7 +17,9 @@
     "lint:fix": "eslint --fix 'src/**/*.ts'",
     "format": "prettier --write 'src/**/*.ts' '*.json' '*.md'",
     "pre-commit": "bun run build:check && bun run lint:fix && bun run format",
-    "test": "bun test",
+    "test": "bun test --bail",
+    "test:e2e": "bun test test/*.e2e.test.ts",
+    "test:unit": "bun test --bail $(find test -name '*.test.ts' ! -name '*.e2e.test.ts')",
     "electron:dev": "electron src/gui/main.js",
     "electron:build": "electron-builder",
     "prepare": "husky"
