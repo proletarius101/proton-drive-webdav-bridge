@@ -457,11 +457,88 @@ describe('ProtonDriveResource - COPY Operation', () => {
     };
 
     let uploaded = false;
-    mockDriveClient.downloadFile = async () => Buffer.from('copied data');
+    mockDriveClient.downloadFile = async () => new TextEncoder().encode('copied data');
     mockDriveClient.uploadFile = async (parentUid: string, name: string, data: any) => {
       uploaded = true;
       expect(name).toBe('file.txt');
-      expect(data.toString()).toBe('copied data');
+      const content = data instanceof Uint8Array ? new TextDecoder().decode(data) : data.toString();
+      expect(content).toBe('copied data');
+      expect(parentUid).toBe('new-parent-uid');
+    };
+
+    // Simulate destination parent exists
+    mockDriveClient.listFolder = async (uid: string) => {
+      if (uid === 'root-uid')
+        return [
+          {
+            uid: 'new-parent-uid',
+            name: 'dest',
+            type: 'folder',
+            size: 0,
+            mimeType: 'inode/directory',
+            createdTime: new Date(),
+            modifiedTime: new Date(),
+            parentUid: 'root-uid',
+          },
+        ];
+      return [];
+    };
+
+    const resource = new ProtonDriveResource({
+      adapter,
+      baseUrl,
+      path: '/file.txt',
+      collection: false,
+    });
+
+    (resource as any)._node = mockNode;
+
+    const destUrl = new URL('/dest/file.txt', baseUrl);
+    await resource.copy(destUrl, baseUrl, { username: 'testuser' } as any);
+
+    expect(uploaded).toBe(true);
+  });
+
+  test('copy a file when downloadFile returns a ReadableStream', async () => {
+    const mockNode: MockNode = {
+      uid: 'file-uid',
+      name: 'file.txt',
+      type: 'file',
+      size: 10,
+      mimeType: 'text/plain',
+      createdTime: new Date(),
+      modifiedTime: new Date(),
+      parentUid: 'root-uid',
+    };
+
+    let uploaded = false;
+    mockDriveClient.downloadFile = async () =>
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('streamed data'));
+          controller.close();
+        },
+      });
+
+    mockDriveClient.uploadFile = async (parentUid: string, name: string, data: any) => {
+      uploaded = true;
+      expect(name).toBe('file.txt');
+
+      if (data instanceof ReadableStream) {
+        const reader = data.getReader();
+        let collected = '';
+        for (;;) {
+          // eslint-disable-next-line no-await-in-loop
+          const { done, value } = await reader.read();
+          if (done) break;
+          collected += new TextDecoder().decode(value);
+        }
+        expect(collected).toBe('streamed data');
+      } else {
+        const content = data instanceof Uint8Array ? new TextDecoder().decode(data) : data.toString();
+        expect(content).toBe('streamed data');
+      }
+
       expect(parentUid).toBe('new-parent-uid');
     };
 

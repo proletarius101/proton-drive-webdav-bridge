@@ -4,7 +4,7 @@
  * Tests config loading, saving, updates, validation, file watching, and callbacks.
  */
 
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, beforeEach, describe, expect, test, mock } from 'bun:test';
@@ -37,7 +37,14 @@ describe('Config - Initialization and Defaults', () => {
     pathsBase = baseDir;
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    // Dynamically import and unwatchConfigFile to clean up file watchers
+    try {
+      const { unwatchConfigFile } = await import(`../src/config.ts?cache=${Date.now()}`);
+      unwatchConfigFile();
+    } catch {
+      // If import fails, continue cleanup
+    }
     rmSync(baseDir, { recursive: true, force: true });
     pathsBase = DEFAULT_PATHS_BASE;
   });
@@ -137,7 +144,13 @@ describe('Config - Updates and Persistence', () => {
     pathsBase = baseDir;
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    try {
+      const { unwatchConfigFile } = await import(`../src/config.ts?cache=${Date.now()}`);
+      unwatchConfigFile();
+    } catch {
+      // ignore
+    }
     rmSync(baseDir, { recursive: true, force: true });
     pathsBase = DEFAULT_PATHS_BASE;
   });
@@ -206,7 +219,13 @@ describe('Config - Change Callbacks', () => {
     pathsBase = baseDir;
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    try {
+      const { unwatchConfigFile } = await import(`../src/config.ts?cache=${Date.now()}`);
+      unwatchConfigFile();
+    } catch {
+      // ignore
+    }
     rmSync(baseDir, { recursive: true, force: true });
     pathsBase = DEFAULT_PATHS_BASE;
   });

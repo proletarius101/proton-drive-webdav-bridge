@@ -552,14 +552,8 @@ export default class ProtonDriveResource implements ResourceInterface {
         await this.copyDirectory(child, createdFolderUid, child.name, user);
       } else {
         const fileData = await this.adapter.driveClient.downloadFile(child.uid);
-        await this.adapter.driveClient.uploadFile(
-          createdFolderUid,
-          child.name,
-          fileData instanceof ReadableStream
-            ? fileData
-            : (Readable.toWeb(Readable.from([fileData])) as ReadableStream),
-          { size: child.size }
-        );
+        // Pass bytes or stream directly to uploadFile; the drive client accepts ReadableStream | Buffer | Uint8Array
+        await this.adapter.driveClient.uploadFile(createdFolderUid, child.name, fileData, { size: child.size });
       }
     }
   }
