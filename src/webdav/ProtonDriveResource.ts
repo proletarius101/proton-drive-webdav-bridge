@@ -390,14 +390,14 @@ export default class ProtonDriveResource implements ResourceInterface {
       if (this.collection) {
         await this.adapter.driveClient.createFolder(parentNode.uid, name);
       } else {
-        // Create empty file
-        const emptyStream = Readable.from([Buffer.from([])]);
-        await this.adapter.driveClient.uploadFile(
-          parentNode.uid,
-          name,
-          Readable.toWeb(emptyStream) as ReadableStream,
-          { size: 0 }
-        );
+        // Create empty file using a small empty ReadableStream (avoid Buffer allocation)
+        const emptyStream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.close();
+          },
+        });
+
+        await this.adapter.driveClient.uploadFile(parentNode.uid, name, emptyStream, { size: 0 });
       }
 
       this._node = undefined;
@@ -518,20 +518,14 @@ export default class ProtonDriveResource implements ResourceInterface {
     } else {
       // Copy file
       const fileData = await this.adapter.driveClient.downloadFile(node.uid);
-      let uploadData: Buffer | Uint8Array | ReadableStream;
 
+      // Prefer passing streams through directly to avoid buffering whole file into memory.
+      // If the backend returns a ReadableStream, pass it straight to uploadFile; otherwise pass the raw bytes.
+      let uploadData: Uint8Array | ReadableStream;
       if (fileData instanceof ReadableStream) {
-        // Convert ReadableStream to Buffer for simpler upload semantics in tests & backends
-        const chunks: Buffer[] = [];
-        const reader = fileData.getReader();
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunks.push(Buffer.from(value));
-        }
-        uploadData = Buffer.concat(chunks);
+        uploadData = fileData;
       } else {
-        uploadData = fileData as Buffer | Uint8Array;
+        uploadData = fileData as Uint8Array;
       }
 
       await this.adapter.driveClient.uploadFile(destParentNode.uid, destName, uploadData, {
