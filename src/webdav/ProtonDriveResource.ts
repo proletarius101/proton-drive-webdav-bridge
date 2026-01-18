@@ -46,16 +46,20 @@ export default class ProtonDriveResource implements ResourceInterface {
     baseUrl,
     path,
     collection,
+    node,
   }: {
     adapter: ProtonDriveAdapter;
     baseUrl: URL;
     path: string;
     collection?: boolean;
+    node?: DriveNode | null;
   }) {
     this.adapter = adapter;
     this.baseUrl = baseUrl;
     this.path = path.replace(/\/?$/, '');
     this.collection = collection;
+    // If a DriveNode is provided, cache it to avoid re-resolving the path later
+    this._node = node ?? undefined;
     this.lockManager = LockManager.getInstance();
   }
 
@@ -751,6 +755,7 @@ export default class ProtonDriveResource implements ResourceInterface {
         baseUrl: this.baseUrl,
         path: childPath,
         collection: child.type === 'folder',
+        node: child,
       });
     });
   }

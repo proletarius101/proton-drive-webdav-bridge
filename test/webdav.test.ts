@@ -242,6 +242,55 @@ describe('ProtonDriveResource - isEmpty()', () => {
     expect(isEmpty).toBe(false);
   });
 
+  test('getInternalMembers caches child nodes to avoid re-resolving parent folder', async () => {
+    let listCalls = 0;
+
+    const mockChild: MockNode = {
+      uid: 'books-uid',
+      name: 'Books',
+      type: 'folder',
+      size: 0,
+      mimeType: 'inode/directory',
+      createdTime: new Date(),
+      modifiedTime: new Date(),
+      parentUid: 'apps-uid',
+    };
+
+    const appsNode: MockNode = {
+      uid: 'apps-uid',
+      name: 'Apps',
+      type: 'folder',
+      size: 0,
+      mimeType: 'inode/directory',
+      createdTime: new Date(),
+      modifiedTime: new Date(),
+      parentUid: 'root-uid',
+    };
+
+    mockDriveClient.listFolder = async (uid: string) => {
+      listCalls++;
+      if (uid === 'root-uid') return [appsNode];
+      if (uid === 'apps-uid') return [mockChild];
+      return [];
+    };
+
+    const resource = new ProtonDriveResource({
+      adapter,
+      baseUrl,
+      path: '/Apps',
+      collection: true,
+    });
+
+    const members = await resource.getInternalMembers({ username: 'test' } as any);
+    expect(members.length).toBe(1);
+
+    const before = listCalls;
+    const childResource = members[0];
+    const exists = await childResource.exists();
+    expect(exists).toBe(true);
+    expect(listCalls).toBe(before); // ensure no extra listFolder call when resolving child
+  });
+
   test('isEmpty returns false for non-collection resources', async () => {
     const resource = new ProtonDriveResource({
       adapter,
