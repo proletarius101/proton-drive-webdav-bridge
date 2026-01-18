@@ -134,6 +134,12 @@ export interface UploadController {
   completion(): Promise<{ nodeUid: string; nodeRevisionUid: string }>;
 }
 
+export interface DownloadController {
+  pause(): void;
+  resume(): void;
+  completion(): Promise<void>;
+}
+
 export interface FileUploader {
   getAvailableName(): Promise<string>;
   uploadFromStream(
@@ -152,7 +158,11 @@ export interface FileRevisionUploader {
 }
 
 export interface FileDownloader {
-  downloadToStream(): Promise<ReadableStream<Uint8Array>>;
+  getSeekableStream(): ReadableStream<Uint8Array>;
+  downloadToStream(
+    stream: WritableStream,
+    onProgress?: (downloadedBytes: number) => void
+  ): DownloadController;
 }
 
 // SDK client interface
@@ -380,6 +390,25 @@ function createProtonAccount(
       };
     },
 
+    async getOwnAddresses(): Promise<ProtonDriveAccountAddress[]> {
+      if (!session.addresses || session.addresses.length === 0) {
+        throw new InvalidRequestError('No addresses found');
+      }
+
+      const results: ProtonDriveAccountAddress[] = [];
+      for (const address of session.addresses) {
+        const primaryKeyIndex = address.keys.findIndex((k) => k.Primary === 1);
+        const keys = await decryptAddressKeys(address.keys);
+        results.push({
+          email: address.Email,
+          addressId: address.ID,
+          primaryKeyIndex: primaryKeyIndex >= 0 ? primaryKeyIndex : 0,
+          keys,
+        });
+      }
+      return results;
+    },
+
     async getOwnAddress(emailOrAddressId: string): Promise<ProtonDriveAccountAddress> {
       const address = session.addresses?.find(
         (a) => a.Email === emailOrAddressId || a.ID === emailOrAddressId
@@ -482,10 +511,13 @@ function createOpenPGPCrypto(): OpenPGPCrypto {
       return { privateKey: decryptedKey as unknown as SDKPrivateKey, armoredKey };
     },
 
-    async generateSessionKey(encryptionKeys: SDKPrivateKey[]): Promise<SDKSessionKey> {
-      return (await openpgp.generateSessionKey({
-        encryptionKeys: toArray(encryptionKeys as unknown as openpgp.PrivateKey[]),
-      })) as unknown as SDKSessionKey;
+    async generateSessionKey(encryptionKeys: SDKPublicKey[]): Promise<SDKSessionKey> {
+      const sessionKey = await openpgp.generateSessionKey({
+        encryptionKeys: toArray(encryptionKeys as unknown as openpgp.PublicKey[]),
+      });
+      return {
+        data: sessionKey.data,
+      } as unknown as SDKSessionKey;
     },
 
     // ========================================================================
@@ -497,8 +529,7 @@ function createOpenPGPCrypto(): OpenPGPCrypto {
       encryptionKeys: SDKPublicKey | SDKPublicKey[]
     ): Promise<{ keyPacket: Uint8Array }> {
       const result = await openpgp.encryptSessionKey({
-        data: sessionKey.data,
-        algorithm: sessionKey.algorithm,
+        ...(sessionKey as unknown as openpgp.SessionKey),
         encryptionKeys: toArray(
           encryptionKeys as unknown as openpgp.PublicKey | openpgp.PublicKey[]
         ),
@@ -512,8 +543,7 @@ function createOpenPGPCrypto(): OpenPGPCrypto {
       password: string
     ): Promise<{ keyPacket: Uint8Array }> {
       const result = await openpgp.encryptSessionKey({
-        data: sessionKey.data,
-        algorithm: sessionKey.algorithm,
+        ...(sessionKey as unknown as openpgp.SessionKey),
         passwords: [password],
         format: 'binary',
       });
@@ -572,19 +602,14 @@ function createOpenPGPCrypto(): OpenPGPCrypto {
 
     async encryptArmored(
       data: Uint8Array,
-      encryptionKeys: SDKPrivateKey[],
+      encryptionKeys: SDKPublicKey[],
       sessionKey?: SDKSessionKey
     ): Promise<{ armoredData: string }> {
       const message = await openpgp.createMessage({ binary: data });
       const encrypted = await openpgp.encrypt({
         message,
-        encryptionKeys: encryptionKeys as unknown as openpgp.PrivateKey[],
-        sessionKey: sessionKey
-          ? {
-              data: sessionKey.data,
-              algorithm: sessionKey.algorithm,
-            }
-          : undefined,
+        encryptionKeys: encryptionKeys as unknown as openpgp.PublicKey[],
+        sessionKey: sessionKey ? (sessionKey as unknown as openpgp.SessionKey) : undefined,
         format: 'armored',
       });
       return { armoredData: encrypted as string };
@@ -593,21 +618,18 @@ function createOpenPGPCrypto(): OpenPGPCrypto {
     async encryptAndSignArmored(
       data: Uint8Array,
       sessionKey: SDKSessionKey | undefined,
-      encryptionKeys: SDKPrivateKey[],
-      signingKey: SDKPrivateKey
+      encryptionKeys: SDKPublicKey[],
+      signingKey: SDKPrivateKey,
+      options?: { compress?: boolean }
     ): Promise<{ armoredData: string }> {
       const message = await openpgp.createMessage({ binary: data });
       const encrypted = await openpgp.encrypt({
         message,
-        encryptionKeys: encryptionKeys as unknown as openpgp.PrivateKey[],
+        encryptionKeys: encryptionKeys as unknown as openpgp.PublicKey[],
         signingKeys: [signingKey as unknown as openpgp.PrivateKey],
-        sessionKey: sessionKey
-          ? {
-              data: sessionKey.data,
-              algorithm: sessionKey.algorithm,
-            }
-          : undefined,
+        sessionKey: sessionKey ? (sessionKey as unknown as openpgp.SessionKey) : undefined,
         format: 'armored',
+        config: { preferredCompressionAlgorithm: options?.compress ? 2 : 0 },
       });
       return { armoredData: encrypted as string };
     },
@@ -615,18 +637,15 @@ function createOpenPGPCrypto(): OpenPGPCrypto {
     async encryptAndSign(
       data: Uint8Array,
       sessionKey: SDKSessionKey,
-      encryptionKeys: SDKPrivateKey[],
+      encryptionKeys: SDKPublicKey[],
       signingKey: SDKPrivateKey
     ): Promise<{ encryptedData: Uint8Array }> {
       const message = await openpgp.createMessage({ binary: data });
       const encrypted = await openpgp.encrypt({
         message,
-        encryptionKeys: encryptionKeys as unknown as openpgp.PrivateKey[],
+        encryptionKeys: encryptionKeys as unknown as openpgp.PublicKey[],
         signingKeys: [signingKey as unknown as openpgp.PrivateKey],
-        sessionKey: {
-          data: sessionKey.data,
-          algorithm: sessionKey.algorithm,
-        },
+        sessionKey: sessionKey as unknown as openpgp.SessionKey,
         format: 'binary',
       });
       return { encryptedData: encrypted as Uint8Array };
@@ -635,18 +654,15 @@ function createOpenPGPCrypto(): OpenPGPCrypto {
     async encryptAndSignDetached(
       data: Uint8Array,
       sessionKey: SDKSessionKey,
-      encryptionKeys: SDKPrivateKey[],
+      encryptionKeys: SDKPublicKey[],
       signingKey: SDKPrivateKey
     ): Promise<{ encryptedData: Uint8Array; signature: Uint8Array }> {
       const message = await openpgp.createMessage({ binary: data });
       const [encrypted, signature] = await Promise.all([
         openpgp.encrypt({
           message,
-          encryptionKeys: encryptionKeys as unknown as openpgp.PrivateKey[],
-          sessionKey: {
-            data: sessionKey.data,
-            algorithm: sessionKey.algorithm,
-          },
+          encryptionKeys: encryptionKeys as unknown as openpgp.PublicKey[],
+          sessionKey: sessionKey as unknown as openpgp.SessionKey,
           format: 'binary',
         }),
         openpgp.sign({
@@ -662,20 +678,15 @@ function createOpenPGPCrypto(): OpenPGPCrypto {
     async encryptAndSignDetachedArmored(
       data: Uint8Array,
       sessionKey: SDKSessionKey,
-      encryptionKeys: SDKPrivateKey[],
+      encryptionKeys: SDKPublicKey[],
       signingKey: SDKPrivateKey
     ): Promise<{ armoredData: string; armoredSignature: string }> {
       const message = await openpgp.createMessage({ binary: data });
       const [encrypted, signature] = await Promise.all([
         openpgp.encrypt({
           message,
-          encryptionKeys: encryptionKeys as unknown as openpgp.PrivateKey[],
-          sessionKey: sessionKey
-            ? {
-                data: sessionKey.data,
-                algorithm: sessionKey.algorithm,
-              }
-            : undefined,
+          encryptionKeys: encryptionKeys as unknown as openpgp.PublicKey[],
+          sessionKey: sessionKey as unknown as openpgp.SessionKey,
           format: 'armored',
         }),
         openpgp.sign({
@@ -758,12 +769,7 @@ function createOpenPGPCrypto(): OpenPGPCrypto {
       const message = await openpgp.readMessage({ armoredMessage: armoredData });
       const result = await openpgp.decrypt({
         message,
-        sessionKeys: [
-          {
-            data: sessionKey.data,
-            algorithm: sessionKey.algorithm,
-          },
-        ],
+        sessionKeys: [sessionKey as unknown as openpgp.SessionKey],
         format: 'binary',
       });
 
@@ -807,12 +813,7 @@ function createOpenPGPCrypto(): OpenPGPCrypto {
       );
       const result = await openpgp.decrypt({
         message,
-        sessionKeys: [
-          {
-            data: sessionKey.data,
-            algorithm: sessionKey.algorithm,
-          },
-        ],
+        sessionKeys: [sessionKey as unknown as openpgp.SessionKey],
         verificationKeys: verifyKeysArray.length > 0 ? verifyKeysArray : undefined,
         format: 'binary',
       });
@@ -930,7 +931,7 @@ function createOpenPGPCrypto(): OpenPGPCrypto {
       const message = await openpgp.readMessage({ binaryMessage: data });
       const result = await openpgp.decrypt({
         message,
-        sessionKeys: [sessionKey],
+        sessionKeys: [sessionKey as unknown as openpgp.SessionKey],
         format: 'binary',
       });
 
@@ -1458,8 +1459,44 @@ export class DriveClientManager {
    */
   async downloadFile(nodeUid: string): Promise<ReadableStream<Uint8Array>> {
     const client = this.getClient();
-    const downloader = await client.getFileDownloader(nodeUid);
-    return downloader.downloadToStream();
+
+    try {
+      const downloader = await client.getFileDownloader(nodeUid);
+
+      // Prefer the SDK-provided seekable readable stream when available.
+      if (typeof downloader.getSeekableStream === 'function') {
+        return downloader.getSeekableStream();
+      }
+
+      // Fallback: bridge the downloader's WritableStream API into a ReadableStream
+      // so the WebDAV layer can consume it without buffering the whole file.
+      return new ReadableStream<Uint8Array>({
+        start: (controller) => {
+          const writable = new WritableStream<Uint8Array>({
+            write(chunk) {
+              controller.enqueue(chunk);
+            },
+            close() {
+              controller.close();
+            },
+            abort(reason) {
+              controller.error(reason);
+            },
+          });
+
+          try {
+            const downloadController = downloader.downloadToStream(writable);
+            downloadController.completion().catch((error) => controller.error(error));
+          } catch (error) {
+            controller.error(error);
+          }
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(`Failed to download node ${nodeUid}: ${message}`);
+      throw new AppError('Failed to download file', 'DOWNLOAD_FAILED', 500, false, error);
+    }
   }
 
   /**
