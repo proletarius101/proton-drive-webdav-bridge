@@ -203,8 +203,40 @@ export class WebDAVServer {
       next();
     });
 
-    // Advertise WebDAV compliance via OPTIONS (RFC 4918)
+    // Global lock enforcement middleware
+    // This ensures that operations which modify resources respect existing locks
+    // (including parent locks with depth:infinity) and return 423 Locked when applicable.
     this.app.use((req, res, next) => {
+      const modifyingMethods = new Set(['PUT', 'DELETE', 'MOVE', 'COPY', 'MKCOL', 'PROPPATCH', 'PROPPATCH']);
+      if (modifyingMethods.has(req.method)) {
+        try {
+          const lm = LockManager.getInstance();
+          const path = req.path || '/';
+          const rawToken = (req.get('Lock-Token') || '').trim().replace(/^<|>$/g, '') || null;
+
+          // If client provided a valid lock token for this path, allow the operation
+          if (rawToken && lm.validateLockToken(path, rawToken)) {
+            return next();
+          }
+
+          // Otherwise check if any lock applies to this path (including parent depth:infinity)
+          const applicable = lm.getAllLocks().filter((l) => {
+            if (l.path === path) return true;
+            if (l.depth === 'infinity' && path.startsWith(l.path.replace(/\/$/, '') + '/')) return true;
+            return false;
+          });
+
+          if (applicable.length > 0) {
+            res.status(423).send('Locked');
+            return;
+          }
+        } catch (e) {
+          // On error, don't block request here; let later handlers handle it
+          logger.warn(`Lock enforcement middleware failed: ${e}`);
+        }
+      }
+
+      // Advertise WebDAV compliance via OPTIONS (RFC 4918)
       if (req.method === 'OPTIONS') {
         // DAV header indicates supported DAV classes; class 1/2 covers core + locking
         res.setHeader('DAV', '1,2');
@@ -228,6 +260,58 @@ export class WebDAVServer {
         // Some clients (MS Office) rely on this hint; harmless for others
         res.setHeader('MS-Author-Via', 'DAV');
       }
+      next();
+    });
+
+    // Pre-check middleware for COPY/MOVE operations
+    // Enforces Overwrite semantics and checks for moving into non-empty collections early
+    this.app.use(async (req, res, next) => {
+      if (req.method === 'COPY' || req.method === 'MOVE') {
+        const destHeader = req.get('Destination');
+        if (!destHeader) {
+          res.status(400).send('Missing Destination header');
+          return;
+        }
+
+        try {
+          const destUrl = new URL(destHeader);
+          const adapter = new ProtonDriveAdapter();
+          const baseUrl = new URL(this.getUrl());
+
+          const destPath = adapter.urlToRelativePath(destUrl, baseUrl);
+          if (!destPath) {
+            res.status(403).send('The destination URL is not under the namespace of this server.');
+            return;
+          }
+
+          try {
+            const destResource = await adapter.getResource(destUrl, baseUrl);
+
+            // Overwrite handling for COPY: if Overwrite=F and destination exists => 412
+            if (req.method === 'COPY' && (req.get('Overwrite') || 'T') === 'F') {
+              res.status(412).send('Precondition Failed: destination exists and Overwrite is F');
+              return;
+            }
+
+            // MOVE into existing non-empty collection is forbidden
+            if (req.method === 'MOVE') {
+              if (await destResource.isCollection() && !(await destResource.isEmpty())) {
+                res.status(403).send('The destination cannot be an existing non-empty directory.');
+                return;
+              }
+            }
+          } catch (err) {
+            // dest not found -> ok to proceed
+            // If error is not a NotFound-like error, rethrow
+            // For robustness, assume absence if any getResource throws
+          }
+        } catch (err) {
+          // malformed Destination header -> bad request
+          res.status(400).send('Invalid Destination header');
+          return;
+        }
+      }
+
       next();
     });
 

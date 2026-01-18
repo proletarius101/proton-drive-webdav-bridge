@@ -14,7 +14,7 @@ import {
   ForbiddenError,
   ResourceNotFoundError,
 } from 'nephele';
-import { MethodNotAllowedError } from '../errors/index.js';
+import { MethodNotAllowedError, LockedError } from '../errors/index.js';
 
 import { type DriveNode } from '../drive.js';
 import { logger } from '../logger.js';
@@ -136,14 +136,24 @@ export default class ProtonDriveResource implements ResourceInterface {
       if (!this.lockManager.validateLockToken(this.path, lockToken)) {
         throw new ForbiddenError('Invalid lock token provided');
       }
-    } else {
-      // Check if resource is locked by someone else
-      const locks = this.lockManager.getLocksForPath(this.path);
-      const userLocks = locks.filter((l) => l.username === user.username);
+      return;
+    }
 
-      if (locks.length > userLocks.length) {
-        throw new ForbiddenError('Resource is locked by another user');
-      }
+    // No token provided: determine if any locks apply to this path (including parent locks with depth=infinity)
+    const allLocks = this.lockManager.getAllLocks();
+    const applicableLocks = allLocks.filter((l) => {
+      if (l.path === this.path) return true;
+      if (l.depth === 'infinity' && this.path.startsWith(l.path.replace(/\/$/, '') + '/')) return true;
+      return false;
+    });
+
+    const userLocks = applicableLocks.filter((l) => l.username === user.username);
+
+    logger.debug(`Lock check for path=${this.path} applicable=${applicableLocks.length} userOwned=${userLocks.length} user=${user.username}`);
+
+    if (applicableLocks.length > userLocks.length) {
+      logger.warn(`Operation blocked on locked resource path=${this.path}`);
+      throw new LockedError(this.path);
     }
   }
 
