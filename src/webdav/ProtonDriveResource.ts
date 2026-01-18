@@ -23,6 +23,7 @@ import ProtonDriveLock from './ProtonDriveLock.js';
 import ProtonDriveProperties from './ProtonDriveProperties.js';
 import MetadataManager from './MetadataManager.js';
 import { LockManager } from './LockManager.js';
+import { getClaimedAdditionalMetadata } from './sdkHelpers.js';
 
 // ============================================================================
 // Resource Implementation
@@ -257,16 +258,14 @@ export default class ProtonDriveResource implements ResourceInterface {
       try {
         const sdkNode = await this.adapter.driveClient.getNode(node.uid);
         if (sdkNode) {
-          // Files: parsed extended attributes may appear on activeRevision
-          const claimed =
-            sdkNode.activeRevision?.value?.claimedAdditionalMetadata ||
-            sdkNode.activeRevision?.claimedAdditionalMetadata ||
-            sdkNode.claimedAdditionalMetadata;
+          const claimedObj = getClaimedAdditionalMetadata(
+            sdkNode as unknown as Parameters<typeof getClaimedAdditionalMetadata>[0]
+          );
 
-          if (claimed && typeof claimed === 'object') {
-            logger.debug(`Hydrating metadata for node ${node.uid}: ${JSON.stringify(claimed)}`);
-            mm.save(node.uid, { props: claimed });
-            this._cachedProps = claimed as { [k: string]: unknown };
+          if (claimedObj) {
+            logger.debug(`Hydrating metadata for node ${node.uid}: ${JSON.stringify(claimedObj)}`);
+            mm.save(node.uid, { props: claimedObj });
+            this._cachedProps = claimedObj;
             return;
           }
 
@@ -555,7 +554,9 @@ export default class ProtonDriveResource implements ResourceInterface {
       } else {
         const fileData = await this.adapter.driveClient.downloadFile(child.uid);
         // Pass bytes or stream directly to uploadFile; the drive client accepts ReadableStream | Buffer | Uint8Array
-        await this.adapter.driveClient.uploadFile(createdFolderUid, child.name, fileData, { size: child.size });
+        await this.adapter.driveClient.uploadFile(createdFolderUid, child.name, fileData, {
+          size: child.size,
+        });
       }
     }
   }
