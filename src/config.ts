@@ -5,8 +5,9 @@
  * mount paths, and security options.
  */
 
-import { readFileSync, writeFileSync, existsSync, watchFile, unwatchFile } from 'fs';
-import { getConfigFilePath, getConfigDir } from './paths.js';
+import { readFileSync, writeFileSync, existsSync, watchFile, unwatchFile, mkdirSync } from 'fs';
+import { dirname } from 'path';
+import { getConfigFilePath } from './paths.js';
 import { logger } from './logger.js';
 
 // Re-export for convenience
@@ -130,8 +131,11 @@ export function saveConfig(config: Config): void {
   const configPath = getConfigFilePath();
 
   try {
-    // Ensure config directory exists
-    getConfigDir();
+    // Ensure the parent directory of the config file exists
+    // Use dirname(getConfigFilePath()) directly to avoid any mismatch
+    // between getConfigDir() and the computed config path.
+    const dir = dirname(configPath);
+    mkdirSync(dir, { recursive: true });
     writeFileSync(configPath, JSON.stringify(config, null, 2), { mode: 0o600 });
     currentConfig = config;
     logger.debug(`Saved config to ${configPath}`);

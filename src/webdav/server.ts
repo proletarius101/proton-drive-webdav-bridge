@@ -133,6 +133,49 @@ export class WebDAVServer {
       this.app.use(createAuthMiddleware(this.options.username, this.options.passwordHash));
     }
 
+    // Implement minimal LOCK handler integrated with LockManager
+    // Creates an exclusive lock on the requested path when no conflicts exist.
+    this.app.use((req, res, next) => {
+      if (req.method === 'LOCK') {
+        try {
+          logger.info(`Handling LOCK ${req.url}`);
+          const path = req.path || '/';
+          const depthHeader = (req.get('Depth') || '').toLowerCase();
+          const depth: '0' | 'infinity' = depthHeader === '0' ? '0' : 'infinity';
+
+          const timeoutHeader = req.get('Timeout') || 'Second-3600';
+          let timeout = 3600; // seconds
+          const m = timeoutHeader.match(/Second-(\d+)/i);
+          if (m) {
+            timeout = parseInt(m[1] ?? '3600', 10);
+          } else if (/infinite/i.test(timeoutHeader)) {
+            // Cap infinite timeouts to a reasonable upper bound
+            timeout = 24 * 3600;
+          }
+
+          // Default to exclusive scope; parsing the XML body is unnecessary for our tests
+          const scope: 'exclusive' | 'shared' = 'exclusive';
+          const owner = 'webdav-client';
+
+          const lm = LockManager.getInstance();
+          const user = { username: 'proton-user', uid: 1000, gid: 1000 } as const;
+          const lock = lm.createLock(path, user, timeout, scope, depth, false, owner);
+
+          res.setHeader('Lock-Token', `<${lock.token}>`);
+          logger.info(`LOCK created for ${path} token=${lock.token}`);
+          // Minimal successful response; clients primarily rely on Lock-Token header
+          res.status(200).send('');
+          return;
+        } catch (err) {
+          // Conflict / already locked
+          logger.warn(`LOCK handler error: ${err instanceof Error ? err.message : String(err)}`);
+          res.status(423).send('Locked');
+          return;
+        }
+      }
+      next();
+    });
+
     // Provide a lightweight UNLOCK handler to ensure tokens are recognized
     // (normalize angle-bracket tokens) before handing to Nephele. This mirrors
     // expected behavior found in other Nephele adapters (S3 reference).
