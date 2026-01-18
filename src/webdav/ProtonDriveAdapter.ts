@@ -29,6 +29,15 @@ export interface ProtonDriveAdapterConfig {
 }
 
 // ============================================================================
+// Cache Types
+// ============================================================================
+
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+}
+
+// ============================================================================
 // Proton Drive Nephele Adapter
 // ============================================================================
 
@@ -39,10 +48,13 @@ export default class ProtonDriveAdapter implements AdapterInterface {
   cacheTTL: number;
   /** The Drive client instance used by resources. Defaults to the module singleton. */
   driveClient: DriveClientManager;
+  /** Cache for folder listings to reduce API calls during path resolution */
+  private folderCache: Map<string, CacheEntry<import('../drive.js').DriveNode[]>>;
 
   constructor({ cacheTTL = 60000, driveClient }: ProtonDriveAdapterConfig = {}) {
     this.cacheTTL = cacheTTL;
     this.driveClient = driveClient ?? globalDriveClient;
+    this.folderCache = new Map();
     logger.debug('ProtonDriveAdapter initialized');
   }
 
@@ -145,6 +157,45 @@ export default class ProtonDriveAdapter implements AdapterInterface {
       path,
       collection: true,
     });
+  }
+
+  /**
+   * Get folder listing with caching
+   */
+  async getCachedFolderListing(folderUid: string): Promise<import('../drive.js').DriveNode[]> {
+    const cached = this.folderCache.get(folderUid);
+    const now = Date.now();
+
+    if (cached && now - cached.timestamp < this.cacheTTL) {
+      logger.debug(`Cache hit for folder ${folderUid}`);
+      return cached.data;
+    }
+
+    logger.debug(`Cache miss for folder ${folderUid}, fetching from API`);
+    const nodes = await this.driveClient.listFolder(folderUid);
+
+    this.folderCache.set(folderUid, {
+      data: nodes,
+      timestamp: now,
+    });
+
+    return nodes;
+  }
+
+  /**
+   * Invalidate cache for a specific folder
+   */
+  invalidateFolderCache(folderUid: string): void {
+    this.folderCache.delete(folderUid);
+    logger.debug(`Invalidated cache for folder ${folderUid}`);
+  }
+
+  /**
+   * Clear all cached folder listings
+   */
+  clearCache(): void {
+    this.folderCache.clear();
+    logger.debug('Cleared all folder cache');
   }
 
   getMethod(_method: string): typeof Method {

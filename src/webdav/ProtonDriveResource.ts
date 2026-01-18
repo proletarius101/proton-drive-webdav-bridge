@@ -92,7 +92,7 @@ export default class ProtonDriveResource implements ResourceInterface {
     let currentNode: DriveNode | null = null;
 
     for (const part of parts) {
-      const nodes = await this.adapter.driveClient.listFolder(currentUid);
+      const nodes = await this.adapter.getCachedFolderListing(currentUid);
       currentNode = nodes.find((n) => n.name === part) || null;
 
       if (!currentNode) {
@@ -368,6 +368,9 @@ export default class ProtonDriveResource implements ResourceInterface {
         {}
       );
 
+      // Invalidate parent folder cache
+      this.adapter.invalidateFolderCache(parentNode.uid);
+
       // Invalidate node + metadata cache
       this._node = undefined;
       this._metaReady = null;
@@ -418,6 +421,9 @@ export default class ProtonDriveResource implements ResourceInterface {
         await this.adapter.driveClient.uploadFile(parentNode.uid, name, emptyStream, { size: 0 });
       }
 
+      // Invalidate parent folder cache
+      this.adapter.invalidateFolderCache(parentNode.uid);
+
       this._node = undefined;
       this._metaReady = null;
       this._cachedProps = null;
@@ -444,6 +450,11 @@ export default class ProtonDriveResource implements ResourceInterface {
     logger.debug(`Deleting node uid=${node.uid} name=${node.name} path=${this.path}`);
     await this.adapter.driveClient.deleteNode(node.uid);
     logger.debug(`Deleted node uid=${node.uid} path=${this.path}`);
+
+    // Invalidate parent folder cache if node has a parent
+    if (node.parentUid) {
+      this.adapter.invalidateFolderCache(node.parentUid);
+    }
 
     // Remove any locks on this resource
     this.lockManager.deleteLocksForPath(this.path);
@@ -654,11 +665,22 @@ export default class ProtonDriveResource implements ResourceInterface {
     const currentParentPath = this.getParentPath();
     if (currentParentPath !== destParentPath) {
       await this.adapter.driveClient.moveNode(node.uid, destParentNode.uid);
+      
+      // Invalidate both source and destination parent folder caches
+      if (node.parentUid) {
+        this.adapter.invalidateFolderCache(node.parentUid);
+      }
+      this.adapter.invalidateFolderCache(destParentNode.uid);
     }
 
     // Rename if needed
     if (node.name !== destName) {
       await this.adapter.driveClient.renameNode(node.uid, destName);
+      
+      // Invalidate parent folder cache (same folder, different name)
+      if (node.parentUid) {
+        this.adapter.invalidateFolderCache(node.parentUid);
+      }
     }
 
     logger.debug(`Moved ${this.path} to ${destPath}`);
