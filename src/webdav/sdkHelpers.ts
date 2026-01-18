@@ -4,7 +4,7 @@ import type { MaybeNode, NodeEntity, DegradedNode, Result, Revision } from '@pro
  * Type guard for SDK Result<T, E> shape
  */
 export function isResult<T, E>(x: unknown): x is Result<T, E> {
-  return typeof x === 'object' && x !== null && 'ok' in (x as any);
+  return typeof x === 'object' && x !== null && 'ok' in (x as { ok?: unknown });
 }
 
 /**
@@ -78,3 +78,63 @@ export function getClaimedAdditionalMetadata(
   );
 }
 
+/**
+ * Convert a MaybeNode / DegradedNode into a stable NodeEntity and collect errors.
+ * Mirrors the approach used in WebClients' `getNodeEntity` helper.
+ */
+export type GetNodeEntityType = {
+  node: NodeEntity;
+  errors: Map<'name' | 'activeRevision' | 'unhandledError', Error | unknown>;
+};
+
+export function getNodeEntity(maybeNode: MaybeNode): GetNodeEntityType {
+  const errors = new Map();
+  let node: NodeEntity;
+
+  if (maybeNode.ok) {
+    node = maybeNode.value;
+  } else {
+    // name might be a Result<string, InvalidNameError> shape
+    const errorShape = maybeNode.error as Record<string, unknown>;
+    const nameRaw = errorShape.name as unknown;
+
+    if (isResult(nameRaw)) {
+      if (!nameRaw.ok) errors.set('name', nameRaw.error);
+    }
+
+    // activeRevision can be Result<Revision, Error> or undefined
+    const activeRevisionRaw = errorShape.activeRevision as unknown;
+    if (activeRevisionRaw !== undefined) {
+      if (isResult(activeRevisionRaw)) {
+        if (!activeRevisionRaw.ok) errors.set('activeRevision', activeRevisionRaw.error);
+      }
+    }
+
+    if (Array.isArray(errorShape.errors) && errorShape.errors.length) {
+      errors.set('unhandledError', errorShape.errors[0]);
+    }
+
+    const name =
+      typeof nameRaw === 'string'
+        ? nameRaw
+        : isResult(nameRaw)
+          ? nameRaw.ok
+            ? nameRaw.value
+            : ((nameRaw.error as { name?: string } | undefined)?.name ?? 'Undecryptable')
+          : 'Undecryptable';
+
+    const activeRevisionVal = isResult(activeRevisionRaw)
+      ? activeRevisionRaw.ok
+        ? activeRevisionRaw.value
+        : undefined
+      : activeRevisionRaw;
+
+    node = {
+      ...(maybeNode.error as unknown as NodeEntity),
+      name,
+      activeRevision: activeRevisionVal,
+    } as NodeEntity;
+  }
+
+  return { node, errors };
+}

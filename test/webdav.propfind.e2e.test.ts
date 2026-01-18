@@ -46,7 +46,9 @@ describe('WebDAV PROPFIND recursion and filtering', () => {
     if (node.parentUid) ensureChildSet(node.parentUid).add(node.uid);
   };
 
-  const readStream = async (stream: ReadableStream | AsyncIterable<Uint8Array> | Uint8Array | Buffer) => {
+  const readStream = async (
+    stream: ReadableStream | AsyncIterable<Uint8Array> | Uint8Array | Buffer
+  ) => {
     if (stream instanceof Uint8Array) return stream;
     const chunks: Uint8Array[] = [];
     let total = 0;
@@ -88,13 +90,43 @@ describe('WebDAV PROPFIND recursion and filtering', () => {
 
     // Build tree: /a/   /a/b/  /a/b/nested.txt   /file1.txt
     const aUid = createUid();
-    addNode({ uid: aUid, name: 'a', type: 'folder', parentUid: 'root', createdTime: new Date(), modifiedTime: new Date() });
+    addNode({
+      uid: aUid,
+      name: 'a',
+      type: 'folder',
+      parentUid: 'root',
+      createdTime: new Date(),
+      modifiedTime: new Date(),
+    });
     const bUid = createUid();
-    addNode({ uid: bUid, name: 'b', type: 'folder', parentUid: aUid, createdTime: new Date(), modifiedTime: new Date() });
+    addNode({
+      uid: bUid,
+      name: 'b',
+      type: 'folder',
+      parentUid: aUid,
+      createdTime: new Date(),
+      modifiedTime: new Date(),
+    });
     const nestedUid = createUid();
-    addNode({ uid: nestedUid, name: 'nested.txt', type: 'file', parentUid: bUid, data: new Uint8Array([1,2,3]), createdTime: new Date(), modifiedTime: new Date() });
+    addNode({
+      uid: nestedUid,
+      name: 'nested.txt',
+      type: 'file',
+      parentUid: bUid,
+      data: new Uint8Array([1, 2, 3]),
+      createdTime: new Date(),
+      modifiedTime: new Date(),
+    });
     const file1 = createUid();
-    addNode({ uid: file1, name: 'file1.txt', type: 'file', parentUid: 'root', data: new Uint8Array([4,5,6]), createdTime: new Date(), modifiedTime: new Date() });
+    addNode({
+      uid: file1,
+      name: 'file1.txt',
+      type: 'file',
+      parentUid: 'root',
+      data: new Uint8Array([4, 5, 6]),
+      createdTime: new Date(),
+      modifiedTime: new Date(),
+    });
 
     // Stub driveClient
     driveClient.initialize = async () => {};
@@ -141,7 +173,11 @@ describe('WebDAV PROPFIND recursion and filtering', () => {
 
     try {
       const body = `<?xml version="1.0" encoding="utf-8" ?>\n<D:propfind xmlns:D="DAV:">\n  <D:allprop/>\n</D:propfind>`;
-      const resp = await fetch(`${baseUrl}/`, { method: 'PROPFIND', headers: { Depth: 'infinity', 'Content-Type': 'application/xml' }, body });
+      const resp = await fetch(`${baseUrl}/`, {
+        method: 'PROPFIND',
+        headers: { Depth: 'infinity', 'Content-Type': 'application/xml' },
+        body,
+      });
       expect(resp.status).toBe(207);
       const text = await resp.text();
 
@@ -166,7 +202,11 @@ describe('WebDAV PROPFIND recursion and filtering', () => {
 
     try {
       const body = `<?xml version="1.0" encoding="utf-8" ?>\n<D:propfind xmlns:D="DAV:">\n  <D:allprop/>\n</D:propfind>`;
-      const resp = await fetch(`${baseUrl}/`, { method: 'PROPFIND', headers: { Depth: '1', 'Content-Type': 'application/xml' }, body });
+      const resp = await fetch(`${baseUrl}/`, {
+        method: 'PROPFIND',
+        headers: { Depth: '1', 'Content-Type': 'application/xml' },
+        body,
+      });
       expect(resp.status).toBe(207);
       const text = await resp.text();
       // Immediate children should include /a but not /a/b
@@ -188,7 +228,11 @@ describe('WebDAV PROPFIND recursion and filtering', () => {
 
     try {
       const body = `<?xml version="1.0" encoding="utf-8" ?>\n<D:propfind xmlns:D="DAV:">\n  <D:prop>\n    <D:getlastmodified/>\n  </D:prop>\n</D:propfind>`;
-      const resp = await fetch(`${baseUrl}/a/`, { method: 'PROPFIND', headers: { Depth: '0', 'Content-Type': 'application/xml' }, body });
+      const resp = await fetch(`${baseUrl}/a/`, {
+        method: 'PROPFIND',
+        headers: { Depth: '0', 'Content-Type': 'application/xml' },
+        body,
+      });
       expect(resp.status).toBe(207);
       const text = await resp.text();
       // Response should include the requested property name

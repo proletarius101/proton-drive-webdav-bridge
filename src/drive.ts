@@ -21,6 +21,43 @@ import type {
 } from '@protontech/drive-sdk/dist/crypto/interface.js';
 import * as openpgp from 'openpgp';
 import { ProtonAuth, restoreSessionFromStorage, type Session } from './auth.js';
+import { isResult, getNodeEntity } from './webdav/sdkHelpers.js';
+
+// Helpers to safely extract revision fields that may be either the plain Revision
+// or a degraded Result<Revision, Error> shape.
+function extractClaimedSize(activeRevision: unknown): number | undefined {
+  if (!activeRevision) return undefined;
+  if (isResult<{ claimedSize?: number; storageSize?: number }, unknown>(activeRevision)) {
+    if (activeRevision.ok && activeRevision.value) {
+      return activeRevision.value.claimedSize ?? activeRevision.value.storageSize;
+    }
+    return undefined;
+  }
+  const rev = activeRevision as { claimedSize?: number; storageSize?: number };
+  return rev.claimedSize ?? rev.storageSize;
+}
+
+function extractClaimedModificationTime(activeRevision: unknown): Date | undefined {
+  if (!activeRevision) return undefined;
+  if (isResult<{ claimedModificationTime?: Date }, unknown>(activeRevision)) {
+    if (activeRevision.ok && activeRevision.value) {
+      return activeRevision.value.claimedModificationTime;
+    }
+    return undefined;
+  }
+  const rev = activeRevision as { claimedModificationTime?: Date };
+  return rev.claimedModificationTime;
+}
+
+function normalizeNodeName(name: unknown): string {
+  if (typeof name === 'string') return name;
+  if (isResult<string, unknown>(name)) {
+    if (name.ok) return name.value;
+    return String(name.error ?? '');
+  }
+  return String(name ?? '');
+}
+
 import { deleteStoredCredentials, storeCredentials, type StoredCredentials } from './keychain.js';
 import { logger } from './logger.js';
 import {
@@ -121,6 +158,13 @@ export interface FileDownloader {
 // SDK client interface
 export interface ProtonDriveClient {
   iterateFolderChildren(folderUid: string): AsyncIterable<NodeResult>;
+  /**
+   * Iterates nodes by their UIDs in bulk (may return missing/degraded nodes)
+   */
+  iterateNodes(
+    nodeUids: string[],
+    signal?: AbortSignal
+  ): AsyncIterable<{ ok: true; value: Partial<NodeEntity> } | { ok: false; error?: unknown }>;
   /**
    * Get a node by UID (SDK MaybeNode result)
    */
@@ -1112,9 +1156,12 @@ export class DriveClientManager {
       if (!result.ok && result.error) return result.error;
 
       // Fallback: some older shapes may include `node` directly
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const fallback = (result as any).node;
-      if (fallback) return fallback as NodeEntity;
+      if (typeof result === 'object' && result !== null && 'node' in result) {
+        const nodeFallback = (result as unknown as { node?: unknown }).node;
+        if (nodeFallback && typeof nodeFallback === 'object') {
+          return nodeFallback as NodeEntity;
+        }
+      }
 
       return null;
     } catch (e) {
@@ -1186,8 +1233,8 @@ export class DriveClientManager {
             throw new Error(`API request failed: ${response.status}`);
           }
 
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const data = (await response.json()) as any;
+          type ChildrenApiResponse = { LinkIDs?: string[]; More?: boolean; AnchorID?: string };
+          const data = (await response.json()) as unknown as ChildrenApiResponse;
 
           if (data.LinkIDs && Array.isArray(data.LinkIDs)) {
             allChildUids.push(...data.LinkIDs);
@@ -1207,37 +1254,67 @@ export class DriveClientManager {
           `Fetched ${allChildUids.length} child UIDs via direct API for folder ${nodeId}`
         );
 
-        // Fetch full node details from SDK (which has caching and decryption)
-        const uidSet = new Set(allChildUids);
-        for await (const result of client.iterateFolderChildren(folderUid)) {
-          if (result.ok && result.value) {
-            const node = result.value;
-            const nodeId = node.uid.split('~')[1] || node.uid;
-            if (uidSet.has(nodeId)) {
-              const isFolder = node.type === 'folder';
-              const size = isFolder
-                ? 0
-                : (node.activeRevision?.claimedSize ?? node.activeRevision?.storageSize ?? 0);
-              const modifiedTime = isFolder
-                ? (node.folder?.claimedModificationTime ??
-                  node.modificationTime ??
-                  node.creationTime)
-                : (node.activeRevision?.claimedModificationTime ??
-                  node.modificationTime ??
-                  node.creationTime);
+        // Fetch full node details from SDK using bulk node fetch (iterateNodes)
+        // Build full node UIDs from LinkIDs returned by the direct API
+        const childNodeUids = allChildUids.map((linkId) => `${volumeId}~${linkId}`);
 
-              nodes.push({
-                uid: node.uid,
-                name: node.name,
-                type: isFolder ? 'folder' : 'file',
-                size,
-                mimeType: node.mediaType || 'application/octet-stream',
-                createdTime: node.creationTime,
-                modifiedTime,
-                parentUid: folderUid,
-              });
-            }
+        logger.debug(`Fetching ${childNodeUids.length} node(s) in bulk via SDK iterateNodes`);
+
+        // Collect nodes into a map keyed by full UID so we can preserve original order
+        const nodesByUid = new Map<string, NodeEntity>();
+        for await (const maybeNode of client.iterateNodes(childNodeUids)) {
+          if (!maybeNode) continue;
+          // Normalize MaybeNode (handles degraded nodes and provides a fallback name)
+          const { node: sdkNode, errors } = getNodeEntity(maybeNode as MaybeNode);
+          if (errors.size > 0) {
+            logger.debug(
+              `iterateNodes returned degraded node for uid=${sdkNode.uid ?? '(unknown)'} errors=[${[...errors.keys()].join(',')}]`
+            );
           }
+
+          const uidVal = sdkNode.uid;
+          if (typeof uidVal === 'string') {
+            nodesByUid.set(uidVal, sdkNode);
+          } else {
+            logger.debug(
+              `iterateNodes returned node without uid, skipping: ${JSON.stringify(maybeNode)}`
+            );
+          }
+        }
+
+        // Preserve the order from the API response
+        for (const uid of childNodeUids) {
+          const node = nodesByUid.get(uid);
+          if (!node) continue; // Node might be missing or failed to decrypt
+
+          const isFolder = node.type === 'folder';
+
+          const createdTime =
+            node.creationTime ??
+            extractClaimedModificationTime(node.activeRevision as unknown) ??
+            node.modificationTime ??
+            new Date(0);
+
+          const modifiedTime = isFolder
+            ? (node.folder?.claimedModificationTime ?? node.modificationTime ?? createdTime)
+            : (extractClaimedModificationTime(node.activeRevision as unknown) ??
+              node.modificationTime ??
+              createdTime);
+
+          const size = isFolder ? 0 : (extractClaimedSize(node.activeRevision as unknown) ?? 0);
+
+          const name = normalizeNodeName(node.name as unknown);
+
+          nodes.push({
+            uid: node.uid,
+            name,
+            type: isFolder ? 'folder' : 'file',
+            size,
+            mimeType: node.mediaType || 'application/octet-stream',
+            createdTime: createdTime as Date,
+            modifiedTime: modifiedTime as Date,
+            parentUid: folderUid,
+          });
         }
 
         logger.debug(`Direct API path completed: returned ${nodes.length} nodes`);

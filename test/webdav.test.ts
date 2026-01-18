@@ -577,14 +577,14 @@ describe('ProtonDriveResource - COPY Operation', () => {
         const reader = data.getReader();
         let collected = '';
         for (;;) {
-          // eslint-disable-next-line no-await-in-loop
           const { done, value } = await reader.read();
           if (done) break;
           collected += new TextDecoder().decode(value);
         }
         expect(collected).toBe('streamed data');
       } else {
-        const content = data instanceof Uint8Array ? new TextDecoder().decode(data) : data.toString();
+        const content =
+          data instanceof Uint8Array ? new TextDecoder().decode(data) : data.toString();
         expect(content).toBe('streamed data');
       }
 

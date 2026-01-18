@@ -78,7 +78,9 @@ describe('webdav e2e', () => {
     nodes.delete(uid);
   };
 
-  const readStream = async (stream: ReadableStream | AsyncIterable<Uint8Array> | Uint8Array | Buffer): Promise<Uint8Array> => {
+  const readStream = async (
+    stream: ReadableStream | AsyncIterable<Uint8Array> | Uint8Array | Buffer
+  ): Promise<Uint8Array> => {
     if (stream instanceof Uint8Array) {
       return stream;
     }
@@ -160,7 +162,9 @@ describe('webdav e2e', () => {
       name: string,
       content: ReadableStream | Buffer | Uint8Array
     ) => {
-      const data = await readStream(content as ReadableStream | AsyncIterable<Uint8Array> | Uint8Array | Buffer);
+      const data = await readStream(
+        content as ReadableStream | AsyncIterable<Uint8Array> | Uint8Array | Buffer
+      );
       const existingId = Array.from(children.get(parentUid) || new Set<string>())
         .map((uid) => nodes.get(uid)!)
         .find((node) => node.type === 'file' && node.name === name)?.uid;

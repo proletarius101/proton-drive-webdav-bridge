@@ -30,8 +30,14 @@ describe('WebDAV COPY/MOVE permission semantics', () => {
   const children = new Map<string, Set<string>>();
   let uidCounter = 0;
   const createUid = () => `n-${uidCounter++}`;
-  const ensure = (p: string) => { if (!children.has(p)) children.set(p, new Set()); return children.get(p)! };
-  const add = (n: Node) => { nodes.set(n.uid, n); if (n.parentUid) ensure(n.parentUid).add(n.uid); };
+  const ensure = (p: string) => {
+    if (!children.has(p)) children.set(p, new Set());
+    return children.get(p)!;
+  };
+  const add = (n: Node) => {
+    nodes.set(n.uid, n);
+    if (n.parentUid) ensure(n.parentUid).add(n.uid);
+  };
 
   beforeAll(() => {
     const root = { uid: 'root', name: '', type: 'folder', parentUid: null };
@@ -50,10 +56,13 @@ describe('WebDAV COPY/MOVE permission semantics', () => {
         return { uid: n.uid, name: n.name, type: n.type, size: n.data?.length ?? 0 };
       });
     };
-    driveClient.downloadFile = async (uid: string) => new ReadableStream({ start: (c) => c.close() });
+    driveClient.downloadFile = async (uid: string) =>
+      new ReadableStream({ start: (c) => c.close() });
     driveClient.uploadFile = async (parentUid: string, name: string) => {
       // If a node with same name exists, emulate overwrite semantics for Overwrite:F tests by throwing
-      const existing = Array.from(children.get(parentUid) || new Set()).map((id) => nodes.get(id)!).find((n) => n.name === name);
+      const existing = Array.from(children.get(parentUid) || new Set())
+        .map((id) => nodes.get(id)!)
+        .find((n) => n.name === name);
       if (existing) {
         // Emulate precondition failed
         const e: any = new Error('Destination exists');
@@ -72,7 +81,10 @@ describe('WebDAV COPY/MOVE permission semantics', () => {
       node.parentUid = newParentUid;
       ensure(newParentUid).add(uid);
     };
-    driveClient.renameNode = async (uid: string, newName: string) => { const node = nodes.get(uid); if (node) node.name = newName; };
+    driveClient.renameNode = async (uid: string, newName: string) => {
+      const node = nodes.get(uid);
+      if (node) node.name = newName;
+    };
   });
 
   afterAll(() => rmSync(pathsBase, { recursive: true, force: true }));
@@ -80,7 +92,13 @@ describe('WebDAV COPY/MOVE permission semantics', () => {
   it('COPY to existing destination with Overwrite:F returns 412', async () => {
     // Create destination first
     const dest = createUid();
-    add({ uid: dest, name: 'dest.txt', type: 'file', parentUid: 'root', data: new Uint8Array([9]) });
+    add({
+      uid: dest,
+      name: 'dest.txt',
+      type: 'file',
+      parentUid: 'root',
+      data: new Uint8Array([9]),
+    });
 
     const server = new WebDAVServer({ host: '127.0.0.1', port: 0, requireAuth: false });
     await server.start();
@@ -90,7 +108,10 @@ describe('WebDAV COPY/MOVE permission semantics', () => {
     const baseUrl = `http://127.0.0.1:${port}`;
 
     try {
-      const resp = await fetch(`${baseUrl}/src.txt`, { method: 'COPY', headers: { Destination: `${baseUrl}/dest.txt`, Overwrite: 'F' } });
+      const resp = await fetch(`${baseUrl}/src.txt`, {
+        method: 'COPY',
+        headers: { Destination: `${baseUrl}/dest.txt`, Overwrite: 'F' },
+      });
       expect(resp.status).toBe(412);
     } finally {
       await server.stop();
@@ -112,7 +133,10 @@ describe('WebDAV COPY/MOVE permission semantics', () => {
     const baseUrl = `http://127.0.0.1:${port}`;
 
     try {
-      const resp = await fetch(`${baseUrl}/src.txt`, { method: 'MOVE', headers: { Destination: `${baseUrl}/destdir/` } });
+      const resp = await fetch(`${baseUrl}/src.txt`, {
+        method: 'MOVE',
+        headers: { Destination: `${baseUrl}/destdir/` },
+      });
       expect(resp.status).toBe(403);
     } finally {
       await server.stop();

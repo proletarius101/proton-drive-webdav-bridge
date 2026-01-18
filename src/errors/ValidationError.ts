@@ -31,7 +31,10 @@ export class ValidationError extends AppError {
    *   password: 'Password too short'
    * })
    */
-  constructor(message: string, readonly details?: Record<string, string>) {
+  constructor(
+    message: string,
+    readonly details?: Record<string, string>
+  ) {
     super(message, 'VALIDATION_ERROR', 400, true);
     Object.setPrototypeOf(this, ValidationError.prototype);
   }

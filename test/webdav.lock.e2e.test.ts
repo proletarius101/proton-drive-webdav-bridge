@@ -35,7 +35,7 @@ let baseDir: string | null = null;
 beforeEach(() => {
   // Reset mock directories for this test to ensure isolation
   mockDirs = null;
-  
+
   baseDir = mkdtempSync(join(tmpdir(), 'pdb-webdav-lock-'));
   // Ensure DB file exists for LockManager
   const dataDir = getDataDir();

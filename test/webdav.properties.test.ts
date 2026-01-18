@@ -11,8 +11,32 @@ function createMockDriveClient() {
   return {
     getRootFolderUid: () => 'root-uid',
     listFolder: async (uid: string) => {
-      if (uid === 'root-uid') return [{ uid: 'folder-uid', name: 'Docs', type: 'folder', size: 0, mimeType: 'inode/directory', createdTime: new Date(), modifiedTime: new Date(), parentUid: 'root-uid' }];
-      if (uid === 'folder-uid') return [{ uid: 'file-uid', name: 'file.txt', type: 'file', size: 10, mimeType: 'text/plain', createdTime: new Date(), modifiedTime: new Date(), parentUid: 'folder-uid' }];
+      if (uid === 'root-uid')
+        return [
+          {
+            uid: 'folder-uid',
+            name: 'Docs',
+            type: 'folder',
+            size: 0,
+            mimeType: 'inode/directory',
+            createdTime: new Date(),
+            modifiedTime: new Date(),
+            parentUid: 'root-uid',
+          },
+        ];
+      if (uid === 'folder-uid')
+        return [
+          {
+            uid: 'file-uid',
+            name: 'file.txt',
+            type: 'file',
+            size: 10,
+            mimeType: 'text/plain',
+            createdTime: new Date(),
+            modifiedTime: new Date(),
+            parentUid: 'folder-uid',
+          },
+        ];
       return [];
     },
     downloadFile: async () => Buffer.from('test'),

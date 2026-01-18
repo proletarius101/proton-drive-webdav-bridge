@@ -207,7 +207,15 @@ export class WebDAVServer {
     // This ensures that operations which modify resources respect existing locks
     // (including parent locks with depth:infinity) and return 423 Locked when applicable.
     this.app.use((req, res, next) => {
-      const modifyingMethods = new Set(['PUT', 'DELETE', 'MOVE', 'COPY', 'MKCOL', 'PROPPATCH', 'PROPPATCH']);
+      const modifyingMethods = new Set([
+        'PUT',
+        'DELETE',
+        'MOVE',
+        'COPY',
+        'MKCOL',
+        'PROPPATCH',
+        'PROPPATCH',
+      ]);
       if (modifyingMethods.has(req.method)) {
         try {
           const lm = LockManager.getInstance();
@@ -222,7 +230,8 @@ export class WebDAVServer {
           // Otherwise check if any lock applies to this path (including parent depth:infinity)
           const applicable = lm.getAllLocks().filter((l) => {
             if (l.path === path) return true;
-            if (l.depth === 'infinity' && path.startsWith(l.path.replace(/\/$/, '') + '/')) return true;
+            if (l.depth === 'infinity' && path.startsWith(l.path.replace(/\/$/, '') + '/'))
+              return true;
             return false;
           });
 
@@ -295,7 +304,7 @@ export class WebDAVServer {
 
             // MOVE into existing non-empty collection is forbidden
             if (req.method === 'MOVE') {
-              if (await destResource.isCollection() && !(await destResource.isEmpty())) {
+              if ((await destResource.isCollection()) && !(await destResource.isEmpty())) {
                 res.status(403).send('The destination cannot be an existing non-empty directory.');
                 return;
               }

@@ -147,13 +147,16 @@ export default class ProtonDriveResource implements ResourceInterface {
     const allLocks = this.lockManager.getAllLocks();
     const applicableLocks = allLocks.filter((l) => {
       if (l.path === this.path) return true;
-      if (l.depth === 'infinity' && this.path.startsWith(l.path.replace(/\/$/, '') + '/')) return true;
+      if (l.depth === 'infinity' && this.path.startsWith(l.path.replace(/\/$/, '') + '/'))
+        return true;
       return false;
     });
 
     const userLocks = applicableLocks.filter((l) => l.username === user.username);
 
-    logger.debug(`Lock check for path=${this.path} applicable=${applicableLocks.length} userOwned=${userLocks.length} user=${user.username}`);
+    logger.debug(
+      `Lock check for path=${this.path} applicable=${applicableLocks.length} userOwned=${userLocks.length} user=${user.username}`
+    );
 
     if (applicableLocks.length > userLocks.length) {
       logger.warn(`Operation blocked on locked resource path=${this.path}`);
