@@ -9,6 +9,9 @@ import { input, password as passwordPrompt, confirm } from '@inquirer/prompts';
 import { ProtonAuth, type ApiError } from '../auth.js';
 import { storeCredentials, deleteStoredCredentials, hasStoredCredentials } from '../keychain.js';
 import { logger } from '../logger.js';
+import { toAppError } from '../utils/error.js';
+import { validateEmail, validatePasswordStrength } from '../validation/auth.js';
+import { InvalidCredentialsError } from '../errors/index.js';
 
 export function registerAuthCommand(program: Command): void {
   const authCmd = program.command('auth').description('Manage Proton account authentication');
@@ -40,11 +43,23 @@ export function registerAuthCommand(program: Command): void {
             validate: (value) => value.length > 0 || 'Username is required',
           }));
 
+        // Validate username format (basic)
+        const usernameValidation = validateEmail(username);
+        if (!usernameValidation.ok) {
+          throw usernameValidation.error;
+        }
+
         // Get password
         const password = await passwordPrompt({
           message: 'Password:',
           mask: '*',
         });
+
+        // Validate password (non-empty)
+        const pwdValidation = validatePasswordStrength(password, 1);
+        if (!pwdValidation.ok) {
+          throw pwdValidation.error;
+        }
 
         console.log('Authenticating...');
 
@@ -92,7 +107,7 @@ export function registerAuthCommand(program: Command): void {
         }
 
         if (!session) {
-          throw new Error('Authentication failed');
+          throw new InvalidCredentialsError('Authentication failed');
         }
 
         // Store credentials
@@ -106,9 +121,9 @@ export function registerAuthCommand(program: Command): void {
         console.log('Credentials stored securely.');
         logger.info(`User ${username} authenticated successfully`);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.error(`\n✗ Login failed: ${message}`);
-        logger.error(`Login failed: ${message}`);
+        const appError = toAppError(error);
+        console.error(`\n✗ Login failed: ${appError.getPublicMessage()}`);
+        logger.error(`Login failed: [${appError.code}] ${appError.message}`);
         process.exit(1);
       }
     });
@@ -138,9 +153,9 @@ export function registerAuthCommand(program: Command): void {
         console.log('✓ Logged out successfully. Credentials removed.');
         logger.info('User logged out');
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.error(`✗ Logout failed: ${message}`);
-        logger.error(`Logout failed: ${message}`);
+        const appError = toAppError(error);
+        console.error(`✗ Logout failed: ${appError.getPublicMessage()}`);
+        logger.error(`Logout failed: [${appError.code}] ${appError.message}`);
         process.exit(1);
       }
     });
@@ -158,8 +173,9 @@ export function registerAuthCommand(program: Command): void {
             const { username } = await restoreSessionFromStorage();
             console.log(`✓ Logged in as: ${username}`);
           } catch (error) {
+            const appError = toAppError(error);
             console.log('⚠ Credentials stored but session may be expired. Try logging in again.');
-            console.log(error);
+            console.log(appError.getPublicMessage());
           }
         } else {
           console.log(

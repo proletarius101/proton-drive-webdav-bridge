@@ -23,6 +23,13 @@ import * as openpgp from 'openpgp';
 import { ProtonAuth, restoreSessionFromStorage, type Session } from './auth.js';
 import { deleteStoredCredentials, storeCredentials, type StoredCredentials } from './keychain.js';
 import { logger } from './logger.js';
+import {
+  NotAuthenticatedError,
+  ApiError,
+  AppError,
+  InvalidRequestError,
+  ConflictError,
+} from './errors/index.js';
 
 // ============================================================================
 // Types
@@ -316,7 +323,7 @@ function createProtonAccount(
     async getOwnPrimaryAddress(): Promise<ProtonDriveAccountAddress> {
       const primaryAddress = session.addresses?.find((a) => a.Type === 1 && a.Status === 1);
       if (!primaryAddress) {
-        throw new Error('No primary address found');
+        throw new InvalidRequestError('No primary address found');
       }
 
       const primaryKeyIndex = primaryAddress.keys.findIndex((k) => k.Primary === 1);
@@ -334,7 +341,7 @@ function createProtonAccount(
         (a) => a.Email === emailOrAddressId || a.ID === emailOrAddressId
       );
       if (!address) {
-        throw new Error(`Address not found: ${emailOrAddressId}`);
+        throw new InvalidRequestError(`Address not found: ${emailOrAddressId}`);
       }
 
       const primaryKeyIndex = address.keys.findIndex((k) => k.Primary === 1);
@@ -925,17 +932,32 @@ function createSrpModule(): SDKSRPModule {
       _salt: string,
       _password: string
     ): Promise<{ clientEphemeral: string; clientProof: string; expectedServerProof: string }> {
-      throw new Error('SRP operations not supported in WebDAV bridge');
+      throw new AppError(
+        'SRP operations not supported in WebDAV bridge',
+        'SRP_UNSUPPORTED',
+        501,
+        true
+      );
     },
 
     async getSrpVerifier(
       _password: string
     ): Promise<{ modulusId: string; version: number; salt: string; verifier: string }> {
-      throw new Error('SRP verifier generation not supported in WebDAV bridge');
+      throw new AppError(
+        'SRP verifier generation not supported in WebDAV bridge',
+        'SRP_UNSUPPORTED',
+        501,
+        true
+      );
     },
 
     async computeKeyPassword(_password: string, _salt: string): Promise<string> {
-      throw new Error('Key password computation not supported in WebDAV bridge');
+      throw new AppError(
+        'Key password computation not supported in WebDAV bridge',
+        'SRP_UNSUPPORTED',
+        501,
+        true
+      );
     },
   };
 }
@@ -968,7 +990,12 @@ export class DriveClientManager {
       // Get root folder
       const rootFolder = await this.client.getMyFilesRootFolder();
       if (!rootFolder.ok || !rootFolder.value) {
-        throw new Error(`Failed to get root folder: ${rootFolder.error}`);
+        throw new ApiError(
+          `Failed to get root folder: ${String(rootFolder.error)}`,
+          502,
+          undefined,
+          rootFolder.error
+        );
       }
       this.rootFolderUid = rootFolder.value.uid;
 
@@ -984,7 +1011,7 @@ export class DriveClientManager {
    */
   private async createClient(sdkDebug = false): Promise<ProtonDriveClient> {
     if (!this.session || !this.auth) {
-      throw new Error('No session available');
+      throw new NotAuthenticatedError();
     }
 
     // Dynamic import of the SDK
@@ -996,7 +1023,7 @@ export class DriveClientManager {
     const cryptoModule = createOpenPGPCrypto();
     const httpClient = createProtonHttpClient(this.session, async () => {
       if (!this.auth || !this.username) {
-        throw new Error('Auth or username not initialized');
+        throw new NotAuthenticatedError();
       }
       try {
         await this.auth.refreshToken();
@@ -1049,7 +1076,12 @@ export class DriveClientManager {
    */
   getClient(): ProtonDriveClient {
     if (!this.client) {
-      throw new Error('Client not initialized. Call initialize() first.');
+      throw new AppError(
+        'Client not initialized. Call initialize() first.',
+        'CLIENT_NOT_INITIALIZED',
+        500,
+        false
+      );
     }
     return this.client;
   }
@@ -1059,7 +1091,7 @@ export class DriveClientManager {
    */
   getRootFolderUid(): string {
     if (!this.rootFolderUid) {
-      throw new Error('Root folder not initialized');
+      throw new AppError('Root folder not initialized', 'ROOT_FOLDER_NOT_INITIALIZED', 500, false);
     }
     return this.rootFolderUid;
   }
@@ -1416,12 +1448,17 @@ export class DriveClientManager {
       if (existing.type === 'folder') {
         return existing.uid;
       }
-      throw new Error(`A file with name "${name}" already exists`);
+      throw new ConflictError(`A file with name "${name}" already exists`);
     }
 
     const result = await client.createFolder(parentFolderUid, name);
     if (!result.ok || !result.value) {
-      throw new Error(`Failed to create folder: ${result.error}`);
+      throw new ApiError(
+        `Failed to create folder: ${String(result.error)}`,
+        502,
+        undefined,
+        result.error
+      );
     }
 
     return result.value.uid;
@@ -1454,10 +1491,15 @@ export class DriveClientManager {
       const iterator = iterable[Symbol.asyncIterator]();
       const { value, done } = await iterator.next();
       if (done || !value) {
-        throw new Error(`No result returned while attempting to ${op}`);
+        throw new AppError(
+          `No result returned while attempting to ${op}`,
+          'OPERATION_FAILED',
+          500,
+          false
+        );
       }
       if (!value.ok) {
-        throw new Error(`Failed to ${op}: ${value.error}`);
+        throw new ApiError(`Failed to ${op}: ${String(value.error)}`, 502, undefined, value.error);
       }
     };
 
@@ -1475,7 +1517,7 @@ export class DriveClientManager {
     const client = this.getClient();
     const result = await client.renameNode(nodeUid, newName);
     if (!result.ok) {
-      throw new Error(`Failed to rename: ${result.error}`);
+      throw new ApiError(`Failed to rename: ${String(result.error)}`, 502, undefined, result.error);
     }
   }
 
@@ -1486,7 +1528,7 @@ export class DriveClientManager {
     const client = this.getClient();
     for await (const result of client.moveNodes([nodeUid], newParentUid)) {
       if (!result.ok) {
-        throw new Error(`Failed to move: ${result.error}`);
+        throw new ApiError(`Failed to move: ${String(result.error)}`, 502, undefined, result.error);
       }
     }
   }

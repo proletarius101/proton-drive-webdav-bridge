@@ -14,6 +14,8 @@ import {
   ForbiddenError,
   ResourceNotFoundError,
 } from 'nephele';
+import { MethodNotAllowedError } from '../errors/index.js';
+
 import { type DriveNode } from '../drive.js';
 import { logger } from '../logger.js';
 import type ProtonDriveAdapter from './ProtonDriveAdapter.js';
@@ -290,7 +292,7 @@ export default class ProtonDriveResource implements ResourceInterface {
 
   async saveMetadata(meta: { props?: { [k: string]: unknown } }): Promise<void> {
     const node = await this.resolveNode();
-    if (!node) throw new Error('Resource not found');
+    if (!node) throw new ResourceNotFoundError('Resource not found');
     const mm = MetadataManager.getInstance();
     mm.save(node.uid, meta);
 
@@ -420,7 +422,7 @@ export default class ProtonDriveResource implements ResourceInterface {
     const node = await this.resolveNode();
 
     if (!node) {
-      throw new Error('Resource not found.');
+      throw new ResourceNotFoundError('Resource not found.');
     }
 
     logger.debug(`Deleting node uid=${node.uid} name=${node.name} path=${this.path}`);
@@ -450,7 +452,7 @@ export default class ProtonDriveResource implements ResourceInterface {
 
     const node = await this.resolveNode();
     if (!node) {
-      throw new Error('Resource not found.');
+      throw new ResourceNotFoundError('Resource not found.');
     }
 
     const destPath = this.adapter.urlToRelativePath(destination, baseUrl);
@@ -563,12 +565,15 @@ export default class ProtonDriveResource implements ResourceInterface {
     this.checkLock(user, lockToken);
 
     if (await this.isCollection()) {
-      throw new Error('Move called on a collection resource.');
+      const err = new MethodNotAllowedError('MOVE', this.path);
+      // Preserve original user-facing message expected by tests
+      err.message = 'Move called on a collection resource.';
+      throw err;
     }
 
     const node = await this.resolveNode();
     if (!node) {
-      throw new Error('Resource not found.');
+      throw new ResourceNotFoundError('Resource not found.');
     }
 
     const destPath = this.adapter.urlToRelativePath(destination, baseUrl);
@@ -676,7 +681,7 @@ export default class ProtonDriveResource implements ResourceInterface {
     }
     const node = await this.resolveNode();
     if (!node) {
-      throw new Error('Resource not found.');
+      throw new ResourceNotFoundError('Resource not found.');
     }
     return node.name;
   }
