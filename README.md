@@ -19,7 +19,7 @@ An unofficial WebDAV bridge for Proton Drive, allowing you to access your Proton
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/proton-drive-webdav-bridge.git
+git clone https://gitlab.com/secure-system/proton/proton-drive-webdav-bridge.git
 cd proton-drive-webdav-bridge
 
 # Install dependencies

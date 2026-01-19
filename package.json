@@ -33,11 +33,11 @@
     "cloud",
     "storage"
   ],
-  "author": "",
-  "license": "GPL-3.0",
+  "author": "proletarius101",
+  "license": "AGPL-3.0-only",
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "https://gitlab.com/secure-system/proton/proton-drive-webdav-bridge"
   },
   "files": [
     "dist"
@@ -71,7 +71,7 @@
     "typescript-eslint": "^8.48.0"
   },
   "build": {
-    "appId": "io.github.proletarius101.proton-drive-webdav-bridge",
+    "appId": "io.gitlab.secure-system.proton-drive-webdav-bridge",
     "productName": "Proton Drive WebDAV Bridge",
     "mac": {
       "category": "public.app-category.utilities"
