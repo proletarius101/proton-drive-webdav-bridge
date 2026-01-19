@@ -8,6 +8,7 @@
 
 include:
 - template: Security/SAST.gitlab-ci.yml
+- template: Security/Secret-Detection.gitlab-ci.yml
 
 variables:
   GITLAB_ADVANCED_SAST_ENABLED: 'true'
@@ -18,6 +19,7 @@ stages:
 - test
 - build
 - release
+- secret-detection
 cache:
   key: "${CI_JOB_NAME}-${CI_COMMIT_REF_SLUG}"
   paths:
@@ -125,5 +127,7 @@ release:
       links:
       - name: proton-drive-webdav-bridge-${CI_COMMIT_TAG}.tar.gz
         url: "$CI_PROJECT_URL/-/jobs/$CI_JOB_ID/artifacts/raw/proton-drive-webdav-bridge-${CI_COMMIT_TAG}.tar.gz"
+secret_detection:
+  stage: secret-detection
 sast:
   stage: test
