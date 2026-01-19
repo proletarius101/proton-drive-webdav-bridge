@@ -281,6 +281,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 ## CI / Releases
 
 - GitLab CI is configured in `.gitlab-ci.yml` to run **lint**, **unit tests**, optional **e2e tests**, and **build** stages.
+- The unit and e2e test jobs now publish **JUnit XML** reports (in `test-results/`) and are exposed to the GitLab Merge Request test widget so test results and failures are visible in MRs. Run locally with `bun run test:ci` or `bun run test:e2e:ci` to reproduce the same reports.
 - Creating a tag (for example `v1.2.3`) in GitLab triggers the **release** job. The job builds the project, runs `bun build:bin`, packages the `dist/` directory into a tarball (`proton-drive-webdav-bridge-<tag>.tar.gz`) and creates a GitLab Release with the tarball attached.
 - No additional CI variables are required for the built-in tag-based release. If you need to call external APIs or publish to external registries, provide a token via CI/CD variables (for example `GITLAB_TOKEN`) with appropriate permissions.
 
