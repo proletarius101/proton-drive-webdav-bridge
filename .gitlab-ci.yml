@@ -5,6 +5,14 @@
 # Container Scanning customization: https://docs.gitlab.com/ee/user/application_security/container_scanning/#customizing-the-container-scanning-settings
 # Note that environment variables can be set in several places
 # See https://docs.gitlab.com/ee/ci/variables/#cicd-variable-precedence
+
+include:
+- template: Security/SAST.gitlab-ci.yml
+- template: Security/Dependency-Scanning.gitlab-ci.yml
+
+variables:
+  GITLAB_ADVANCED_SAST_ENABLED: 'true'
+
 image: oven/bun:latest
 stages:
 - lint
@@ -118,5 +126,6 @@ release:
       links:
       - name: proton-drive-webdav-bridge-${CI_COMMIT_TAG}.tar.gz
         url: "$CI_PROJECT_URL/-/jobs/$CI_JOB_ID/artifacts/raw/proton-drive-webdav-bridge-${CI_COMMIT_TAG}.tar.gz"
-include:
-- template: Security/Dependency-Scanning.gitlab-ci.yml
+
+sast:
+  stage: test
