@@ -434,9 +434,11 @@ export default class ProtonDriveResource implements ResourceInterface {
     this._metaReady = Promise.resolve();
   }
 
-  async getStream(_range?: { start: number; end: number }): Promise<Readable> {
+  async getStream(range?: { start: number; end: number }): Promise<Readable> {
     const t0 = Date.now();
-    logger.debug(`getStream called for path: ${this.path}`);
+    logger.debug(
+      `getStream called for path: ${this.path}, range: ${range ? `${range.start}-${range.end}` : 'none'}`
+    );
 
     const node = await this.resolveNode();
     const resolveNodeDuration = Date.now() - t0;
@@ -447,20 +449,63 @@ export default class ProtonDriveResource implements ResourceInterface {
       return Readable.from([]);
     }
 
-    // Use the SDK's downloader directly with our own Node.js PassThrough stream
-    // to avoid Web ReadableStream locking issues
     logger.debug(`getStream: Getting downloader for uid=${node.uid}, path=${this.path}`);
     const t1 = Date.now();
     const downloader = await this.adapter.driveClient.getFileDownloader(node.uid);
     const downloaderDuration = Date.now() - t1;
     logger.debug(`getStream: Got downloader in ${downloaderDuration}ms`);
 
-    // Create a PassThrough stream that the SDK can write to
     const { PassThrough } = await import('stream');
     const passthrough = new PassThrough();
 
-    // Start the download in the background
-    // Don't await this - let it run independently while we return the stream
+    // If a range is requested, use the seekable stream for partial content
+    if (range) {
+      const seekableStream = downloader.getSeekableStream();
+      const bytesToRead = range.end - range.start + 1;
+
+      logger.debug(
+        `getStream: Using seekable stream for range ${range.start}-${range.end} (${bytesToRead} bytes)`
+      );
+
+      // Perform the ranged read in background
+      (async () => {
+        const t2 = Date.now();
+        try {
+          await seekableStream.seek(range.start);
+          let remaining = bytesToRead;
+
+          while (remaining > 0) {
+            // Read in chunks to avoid memory issues with large ranges
+            const chunkSize = Math.min(remaining, 64 * 1024);
+            const { value, done } = await seekableStream.read(chunkSize);
+
+            // Write any data we received, even if this is the last chunk
+            if (value && value.length > 0) {
+              passthrough.write(value);
+              remaining -= value.length;
+            }
+
+            // Stop if we've reached the end of the stream
+            if (done || !value || value.length === 0) {
+              break;
+            }
+          }
+
+          passthrough.end();
+          const duration = Date.now() - t2;
+          logger.debug(`getStream: Range download completed for ${this.path} in ${duration}ms`);
+        } catch (error: unknown) {
+          logger.error(
+            `getStream: Error during range download for ${this.path}: ${error instanceof Error ? error.message : String(error)}`
+          );
+          passthrough.destroy(error instanceof Error ? error : new Error(String(error)));
+        }
+      })();
+
+      return passthrough;
+    }
+
+    // Full file download using downloadToStream for verified integrity
     const t2 = Date.now();
     downloader
       .downloadToStream(

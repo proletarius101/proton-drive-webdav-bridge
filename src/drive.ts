@@ -157,8 +157,23 @@ export interface FileRevisionUploader {
   ): Promise<UploadController>;
 }
 
+/**
+ * A seekable readable stream that supports seeking to arbitrary byte positions
+ * and reading specific byte counts. Used for HTTP Range requests.
+ */
+export interface SeekableReadableStream extends ReadableStream<Uint8Array> {
+  /**
+   * Read a specific number of bytes from the stream at the current position.
+   */
+  read(numBytes: number): Promise<{ value: Uint8Array; done: boolean }>;
+  /**
+   * Seek to the given position in the stream from the beginning.
+   */
+  seek(position: number): void | Promise<void>;
+}
+
 export interface FileDownloader {
-  getSeekableStream(): ReadableStream<Uint8Array>;
+  getSeekableStream(): SeekableReadableStream;
   downloadToStream(
     stream: WritableStream,
     onProgress?: (downloadedBytes: number) => void
