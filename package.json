@@ -20,6 +20,8 @@
     "test": "bun test --bail",
     "test:e2e": "bun test test/*.e2e.test.ts",
     "test:unit": "bun test --bail $(find test -name '*.test.ts' ! -name '*.e2e.test.ts')",
+    "test:ci": "mkdir -p test-results && bun test --bail $(find test -name '*.test.ts' ! -name '*.e2e.test.ts') --reporter=junit --reporter-outfile=./test-results/junit.xml",
+    "test:e2e:ci": "mkdir -p test-results && bun test test/*.e2e.test.ts --reporter=junit --reporter-outfile=./test-results/e2e-junit.xml",
     "electron:dev": "electron src/gui/main.js",
     "electron:build": "electron-builder",
     "pack:dist": "tar -czf proton-drive-webdav-bridge-${npm_package_version}.tar.gz -C dist .",
