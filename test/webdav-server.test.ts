@@ -27,6 +27,30 @@ mock.module('env-paths', () => ({
   }),
 }));
 
+// Mock config to provide defaults
+mock.module('../src/config.js', () => ({
+  getConfig: () => ({
+    webdav: {
+      host: '127.0.0.1',
+      port: 8080,
+      requireAuth: true,
+      https: false,
+    },
+    remotePath: '/',
+    cache: {
+      enabled: true,
+      ttlSeconds: 60,
+      maxSizeMB: 100,
+    },
+    debug: false,
+    autoStart: false,
+  }),
+  loadConfig: () => ({}),
+  saveConfig: () => {},
+  updateConfig: () => ({}),
+  getConfigFilePath: () => join(pathsBase, 'config', 'proton-drive-webdav-bridge', 'config.json'),
+}));
+
 describe('WebDAV Server - Initialization', () => {
   test('should import WebDAV server module', async () => {
     const serverModule = await import('../src/webdav/server.js');

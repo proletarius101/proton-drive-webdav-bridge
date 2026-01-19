@@ -42,6 +42,7 @@ describe('webdav e2e', () => {
     deleteNode: driveClient.deleteNode.bind(driveClient),
     uploadFile: driveClient.uploadFile.bind(driveClient),
     downloadFile: driveClient.downloadFile.bind(driveClient),
+    getFileDownloader: driveClient.getFileDownloader.bind(driveClient),
     renameNode: driveClient.renameNode.bind(driveClient),
     moveNode: driveClient.moveNode.bind(driveClient),
   };
@@ -195,6 +196,27 @@ describe('webdav e2e', () => {
         },
       });
     };
+    driveClient.getFileDownloader = async (uid: string) => {
+      const node = nodes.get(uid);
+      const data = node?.data || new Uint8Array();
+      return {
+        getSeekableStream: () =>
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(data);
+              controller.close();
+            },
+          }),
+        downloadToStream: (stream: WritableStream) => {
+          const writer = stream.getWriter();
+          const writePromise = writer.write(data).then(() => writer.close());
+          return {
+            abort: () => {},
+            completion: () => writePromise,
+          };
+        },
+      };
+    };
     driveClient.renameNode = async (uid: string, newName: string) => {
       const node = nodes.get(uid);
       if (node) {
@@ -222,6 +244,7 @@ describe('webdav e2e', () => {
     driveClient.deleteNode = originalMethods.deleteNode;
     driveClient.uploadFile = originalMethods.uploadFile;
     driveClient.downloadFile = originalMethods.downloadFile;
+    driveClient.getFileDownloader = originalMethods.getFileDownloader;
     driveClient.renameNode = originalMethods.renameNode;
     driveClient.moveNode = originalMethods.moveNode;
     rmSync(pathsBase, { recursive: true, force: true });
@@ -231,9 +254,8 @@ describe('webdav e2e', () => {
     const server = new WebDAVServer({ host: '127.0.0.1', port: 0, requireAuth: false });
     await server.start();
 
-    const httpServer = (server as unknown as { httpServer: { address: () => { port: number } } })
-      .httpServer;
-    const port = httpServer.address().port;
+    const httpServer = server.getHttpServer()!;
+    const port = (httpServer.address() as { port: number }).port;
     const baseUrl = `http://127.0.0.1:${port}`;
 
     try {
@@ -260,9 +282,8 @@ describe('webdav e2e', () => {
     const server = new WebDAVServer({ host: '127.0.0.1', port: 0, requireAuth: false });
     await server.start();
 
-    const httpServer = (server as unknown as { httpServer: { address: () => { port: number } } })
-      .httpServer;
-    const port = httpServer.address().port;
+    const httpServer = server.getHttpServer()!;
+    const port = (httpServer.address() as { port: number }).port;
     const baseUrl = `http://127.0.0.1:${port}`;
 
     try {
@@ -298,9 +319,8 @@ describe('webdav e2e', () => {
     });
     await server.start();
 
-    const httpServer = (server as unknown as { httpServer: { address: () => { port: number } } })
-      .httpServer;
-    const port = httpServer.address().port;
+    const httpServer = server.getHttpServer()!;
+    const port = (httpServer.address() as { port: number }).port;
     const baseUrl = `http://127.0.0.1:${port}`;
 
     try {

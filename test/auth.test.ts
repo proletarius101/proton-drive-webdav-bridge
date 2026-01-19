@@ -61,13 +61,19 @@ beforeAll(async () => {
 let pathsBase: string = join(tmpdir(), 'pdb-auth-default');
 
 mock.module('env-paths', () => ({
-  default: () => ({
-    config: mkdirSync(join(pathsBase, 'config', 'proton-drive-webdav-bridge'), { recursive: true }),
-    data: mkdirSync(join(pathsBase, 'data', 'proton-drive-webdav-bridge'), { recursive: true }),
-    log: mkdirSync(join(pathsBase, 'log', 'proton-drive-webdav-bridge'), { recursive: true }),
-    temp: mkdirSync(join(pathsBase, 'temp', 'proton-drive-webdav-bridge'), { recursive: true }),
-    cache: mkdirSync(join(pathsBase, 'cache', 'proton-drive-webdav-bridge'), { recursive: true }),
-  }),
+  default: () => {
+    const config = join(pathsBase, 'config', 'proton-drive-webdav-bridge');
+    const data = join(pathsBase, 'data', 'proton-drive-webdav-bridge');
+    const log = join(pathsBase, 'log', 'proton-drive-webdav-bridge');
+    const temp = join(pathsBase, 'temp', 'proton-drive-webdav-bridge');
+    const cache = join(pathsBase, 'cache', 'proton-drive-webdav-bridge');
+    mkdirSync(config, { recursive: true });
+    mkdirSync(data, { recursive: true });
+    mkdirSync(log, { recursive: true });
+    mkdirSync(temp, { recursive: true });
+    mkdirSync(cache, { recursive: true });
+    return { config, data, log, temp, cache };
+  },
 }));
 
 const keyringStore = new Map<string, string>();

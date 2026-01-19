@@ -95,88 +95,133 @@ export default class ProtonDriveResource implements ResourceInterface {
 
     // Use SDK's efficient resolvePath that uses iterators (stops early, doesn't fetch all items)
     // instead of listFolder which fetches all children and searches
-    const t0 = Date.now();
-    const resolved = await this.adapter.driveClient.resolvePath(this.path);
-    const resolvePathDuration = Date.now() - t0;
-    logger.debug(
-      `resolvePath("${this.path}") took ${resolvePathDuration}ms, resolved: ${resolved ? resolved.uid : 'null'}`
-    );
+    try {
+      const t0 = Date.now();
+      const resolved = await this.adapter.driveClient.resolvePath(this.path);
+      const resolvePathDuration = Date.now() - t0;
+      logger.debug(
+        `resolvePath("${this.path}") took ${resolvePathDuration}ms, resolved: ${resolved ? resolved.uid : 'null'}`
+      );
 
-    if (!resolved) {
-      this._node = null;
-      return null;
-    }
+      if (!resolved) {
+        this._node = null;
+        return null;
+      }
 
-    // Fetch full node details using the SDK's getNode for complete metadata
-    const t1 = Date.now();
-    const nodeResult = await this.adapter.driveClient.getNode(resolved.uid);
-    const getNodeDuration = Date.now() - t1;
-    logger.debug(`getNode("${resolved.uid}") took ${getNodeDuration}ms`);
+      // Fetch full node details using the SDK's getNode for complete metadata
+      const t1 = Date.now();
+      const nodeResult = await this.adapter.driveClient.getNode(resolved.uid);
+      const getNodeDuration = Date.now() - t1;
+      logger.debug(`getNode("${resolved.uid}") took ${getNodeDuration}ms`);
 
-    if (!nodeResult) {
-      this._node = null;
-      return null;
-    }
+      if (!nodeResult) {
+        this._node = null;
+        return null;
+      }
 
-    // getNode returns NodeEntity | DegradedNode - both have the properties we need
-    const node = nodeResult;
-    const isFolder = node.type === 'folder';
+      // getNode returns NodeEntity | DegradedNode - both have the properties we need
+      const node = nodeResult;
+      const isFolder = node.type === 'folder';
 
-    // Extract size from activeRevision if available
-    function extractClaimedSize(activeRevision: unknown): number | undefined {
-      if (!activeRevision) return undefined;
-      const rev = activeRevision as { claimedSize?: number; storageSize?: number };
-      return rev.claimedSize ?? rev.storageSize;
-    }
+      // Extract size from activeRevision if available
+      function extractClaimedSize(activeRevision: unknown): number | undefined {
+        if (!activeRevision) return undefined;
+        const rev = activeRevision as { claimedSize?: number; storageSize?: number };
+        return rev.claimedSize ?? rev.storageSize;
+      }
 
-    // Extract modification time from activeRevision if available
-    function extractClaimedModificationTime(activeRevision: unknown): Date | undefined {
-      if (!activeRevision) return undefined;
-      const rev = activeRevision as { claimedModificationTime?: Date };
-      return rev.claimedModificationTime;
-    }
+      // Extract modification time from activeRevision if available
+      function extractClaimedModificationTime(activeRevision: unknown): Date | undefined {
+        if (!activeRevision) return undefined;
+        const rev = activeRevision as { claimedModificationTime?: Date };
+        return rev.claimedModificationTime;
+      }
 
-    const createdTime =
-      node.creationTime ??
-      extractClaimedModificationTime(node.activeRevision as unknown) ??
-      node.modificationTime ??
-      new Date(0);
-
-    const modifiedTime = isFolder
-      ? (node.folder?.claimedModificationTime ?? node.modificationTime ?? createdTime)
-      : (extractClaimedModificationTime(node.activeRevision as unknown) ??
+      const createdTime =
+        node.creationTime ??
+        extractClaimedModificationTime(node.activeRevision as unknown) ??
         node.modificationTime ??
-        createdTime);
+        new Date(0);
 
-    const size = isFolder ? 0 : (extractClaimedSize(node.activeRevision as unknown) ?? 0);
+      const modifiedTime = isFolder
+        ? (node.folder?.claimedModificationTime ?? node.modificationTime ?? createdTime)
+        : (extractClaimedModificationTime(node.activeRevision as unknown) ??
+          node.modificationTime ??
+          createdTime);
 
-    // Handle name which may be a Result<string, Error> in degraded nodes
-    let name: string;
-    if (typeof node.name === 'string') {
-      name = node.name;
-    } else if (node.name && typeof node.name === 'object' && 'ok' in node.name) {
-      const nameResult = node.name as { ok?: boolean; value?: string };
-      name = nameResult.ok && nameResult.value ? nameResult.value : 'Undecryptable';
-    } else {
-      name = 'Undecryptable';
+      const size = isFolder ? 0 : (extractClaimedSize(node.activeRevision as unknown) ?? 0);
+
+      // Handle name which may be a Result<string, Error> in degraded nodes
+      let name: string;
+      if (typeof node.name === 'string') {
+        name = node.name;
+      } else if (node.name && typeof node.name === 'object' && 'ok' in node.name) {
+        const nameResult = node.name as { ok?: boolean; value?: string };
+        name = nameResult.ok && nameResult.value ? nameResult.value : 'Undecryptable';
+      } else {
+        name = 'Undecryptable';
+      }
+
+      const driveNode: DriveNode = {
+        uid: node.uid,
+        name,
+        type: isFolder ? 'folder' : 'file',
+        size,
+        mimeType: node.mediaType || 'application/octet-stream',
+        createdTime: createdTime as Date,
+        modifiedTime: modifiedTime as Date,
+        parentUid: resolved.uid, // Use the resolved parent UID
+      };
+
+      // Cache the resolved node by path for future lookups
+      this.adapter.cacheNode(this.path, driveNode);
+
+      this._node = driveNode;
+      return driveNode;
+    } catch (e) {
+      // Fallback to listFolder-based resolution using cached folder listings
+      logger.debug('resolvePath failed, falling back to cached listing resolution', {
+        error: e,
+        path: this.path,
+      });
+      const parts = this.path.split('/').filter((p) => p.length > 0);
+      let currentUid = this.adapter.driveClient.getRootFolderUid();
+      let foundNode: import('../drive.js').DriveNode | undefined = undefined;
+
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        const nodes = await this.adapter.getCachedFolderListing(currentUid);
+        const nodeItem = nodes.find((n) => n.name === part);
+        if (!nodeItem) {
+          this._node = null;
+          return null;
+        }
+        foundNode = nodeItem;
+        currentUid = nodeItem.uid;
+      }
+
+      if (!foundNode) {
+        this._node = null;
+        return null;
+      }
+
+      const isFolder = foundNode.type === 'folder';
+      const driveNode: DriveNode = {
+        uid: foundNode.uid,
+        name: foundNode.name,
+        type: isFolder ? 'folder' : 'file',
+        size: isFolder ? 0 : (foundNode.size ?? 0),
+        mimeType: foundNode.mimeType || 'application/octet-stream',
+        createdTime: foundNode.createdTime ?? new Date(0),
+        modifiedTime: foundNode.modifiedTime ?? foundNode.createdTime ?? new Date(0),
+        parentUid: foundNode.parentUid ?? null,
+      };
+
+      // Cache and return
+      this.adapter.cacheNode(this.path, driveNode);
+      this._node = driveNode;
+      return driveNode;
     }
-
-    const driveNode: DriveNode = {
-      uid: node.uid,
-      name,
-      type: isFolder ? 'folder' : 'file',
-      size,
-      mimeType: node.mediaType || 'application/octet-stream',
-      createdTime: createdTime as Date,
-      modifiedTime: modifiedTime as Date,
-      parentUid: resolved.uid, // Use the resolved parent UID
-    };
-
-    // Cache the resolved node by path for future lookups
-    this.adapter.cacheNode(this.path, driveNode);
-
-    this._node = driveNode;
-    return driveNode;
   }
 
   /**
@@ -688,8 +733,8 @@ export default class ProtonDriveResource implements ResourceInterface {
     // Create destination directory
     const createdFolderUid = await this.adapter.driveClient.createFolder(destParentUid, destName);
 
-    // Copy all children
-    const children = await this.adapter.driveClient.listFolder(sourceNode.uid);
+    // Copy all children (using cached listing to reduce API calls)
+    const children = await this.adapter.getCachedFolderListing(sourceNode.uid);
     for (const child of children) {
       if (child.type === 'folder') {
         await this.copyDirectory(child, createdFolderUid, child.name, user);
@@ -884,10 +929,17 @@ export default class ProtonDriveResource implements ResourceInterface {
       return [];
     }
 
-    const children = await this.adapter.driveClient.listFolder(node.uid);
+    const children = await this.adapter.getCachedFolderListing(node.uid);
     return children.map((child) => {
       const childPath =
         this.path === '' || this.path === '/' ? `/${child.name}` : `${this.path}/${child.name}`;
+
+      // Populate path cache for faster subsequent resolve calls
+      try {
+        this.adapter.cacheNode(childPath, child);
+      } catch (e) {
+        logger.debug(`Failed to cache node for ${childPath}: ${e}`);
+      }
 
       return new ProtonDriveResource({
         adapter: this.adapter,
@@ -933,7 +985,7 @@ export default class ProtonDriveResource implements ResourceInterface {
       return true;
     }
 
-    const children = await this.adapter.driveClient.listFolder(node.uid);
+    const children = await this.adapter.getCachedFolderListing(node.uid);
     return children.length === 0;
   }
 
@@ -970,7 +1022,7 @@ export default class ProtonDriveResource implements ResourceInterface {
       // Validate all parents except the last part (the resource itself)
       for (let i = 0; i < parts.length - 1; i++) {
         const part = parts[i];
-        const nodes = await this.adapter.driveClient.listFolder(currentUid);
+        const nodes = await this.adapter.getCachedFolderListing(currentUid);
         const foundNode = nodes.find((n) => n.name === part);
 
         if (!foundNode || foundNode.type !== 'folder') {

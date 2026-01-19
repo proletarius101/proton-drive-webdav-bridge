@@ -156,6 +156,32 @@ describe('WebDAV PROPFIND recursion and filtering', () => {
         },
       });
     };
+
+    // Allow uploads during tests and reflect them in the in-memory nodes map
+    driveClient.uploadFile = async (
+      parentUid: string,
+      name: string,
+      content: ReadableStream | Uint8Array | Buffer,
+      _opts?: unknown
+    ) => {
+      const newUid = createUid();
+      let data: Uint8Array;
+      if (content instanceof Uint8Array) {
+        data = content;
+      } else {
+        data = await readStream(content as ReadableStream);
+      }
+      addNode({
+        uid: newUid,
+        name,
+        type: 'file',
+        parentUid: parentUid,
+        data,
+        createdTime: new Date(),
+        modifiedTime: new Date(),
+      });
+      return newUid;
+    };
   });
 
   afterAll(() => {
@@ -237,6 +263,96 @@ describe('WebDAV PROPFIND recursion and filtering', () => {
       const text = await resp.text();
       // Response should include the requested property name
       expect(text).toContain('getlastmodified');
+    } finally {
+      await server.stop();
+    }
+  });
+
+  // New tests for caching behavior
+  it('PROPFIND uses folder cache to avoid repeated API calls', async () => {
+    const server = new WebDAVServer({ host: '127.0.0.1', port: 0, requireAuth: false });
+    await server.start();
+
+    const httpServer = server.getHttpServer();
+    if (!httpServer) throw new Error('HTTP server not available');
+    const port = (httpServer.address() as import('net').AddressInfo).port;
+    const baseUrl = `http://127.0.0.1:${port}`;
+
+    try {
+      const originalList = driveClient.listFolder;
+      let calls = 0;
+      driveClient.listFolder = async (uid: string) => {
+        calls++;
+        return originalList(uid);
+      };
+
+      const body = `<?xml version="1.0" encoding="utf-8" ?>\n<D:propfind xmlns:D="DAV:">\n  <D:allprop/>\n</D:propfind>`;
+
+      // First PROPFIND primes the cache
+      const resp1 = await fetch(`${baseUrl}/`, {
+        method: 'PROPFIND',
+        headers: { Depth: '1', 'Content-Type': 'application/xml' },
+        body,
+      });
+      expect(resp1.status).toBe(207);
+      const callsAfterFirst = calls;
+
+      // Second PROPFIND should not cause additional listFolder calls (cache hit)
+      const resp2 = await fetch(`${baseUrl}/`, {
+        method: 'PROPFIND',
+        headers: { Depth: '1', 'Content-Type': 'application/xml' },
+        body,
+      });
+      expect(resp2.status).toBe(207);
+      expect(calls).toBe(callsAfterFirst);
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('Cache invalidates after PUT and subsequent PROPFIND triggers re-fetch', async () => {
+    const server = new WebDAVServer({ host: '127.0.0.1', port: 0, requireAuth: false });
+    await server.start();
+
+    const httpServer = server.getHttpServer();
+    if (!httpServer) throw new Error('HTTP server not available');
+    const port = (httpServer.address() as import('net').AddressInfo).port;
+    const baseUrl = `http://127.0.0.1:${port}`;
+
+    try {
+      const originalList = driveClient.listFolder;
+      let calls = 0;
+      driveClient.listFolder = async (uid: string) => {
+        calls++;
+        return originalList(uid);
+      };
+
+      const body = `<?xml version="1.0" encoding="utf-8" ?>\n<D:propfind xmlns:D="DAV:">\n  <D:allprop/>\n</D:propfind>`;
+
+      // Prime the cache
+      const resp1 = await fetch(`${baseUrl}/`, {
+        method: 'PROPFIND',
+        headers: { Depth: '1', 'Content-Type': 'application/xml' },
+        body,
+      });
+      expect(resp1.status).toBe(207);
+      const callsAfterFirst = calls;
+
+      // Upload a new file to root (should invalidate folder cache)
+      const putResp = await fetch(`${baseUrl}/newfile.txt`, {
+        method: 'PUT',
+        body: new Uint8Array([7, 8, 9]),
+      });
+      expect([200, 201, 204].includes(putResp.status)).toBeTruthy();
+
+      // Next PROPFIND should cause listFolder to be called again (cache refreshed)
+      const resp2 = await fetch(`${baseUrl}/`, {
+        method: 'PROPFIND',
+        headers: { Depth: '1', 'Content-Type': 'application/xml' },
+        body,
+      });
+      expect(resp2.status).toBe(207);
+      expect(calls).toBeGreaterThan(callsAfterFirst);
     } finally {
       await server.stop();
     }

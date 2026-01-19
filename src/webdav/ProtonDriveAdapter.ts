@@ -52,13 +52,16 @@ export default class ProtonDriveAdapter implements AdapterInterface {
   private folderCache: Map<string, CacheEntry<import('../drive.js').DriveNode[]>>;
   /** Cache mapping full paths to resolved nodes to skip entire traversals */
   private pathCache: Map<string, CacheEntry<import('../drive.js').DriveNode>>;
+  /** In-flight folder fetch promises to deduplicate concurrent fetches */
+  private inflightFolderFetches: Map<string, Promise<import('../drive.js').DriveNode[]>>;
 
   constructor({ cacheTTL = 60000, driveClient }: ProtonDriveAdapterConfig = {}) {
     this.cacheTTL = cacheTTL;
     this.driveClient = driveClient ?? globalDriveClient;
     this.folderCache = new Map();
     this.pathCache = new Map();
-    logger.debug('ProtonDriveAdapter initialized');
+    this.inflightFolderFetches = new Map();
+    logger.debug(`ProtonDriveAdapter initialized (cacheTTL=${this.cacheTTL}ms)`);
   }
 
   urlToRelativePath(url: URL, baseUrl: URL): string | null {
@@ -188,26 +191,50 @@ export default class ProtonDriveAdapter implements AdapterInterface {
   }
 
   /**
-   * Get folder listing with caching
+   * Get folder listing with caching (deduplicates in-flight fetches)
    */
   async getCachedFolderListing(folderUid: string): Promise<import('../drive.js').DriveNode[]> {
     const cached = this.folderCache.get(folderUid);
     const now = Date.now();
 
+    // Fast path: cached and fresh
     if (cached && now - cached.timestamp < this.cacheTTL) {
       logger.debug(`Folder cache hit for ${folderUid}`);
       return cached.data;
     }
 
+    // If a fetch for this folder is already in-flight, await it
+    const inFlight = this.inflightFolderFetches.get(folderUid);
+    if (inFlight) {
+      logger.debug(`Awaiting in-flight fetch for folder ${folderUid}`);
+      return inFlight;
+    }
+
+    // If caching is disabled (ttl <= 0), fetch directly without storing results
+    if (this.cacheTTL <= 0) {
+      logger.debug(`Caching disabled or TTL<=0 for ${folderUid}, fetching direct`);
+      return this.driveClient.listFolder(folderUid);
+    }
+
     logger.debug(`Folder cache miss for ${folderUid}, fetching from API`);
-    const nodes = await this.driveClient.listFolder(folderUid);
+    const fetchPromise = (async () => {
+      try {
+        const nodes = await this.driveClient.listFolder(folderUid);
+        this.folderCache.set(folderUid, {
+          data: nodes,
+          timestamp: Date.now(),
+        });
+        return nodes;
+      } catch (error) {
+        logger.warn(`Failed to fetch folder ${folderUid}: ${error}`);
+        throw error;
+      } finally {
+        this.inflightFolderFetches.delete(folderUid);
+      }
+    })();
 
-    this.folderCache.set(folderUid, {
-      data: nodes,
-      timestamp: now,
-    });
-
-    return nodes;
+    this.inflightFolderFetches.set(folderUid, fetchPromise);
+    return fetchPromise;
   }
 
   /**

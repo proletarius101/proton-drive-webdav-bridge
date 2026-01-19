@@ -325,7 +325,13 @@ export class WebDAVServer {
     });
 
     // Create a single adapter instance to preserve caching across requests
-    const sharedAdapter = new ProtonDriveAdapter();
+    const cacheCfg = getConfig().cache;
+    const sharedAdapter = new ProtonDriveAdapter({
+      cacheTTL: cacheCfg.enabled ? cacheCfg.ttlSeconds * 1000 : 0,
+    });
+    logger.debug(
+      `Shared adapter created with cache enabled=${cacheCfg.enabled} ttl=${cacheCfg.ttlSeconds}s`
+    );
 
     // Mount Nephele WebDAV handler
     this.app.use(
