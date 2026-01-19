@@ -324,11 +324,14 @@ export class WebDAVServer {
       next();
     });
 
+    // Create a single adapter instance to preserve caching across requests
+    const sharedAdapter = new ProtonDriveAdapter();
+
     // Mount Nephele WebDAV handler
     this.app.use(
       '/',
       nepheleServer({
-        adapter: async () => ({ '/': new ProtonDriveAdapter() }),
+        adapter: async () => ({ '/': sharedAdapter }),
         authenticator: async (_request, response) => {
           // Authentication already handled by middleware
           response.locals.user = {

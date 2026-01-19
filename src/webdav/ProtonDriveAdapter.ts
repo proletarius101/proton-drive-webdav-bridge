@@ -50,11 +50,14 @@ export default class ProtonDriveAdapter implements AdapterInterface {
   driveClient: DriveClientManager;
   /** Cache for folder listings to reduce API calls during path resolution */
   private folderCache: Map<string, CacheEntry<import('../drive.js').DriveNode[]>>;
+  /** Cache mapping full paths to resolved nodes to skip entire traversals */
+  private pathCache: Map<string, CacheEntry<import('../drive.js').DriveNode>>;
 
   constructor({ cacheTTL = 60000, driveClient }: ProtonDriveAdapterConfig = {}) {
     this.cacheTTL = cacheTTL;
     this.driveClient = driveClient ?? globalDriveClient;
     this.folderCache = new Map();
+    this.pathCache = new Map();
     logger.debug('ProtonDriveAdapter initialized');
   }
 
@@ -160,6 +163,31 @@ export default class ProtonDriveAdapter implements AdapterInterface {
   }
 
   /**
+   * Get cached node by path (fast path to skip traversal)
+   */
+  getCachedNode(path: string): import('../drive.js').DriveNode | null {
+    const cached = this.pathCache.get(path);
+    const now = Date.now();
+
+    if (cached && now - cached.timestamp < this.cacheTTL) {
+      logger.debug(`Path cache hit for ${path}`);
+      return cached.data;
+    }
+
+    return null;
+  }
+
+  /**
+   * Cache a resolved node by its full path
+   */
+  cacheNode(path: string, node: import('../drive.js').DriveNode): void {
+    this.pathCache.set(path, {
+      data: node,
+      timestamp: Date.now(),
+    });
+  }
+
+  /**
    * Get folder listing with caching
    */
   async getCachedFolderListing(folderUid: string): Promise<import('../drive.js').DriveNode[]> {
@@ -167,11 +195,11 @@ export default class ProtonDriveAdapter implements AdapterInterface {
     const now = Date.now();
 
     if (cached && now - cached.timestamp < this.cacheTTL) {
-      logger.debug(`Cache hit for folder ${folderUid}`);
+      logger.debug(`Folder cache hit for ${folderUid}`);
       return cached.data;
     }
 
-    logger.debug(`Cache miss for folder ${folderUid}, fetching from API`);
+    logger.debug(`Folder cache miss for ${folderUid}, fetching from API`);
     const nodes = await this.driveClient.listFolder(folderUid);
 
     this.folderCache.set(folderUid, {
@@ -183,19 +211,29 @@ export default class ProtonDriveAdapter implements AdapterInterface {
   }
 
   /**
-   * Invalidate cache for a specific folder
+   * Invalidate cache for a specific folder and all paths containing it
    */
   invalidateFolderCache(folderUid: string): void {
     this.folderCache.delete(folderUid);
-    logger.debug(`Invalidated cache for folder ${folderUid}`);
+
+    // Also invalidate any path cache entries that might reference this folder
+    // (we don't track which paths contain which folders, so we clear all paths)
+    // This is conservative but safe
+    if (this.pathCache.size > 0) {
+      this.pathCache.clear();
+      logger.debug(`Invalidated path cache due to folder change ${folderUid}`);
+    }
+
+    logger.debug(`Invalidated folder cache for ${folderUid}`);
   }
 
   /**
-   * Clear all cached folder listings
+   * Clear all caches
    */
   clearCache(): void {
     this.folderCache.clear();
-    logger.debug('Cleared all folder cache');
+    this.pathCache.clear();
+    logger.debug('Cleared all caches');
   }
 
   getMethod(_method: string): typeof Method {

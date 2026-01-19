@@ -1455,6 +1455,14 @@ export class DriveClientManager {
   }
 
   /**
+   * Get file downloader
+   */
+  async getFileDownloader(nodeUid: string): Promise<FileDownloader> {
+    const client = this.getClient();
+    return client.getFileDownloader(nodeUid);
+  }
+
+  /**
    * Download a file
    */
   async downloadFile(nodeUid: string): Promise<ReadableStream<Uint8Array>> {

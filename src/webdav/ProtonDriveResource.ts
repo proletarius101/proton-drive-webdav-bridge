@@ -86,25 +86,97 @@ export default class ProtonDriveResource implements ResourceInterface {
       return this._node;
     }
 
-    // Traverse path
-    const parts = this.path.split('/').filter((p) => p.length > 0);
-    let currentUid = this.adapter.driveClient.getRootFolderUid();
-    let currentNode: DriveNode | null = null;
-
-    for (const part of parts) {
-      const nodes = await this.adapter.getCachedFolderListing(currentUid);
-      currentNode = nodes.find((n) => n.name === part) || null;
-
-      if (!currentNode) {
-        this._node = null;
-        return null;
-      }
-
-      currentUid = currentNode.uid;
+    // Check path cache first (fast path)
+    const cachedNode = this.adapter.getCachedNode(this.path);
+    if (cachedNode) {
+      this._node = cachedNode;
+      return cachedNode;
     }
 
-    this._node = currentNode;
-    return currentNode;
+    // Use SDK's efficient resolvePath that uses iterators (stops early, doesn't fetch all items)
+    // instead of listFolder which fetches all children and searches
+    const t0 = Date.now();
+    const resolved = await this.adapter.driveClient.resolvePath(this.path);
+    const resolvePathDuration = Date.now() - t0;
+    logger.debug(
+      `resolvePath("${this.path}") took ${resolvePathDuration}ms, resolved: ${resolved ? resolved.uid : 'null'}`
+    );
+
+    if (!resolved) {
+      this._node = null;
+      return null;
+    }
+
+    // Fetch full node details using the SDK's getNode for complete metadata
+    const t1 = Date.now();
+    const nodeResult = await this.adapter.driveClient.getNode(resolved.uid);
+    const getNodeDuration = Date.now() - t1;
+    logger.debug(`getNode("${resolved.uid}") took ${getNodeDuration}ms`);
+
+    if (!nodeResult) {
+      this._node = null;
+      return null;
+    }
+
+    // getNode returns NodeEntity | DegradedNode - both have the properties we need
+    const node = nodeResult;
+    const isFolder = node.type === 'folder';
+
+    // Extract size from activeRevision if available
+    function extractClaimedSize(activeRevision: unknown): number | undefined {
+      if (!activeRevision) return undefined;
+      const rev = activeRevision as { claimedSize?: number; storageSize?: number };
+      return rev.claimedSize ?? rev.storageSize;
+    }
+
+    // Extract modification time from activeRevision if available
+    function extractClaimedModificationTime(activeRevision: unknown): Date | undefined {
+      if (!activeRevision) return undefined;
+      const rev = activeRevision as { claimedModificationTime?: Date };
+      return rev.claimedModificationTime;
+    }
+
+    const createdTime =
+      node.creationTime ??
+      extractClaimedModificationTime(node.activeRevision as unknown) ??
+      node.modificationTime ??
+      new Date(0);
+
+    const modifiedTime = isFolder
+      ? (node.folder?.claimedModificationTime ?? node.modificationTime ?? createdTime)
+      : (extractClaimedModificationTime(node.activeRevision as unknown) ??
+        node.modificationTime ??
+        createdTime);
+
+    const size = isFolder ? 0 : (extractClaimedSize(node.activeRevision as unknown) ?? 0);
+
+    // Handle name which may be a Result<string, Error> in degraded nodes
+    let name: string;
+    if (typeof node.name === 'string') {
+      name = node.name;
+    } else if (node.name && typeof node.name === 'object' && 'ok' in node.name) {
+      const nameResult = node.name as { ok?: boolean; value?: string };
+      name = nameResult.ok && nameResult.value ? nameResult.value : 'Undecryptable';
+    } else {
+      name = 'Undecryptable';
+    }
+
+    const driveNode: DriveNode = {
+      uid: node.uid,
+      name,
+      type: isFolder ? 'folder' : 'file',
+      size,
+      mimeType: node.mediaType || 'application/octet-stream',
+      createdTime: createdTime as Date,
+      modifiedTime: modifiedTime as Date,
+      parentUid: resolved.uid, // Use the resolved parent UID
+    };
+
+    // Cache the resolved node by path for future lookups
+    this.adapter.cacheNode(this.path, driveNode);
+
+    this._node = driveNode;
+    return driveNode;
   }
 
   /**
@@ -318,19 +390,61 @@ export default class ProtonDriveResource implements ResourceInterface {
   }
 
   async getStream(_range?: { start: number; end: number }): Promise<Readable> {
+    const t0 = Date.now();
+    logger.debug(`getStream called for path: ${this.path}`);
+
     const node = await this.resolveNode();
+    const resolveNodeDuration = Date.now() - t0;
+    logger.debug(`getStream: resolveNode took ${resolveNodeDuration}ms for ${this.path}`);
 
     if (!node || node.type !== 'file') {
+      logger.debug(`getStream: Not a file or node not found for ${this.path}`);
       return Readable.from([]);
     }
 
-    const data = await this.adapter.driveClient.downloadFile(node.uid);
+    // Use the SDK's downloader directly with our own Node.js PassThrough stream
+    // to avoid Web ReadableStream locking issues
+    logger.debug(`getStream: Getting downloader for uid=${node.uid}, path=${this.path}`);
+    const t1 = Date.now();
+    const downloader = await this.adapter.driveClient.getFileDownloader(node.uid);
+    const downloaderDuration = Date.now() - t1;
+    logger.debug(`getStream: Got downloader in ${downloaderDuration}ms`);
 
-    if (data instanceof ReadableStream) {
-      return Readable.fromWeb(data as ReadableStream);
-    }
+    // Create a PassThrough stream that the SDK can write to
+    const { PassThrough } = await import('stream');
+    const passthrough = new PassThrough();
 
-    return Readable.from([data]);
+    // Start the download in the background
+    // Don't await this - let it run independently while we return the stream
+    const t2 = Date.now();
+    downloader
+      .downloadToStream(
+        new WritableStream({
+          write(chunk) {
+            passthrough.write(chunk);
+          },
+          close() {
+            passthrough.end();
+          },
+          abort(reason) {
+            passthrough.destroy(reason instanceof Error ? reason : new Error(String(reason)));
+          },
+        })
+      )
+      .completion()
+      .then(() => {
+        const duration = Date.now() - t2;
+        logger.debug(`getStream: Download completed for ${this.path} in ${duration}ms`);
+      })
+      .catch((error: unknown) => {
+        logger.error(
+          `getStream: Error downloading for ${this.path}: ${error instanceof Error ? error.message : String(error)}`
+        );
+        passthrough.destroy(error instanceof Error ? error : new Error(String(error)));
+      });
+
+    logger.debug(`getStream: Returning PassThrough stream for ${this.path}`);
+    return passthrough;
   }
 
   async setStream(input: Readable, user: User, lockToken?: string): Promise<void> {
