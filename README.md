@@ -278,6 +278,14 @@ MIT License - see [LICENSE](LICENSE) for details.
 - [@napi-rs/keyring](https://github.com/nicokosi/napi-rs-keyring) for native credential storage
 - [nephele](https://github.com/sciactive/nephele) for the WebDAV implementation
 
+## CI / Releases
+
+- GitLab CI is configured in `.gitlab-ci.yml` to run **lint**, **unit tests**, optional **e2e tests**, and **build** stages.
+- Creating a tag (for example `v1.2.3`) in GitLab triggers the **release** job. The job builds the project, runs `bun build:bin`, packages the `dist/` directory into a tarball (`proton-drive-webdav-bridge-<tag>.tar.gz`) and creates a GitLab Release with the tarball attached.
+- No additional CI variables are required for the built-in tag-based release. If you need to call external APIs or publish to external registries, provide a token via CI/CD variables (for example `GITLAB_TOKEN`) with appropriate permissions.
+
+> Tip: Push an annotated tag to trigger a release: `git tag -a vX.Y.Z -m "Release vX.Y.Z" && git push origin vX.Y.Z`.
+
 ## Disclaimer
 
 This is an unofficial project and is not affiliated with Proton AG. Use at your own risk. Always keep backups of your important data.

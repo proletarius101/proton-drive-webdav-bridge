@@ -1,0 +1,104 @@
+# GitLab CI for Proton Drive WebDAV Bridge
+# Lightweight pipeline for linting, testing, building and creating releases (tag-based)
+
+image: oven/bun:latest
+
+stages:
+  - lint
+  - test
+  - build
+  - release
+
+cache:
+  key: "${CI_JOB_NAME}-${CI_COMMIT_REF_SLUG}"
+  paths:
+    - node_modules/
+    - .bun/
+    - bun.lockb
+
+.before_script: &before_script
+  - bun -v
+  - bun install --frozen-lockfile
+
+lint:
+  stage: lint
+  before_script: *before_script
+  script:
+    - bun run lint
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: always
+    - if: $CI_PIPELINE_SOURCE == "push"
+      when: on_success
+
+unit_tests:
+  stage: test
+  before_script: *before_script
+  script:
+    - bun run build:check
+    - bun run test:unit
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: always
+    - if: $CI_PIPELINE_SOURCE == "push"
+      when: on_success
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - test-results/
+
+e2e_tests:
+  stage: test
+  before_script: *before_script
+  script:
+    - bun run test:e2e
+  rules:
+    # Run e2e on pushes and make it optional on MRs (manual) to save resources
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+    - if: $CI_PIPELINE_SOURCE == "push"
+      when: on_success
+  allow_failure: true
+
+build:
+  stage: build
+  before_script: *before_script
+  script:
+    - bun run build
+    - bun run build:bin
+  artifacts:
+    paths:
+      - dist/
+      - dist/proton-drive-webdav-bridge
+    expire_in: 1 week
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "push"
+      when: on_success
+
+release:
+  stage: release
+  before_script: *before_script
+  script:
+    - bun run build
+    - bun run build:bin
+    - "tar -czf \"proton-drive-webdav-bridge-${CI_COMMIT_TAG}.tar.gz\" -C dist ."
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: on_success
+    - when: never
+  artifacts:
+    paths:
+      - "proton-drive-webdav-bridge-${CI_COMMIT_TAG}.tar.gz"
+      - dist/
+    expire_in: 1 week
+  release:
+    name: "$CI_COMMIT_TAG"
+    tag_name: "$CI_COMMIT_TAG"
+    description: "Release $CI_COMMIT_TAG"
+    assets:
+      links:
+        - name: "proton-drive-webdav-bridge-${CI_COMMIT_TAG}.tar.gz"
+          url: "$CI_PROJECT_URL/-/jobs/$CI_JOB_ID/artifacts/raw/proton-drive-webdav-bridge-${CI_COMMIT_TAG}.tar.gz"
