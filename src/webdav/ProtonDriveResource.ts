@@ -869,7 +869,7 @@ export default class ProtonDriveResource implements ResourceInterface {
     const currentParentPath = this.getParentPath();
     if (currentParentPath !== destParentPath) {
       await this.adapter.driveClient.moveNode(node.uid, destParentNode.uid);
-      
+
       // Invalidate both source and destination parent folder caches
       if (node.parentUid) {
         this.adapter.invalidateFolderCache(node.parentUid);
@@ -880,7 +880,7 @@ export default class ProtonDriveResource implements ResourceInterface {
     // Rename if needed
     if (node.name !== destName) {
       await this.adapter.driveClient.renameNode(node.uid, destName);
-      
+
       // Invalidate parent folder cache (same folder, different name)
       if (node.parentUid) {
         this.adapter.invalidateFolderCache(node.parentUid);

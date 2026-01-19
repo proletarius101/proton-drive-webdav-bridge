@@ -10,7 +10,7 @@ import { createServer as createHttpServer, type Server as HttpServer } from 'htt
 import { createServer as createHttpsServer, type Server as HttpsServer } from 'https';
 import { readFileSync } from 'fs';
 import { createHash } from 'crypto';
-import nepheleServer from 'nephele';
+import nepheleServer, { ResourceNotFoundError } from 'nephele';
 import { logger } from '../logger.js';
 import { getConfig } from '../config.js';
 import { driveClient } from '../drive.js';
@@ -309,15 +309,28 @@ export class WebDAVServer {
                 return;
               }
             }
-          } catch (err) {
-            // dest not found -> ok to proceed
-            // If error is not a NotFound-like error, rethrow
-            // For robustness, assume absence if any getResource throws
+          } catch (error) {
+            // Destination not found -> ok to proceed.
+            // If the error indicates something other than a not-found (e.g., API/network error), rethrow
+            if (error instanceof ResourceNotFoundError) {
+              logger.debug(
+                `Destination resource ${destPath} not found, proceeding with the operation.`
+              );
+            } else {
+              throw error;
+            }
           }
-        } catch (err) {
-          // malformed Destination header -> bad request
-          res.status(400).send('Invalid Destination header');
-          return;
+        } catch (error) {
+          // Malformed Destination header (eg. invalid URL) -> bad request.
+          // If it's an unexpected error, rethrow so the global error handler can surface it.
+          if (error instanceof TypeError || error instanceof URIError) {
+            logger.debug(
+              `Invalid Destination header: ${error instanceof Error ? error.message : String(error)}`
+            );
+            res.status(400).send('Invalid Destination header');
+            return;
+          }
+          throw error;
         }
       }
 

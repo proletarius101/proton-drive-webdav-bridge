@@ -881,10 +881,13 @@ export class ProtonAuth {
 
     await this._fetchUserAndKeys(mailboxPassword);
 
-    this.parentSession!.keyPassword = this.session.keyPassword;
-    this.parentSession!.user = this.session.user;
-    this.parentSession!.primaryKey = this.session.primaryKey;
-    this.parentSession!.addresses = this.session.addresses;
+    if (!this.parentSession || !this.session) {
+      throw new Error('No parent session available - call login() first');
+    }
+    this.parentSession.keyPassword = this.session.keyPassword;
+    this.parentSession.user = this.session.user;
+    this.parentSession.primaryKey = this.session.primaryKey;
+    this.parentSession.addresses = this.session.addresses;
 
     logger.info('Forking child session from parent...');
     await this.forkNewChildSession();
