@@ -1,0 +1,45 @@
+diff --git a/node_modules/nephele/.bun-tag-10f13014fc6c0745 b/.bun-tag-10f13014fc6c0745
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+diff --git a/dist/createServer.js b/dist/createServer.js
+index ba73ee96e98d2b20aeda5f6917d4e414eff25696..2c2bc7ee27ec5bd5486f1ead6cecdc809de1a0e3 100644
+--- a/dist/createServer.js
++++ b/dist/createServer.js
+@@ -10,8 +10,7 @@ import { catchErrors } from './catchErrors.js';
+ import { ForbiddenError, UnauthorizedError } from './Errors/index.js';
+ import { COPY, DELETE, GET_HEAD, LOCK, MKCOL, MOVE, OPTIONS, PROPFIND, PROPPATCH, PUT, UNLOCK, Method, } from './Methods/index.js';
+ const debug = createDebug('nephele:server');
+-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+-const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json')).toString());
++const pkg = require('../package.json');
+ export default function createServer({ adapter, authenticator, plugins }, options = {}) {
+     const opts = Object.assign({}, defaults, options);
+     const app = express();
+diff --git a/src/createServer.ts b/src/createServer.ts
+index 73ac49eb56ea22b95a4a6756db3f79d925759aa5..4af5451cfe72a2ee394b45f3446c9975af3f3e74 100644
+--- a/src/createServer.ts
++++ b/src/createServer.ts
+@@ -33,10 +33,7 @@ import {
+ 
+ const debug = createDebug('nephele:server');
+ 
+-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+-const pkg = JSON.parse(
+-  fs.readFileSync(path.join(__dirname, '..', 'package.json')).toString(),
+-);
++import pkg from '../package.json';
+ 
+ /**
+  * A server middleware creator for Nephele, a WebDAV server library.
+diff --git a/tsconfig.json b/tsconfig.json
+index cc5330445bd13a5592f3b1fca49a6e0f02a79077..ab9538e5b8e1609b5cede0abbdde338972dc752d 100644
+--- a/tsconfig.json
++++ b/tsconfig.json
+@@ -10,6 +10,7 @@
+     "sourceMap": true,
+     "outDir": "dist",
+     "resolveJsonModule": true,
++    "allowSyntheticDefaultImports": true,
+     "rootDir": "src/",
+     "declaration": true
+   },

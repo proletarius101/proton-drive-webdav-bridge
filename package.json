@@ -89,5 +89,8 @@
     "win": {
       "target": "nsis"
     }
+  },
+  "patchedDependencies": {
+    "nephele@1.0.0-alpha.67": "patches/nephele@1.0.0-alpha.67.patch"
   }
 }
