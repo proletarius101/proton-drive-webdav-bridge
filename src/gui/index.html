@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Proton Drive WebDAV Bridge</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Proton Drive WebDAV Bridge</h1>
+    <div id="permissions" title="Background Activity permission"></div>
+  </header>
+
+  <main>
+    <!-- Login / Setup -->
+    <section id="login-screen" class="card hidden">
+      <h2>Sign in</h2>
+      <p>Connect your Proton Drive account to the WebDAV Bridge.</p>
+      <input id="email" type="email" placeholder="you@proton.me" />
+      <button id="start-auth">Continue</button>
+      <div id="auth-error" class="error"></div>
+    </section>
+
+    <!-- Dashboard -->
+    <section id="dashboard" class="card">
+      <div class="status-row">
+        <div class="badge" id="service-badge">Unknown</div>
+        <div class="live-status" id="live-status">Live status: N/A</div>
+      </div>
+
+      <div class="quota">
+        <label>Storage Quota</label>
+        <progress id="quota-bar" value="0" max="100"></progress>
+        <div id="quota-text">—</div>
+      </div>
+
+      <div class="filesystem">
+        <button id="open-files">Open in Files</button>
+        <label class="switch">Mount
+          <input id="mount-toggle" type="checkbox">
+          <span class="slider"></span>
+        </label>
+        <div class="local-address">Address: <input id="dav-url" readonly value="dav://localhost:12345" /><button id="copy-url">Copy</button></div>
+      </div>
+
+      <div class="controls">
+        <label class="switch">Autostart
+          <input id="autostart-toggle" type="checkbox">
+          <span class="slider"></span>
+        </label>
+        <label class="switch">Persistence
+          <input id="persistence-toggle" type="checkbox">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <details id="advanced">
+        <summary>Advanced / Troubleshoot</summary>
+        <div class="advanced-grid">
+          <label>Network Port: <input id="network-port" type="number" min="1024" max="65535" value="12345" /></label>
+          <button id="apply-port">Apply</button>
+          <button id="purge-cache">Purge Cache</button>
+          <button id="logout">Logout / Reset Auth</button>
+        </div>
+      </details>
+
+      <div class="log-console">
+        <button id="toggle-log">Show Logs</button>
+        <pre id="log-area" class="hidden"></pre>
+      </div>
+    </section>
+
+  </main>
+
+  <script type="module" src="main.ts"></script>
+</body>
+</html>
