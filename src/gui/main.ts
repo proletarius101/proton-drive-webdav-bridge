@@ -3,50 +3,87 @@ import { listen } from '@tauri-apps/api/event'
 
 
 // Utilities
-const $ = (id: string) => document.getElementById(id) as HTMLElement
+const $ = (id: string) => document.getElementById(id) as HTMLElement | null
 const setBadge = (state: 'active' | 'connecting' | 'stopped', text: string) => {
   const b = $('service-badge')
+  if (!b) return
   b.className = 'badge ' + state
   b.textContent = text
 }
 
 
-async function refreshStatus() {
+async function refreshStatus(invokeFn: typeof invoke = invoke, checkTimeoutMs = 1000, statusTimeoutMs = 2000) {
   try {
-    const s: any = await invoke('get_status')
+    // Race get_status with a timeout so the UI doesn't hang indefinitely
+    const getStatusPromise = invokeFn('get_status')
+    const s: any = await Promise.race([
+      getStatusPromise,
+      new Promise((r) => setTimeout(() => r('__timeout__'), statusTimeoutMs)),
+    ])
+
+    if (s === '__timeout__') {
+      // Mark as unavailable and set mount as timed out so the user isn't left at 'Checking mount status...'
+      setBadge('stopped', 'Unavailable')
+      const live = $('live-status')
+      if (live) live.textContent = 'Status unavailable'
+      const ms = $('mount-status') as HTMLElement | null
+      if (ms) { ms.textContent = 'Mount: timed out'; ms.className = 'mount-status err' }
+      return
+    }
+
     setBadge(s.running ? 'active' : 'stopped', s.running ? 'Active' : (s.connecting ? 'Connecting' : 'Stopped'))
     const live = $('live-status')
-    live.textContent = s.liveStatusString ? s.liveStatusString : 'Live status: N/A'
+    if (live) live.textContent = s.liveStatusString ? s.liveStatusString : 'Live status: N/A'
     // quota
     const quotaPercent = s.storage && s.storage.total > 0 ? Math.round((s.storage.used / s.storage.total) * 100) : 0
-    const bar = $('quota-bar') as HTMLProgressElement
-    bar.value = quotaPercent
-    $('quota-text').textContent = `${formatBytes(s.storage.used)} / ${formatBytes(s.storage.total)} (${quotaPercent}%)`
+    const bar = $('quota-bar') as HTMLProgressElement | null
+    if (bar) bar.value = quotaPercent
+    const qt = $('quota-text')
+    if (qt) qt.textContent = `${formatBytes(s.storage.used)} / ${formatBytes(s.storage.total)} (${quotaPercent}%)`
     // address
-    const dav = $('dav-url') as HTMLInputElement
-    dav.value = `dav://localhost:${s.port || 12345}`
-    const mountToggle = $('mount-toggle') as HTMLInputElement
-    mountToggle.checked = !!s.mounted
+    const dav = $('dav-url') as HTMLInputElement | null
+    if (dav) dav.value = `dav://localhost:${s.port || 12345}`
+    const mountToggle = $('mount-toggle') as HTMLInputElement | null
+    if (mountToggle) mountToggle.checked = !!s.mounted
 
     // Mount status (more explicit than badge)
     try {
-      const m: any = await invoke('check_mount_status')
-      const ms = $('mount-status')
-      if (m) {
-        ms.textContent = `Mounted: ${m}`
+      // Race the mount-check with a timeout so the UI doesn't hang forever
+      const checkPromise = invokeFn('check_mount_status')
+      const res = await Promise.race([
+        checkPromise,
+        new Promise((r) => setTimeout(() => r('__timeout__'), checkTimeoutMs)),
+      ])
+
+      const ms = $('mount-status') as HTMLElement | null
+      if (!ms) return
+
+      if (res === '__timeout__') {
+        ms.textContent = 'Mount: timed out'
+        ms.className = 'mount-status err'
+      } else if (res) {
+        ms.textContent = `Mounted: ${res}`
         ms.className = 'mount-status ok'
       } else {
-        ms.textContent = mountToggle.checked ? 'Pending...' : 'Not mounted'
+        ms.textContent = mountToggle && mountToggle.checked ? 'Pending...' : 'Not mounted'
         ms.className = 'mount-status'
       }
   } catch (err) {
-      const ms = $('mount-status') as HTMLElement
-      ms.textContent = 'Mount: error checking status'
-      ms.className = 'mount-status err'
+      const ms = $('mount-status') as HTMLElement | null
+      if (ms) {
+        ms.textContent = 'Mount: error checking status'
+        ms.className = 'mount-status err'
+      }
       console.debug('check_mount_status error:', err)
     }
   } catch (e) {
     setBadge('stopped', 'Error')
+    // Ensure mount status is updated on global failures so the UI doesn't stay at the initial placeholder.
+    const ms = $('mount-status')
+    if (ms) {
+      ms.textContent = 'Mount: error checking status'
+      ms.className = 'mount-status err'
+    }
   }
 }
 
@@ -59,85 +96,147 @@ function formatBytes(n = 0) {
 }
 
 
-// UI actions
-$('open-files').addEventListener('click', async () => {
+// UI actions moved into an init function for lifecycle safety and testability
+export function initGui(opts?: { invoke?: typeof invoke; listen?: typeof listen; checkTimeoutMs?: number; statusTimeoutMs?: number }) {
+  const invokeFn = opts?.invoke ?? invoke
+  const listenFn = opts?.listen ?? listen
+
+  // Defensive helper for getting elements
+  const $safe = (id: string) => document.getElementById(id) as HTMLElement | null
+
+  // Wire UI actions (guard elements and use optional chaining)
+  $safe('open-files')?.addEventListener('click', async () => {
+    try {
+      await invokeFn('open_in_files')
+    } catch (err) {
+      console.error('open_in_files failed', err)
+      setBadge('stopped', 'Error')
+    }
+  })
+
+  $safe('mount-toggle')?.addEventListener('change', async (e) => {
+    const on = (e.target as HTMLInputElement).checked
+    const ms = $safe('mount-status') as HTMLElement | null
+    try {
+      if (on) {
+        if (ms) { ms.textContent = 'Mounting...'; ms.className = 'mount-status' }
+      } else {
+        if (ms) { ms.textContent = 'Unmounting...'; ms.className = 'mount-status' }
+      }
+
+      await invokeFn(on ? 'mount_drive' : 'unmount_drive')
+
+      // Success: update explicit message and refresh status
+      if (on) {
+        if (ms) { ms.textContent = 'Mounted successfully'; ms.className = 'mount-status ok' }
+      } else {
+        if (ms) { ms.textContent = 'Unmounted'; ms.className = 'mount-status' }
+      }
+      // Wait a bit for GIO mount to complete before refreshing
+      await new Promise(r => setTimeout(r, 1000))
+      await refreshStatus(invokeFn, opts?.checkTimeoutMs ?? 1000)
+    } catch (err: any) {
+      console.error('mount action failed', err)
+      // show actionable error message to the user
+      const errorMsg = typeof err === 'string' ? err : (err?.message || String(err) || 'Mount action failed')
+      if (ms) { ms.textContent = `Mount error: ${errorMsg}`; ms.className = 'mount-status err' }
+      // revert toggle to previous state on failure
+      (e.target as HTMLInputElement).checked = !on
+      await refreshStatus(invokeFn, opts?.checkTimeoutMs ?? 1000)
+    }
+  })
+
+  $safe('copy-url')?.addEventListener('click', async () => {
+    const dav = ($safe('dav-url') as HTMLInputElement | null)?.value
+    if (dav && navigator?.clipboard) await navigator.clipboard.writeText(dav)
+  })
+  $safe('toggle-log')?.addEventListener('click', () => {
+    $safe('log-area')?.classList.toggle('hidden')
+  })
+  $safe('purge-cache')?.addEventListener('click', () => invokeFn('purge_cache').then(() => refreshStatus(invokeFn, opts?.checkTimeoutMs ?? 1000)))
+  $safe('logout')?.addEventListener('click', () => invokeFn('logout'))
+  $safe('apply-port')?.addEventListener('click', () => {
+    const p = Number((document.getElementById('network-port') as HTMLInputElement).value)
+    invokeFn('set_network_port', { port: p }).then(() => refreshStatus(invokeFn, opts?.checkTimeoutMs ?? 1000))
+  })
+
+  // Log streaming - listen to sidecar logs with payload { level, message }
   try {
-    await invoke('open_in_files')
+    listenFn('sidecar:log', (event: any) => {
+      const area = $safe('log-area') as HTMLPreElement | null
+      const payload = event.payload || { level: 'info', message: '' }
+      // Trim trailing newline to avoid double spacing
+      const msg = String(payload.message).replace(/\n$/, '')
+      if (!area) return
+      area.textContent += `[${payload.level}] ${msg}\n`
+      area.scrollTop = area.scrollHeight
+    })
+
+    // Mount status updates - the sidecar emits intermediate events like "Checking mount: ..."
+    listenFn('mount-status', (event: any) => {
+      const ms = $safe('mount-status') as HTMLElement | null
+      if (!ms) return
+      const payload = event.payload ?? event
+      const msg = typeof payload === 'string' ? payload : String(payload)
+      ms.textContent = msg
+      // Class heuristics: if it's checking, leave plain; if it mentions 'No matching', mark as err
+      if (msg.toLowerCase().includes('no matching') || msg.toLowerCase().includes('error')) {
+        ms.className = 'mount-status err'
+      } else if (msg.toLowerCase().includes('checking')) {
+        ms.className = 'mount-status'
+      } else {
+        // otherwise assume it's a final result like 'Mounted: NAME'
+        ms.className = 'mount-status ok'
+      }
+    })
   } catch (err) {
-    console.error('open_in_files failed', err)
-    setBadge('stopped', 'Error')
+    // listen may not be available in tests; ignore failures
   }
-})
-$('mount-toggle').addEventListener('change', async (e) => {
-  const on = (e.target as HTMLInputElement).checked
-  const ms = $('mount-status') as HTMLElement
-  try {
-    if (on) {
-      ms.textContent = 'Mounting...'
-      ms.className = 'mount-status'
-    } else {
-      ms.textContent = 'Unmounting...'
-      ms.className = 'mount-status'
+
+  // Periodic refresh and initial run
+  const interval = setInterval(() => refreshStatus(invokeFn, opts?.checkTimeoutMs ?? 1000, opts?.statusTimeoutMs ?? 2000), 3000)
+  // Run initial refresh now
+  refreshStatus(invokeFn, opts?.checkTimeoutMs ?? 1000, opts?.statusTimeoutMs ?? 2000)
+
+  // Start sidecar on load if not running (optional)
+  invokeFn('get_status').then(async (s: any) => {
+    if (!s || !s.running) {
+      try {
+        await invokeFn('start_sidecar')
+      } catch (err: any) {
+        // Common benign error — don't surface as an unhandled rejection in the UI
+        const msg = String(err?.message ?? err ?? '')
+        if (msg.toLowerCase().includes('already')) {
+          console.debug('start_sidecar: already running')
+        } else {
+          console.error('start_sidecar failed:', err)
+        }
+      }
     }
-    
-    await invoke(on ? 'mount_drive' : 'unmount_drive')
-    
-    // Success: update explicit message and refresh status
-    if (on) {
-      ms.textContent = 'Mounted successfully'
-      ms.className = 'mount-status ok'
-    } else {
-      ms.textContent = 'Unmounted'
-      ms.className = 'mount-status'
-    }
-    // Wait a bit for GIO mount to complete before refreshing
-    await new Promise(r => setTimeout(r, 1000))
-    await refreshStatus()
-  } catch (err: any) {
-    console.error('mount action failed', err)
-    // show actionable error message to the user
-    const errorMsg = typeof err === 'string' ? err : (err?.message || String(err) || 'Mount action failed')
-    ms.textContent = `Mount error: ${errorMsg}`
-    ms.className = 'mount-status err'
-    // revert toggle to previous state on failure
-    (e.target as HTMLInputElement).checked = !on
-    await refreshStatus()
+  }).catch(() => {})
+
+  // Return a stop() function to help tests/cleanup
+  return {
+    stop: () => clearInterval(interval),
   }
-})
-$('copy-url').addEventListener('click', async () => {
-  const dav = ($('dav-url') as HTMLInputElement).value
-  await navigator.clipboard.writeText(dav)
-})
-$('toggle-log').addEventListener('click', () => {
-  const a = $('log-area')
-  a.classList.toggle('hidden')
-})
-$('purge-cache').addEventListener('click', () => invoke('purge_cache').then(() => refreshStatus()))
-$('logout').addEventListener('click', () => invoke('logout'))
-$('apply-port').addEventListener('click', () => {
-  const p = Number((document.getElementById('network-port') as HTMLInputElement).value)
-  invoke('set_network_port', { port: p }).then(() => refreshStatus())
-})
+}
 
+// Top-level guards for uncaught errors and to kick off init on DOM ready
+if (typeof window !== 'undefined') {
+  window.addEventListener('error', (e: any) => {
+    console.error('Uncaught error in UI', e.error ?? e.message ?? e)
+  })
+  window.addEventListener('unhandledrejection', (e: any) => {
+    console.error('Unhandled promise rejection in UI', e.reason ?? e)
+  })
 
-// Log streaming - listen to sidecar logs with payload { level, message }
-listen<{ level: string; message: string }>('sidecar:log', (event) => {
-  const area = $('log-area') as HTMLPreElement
-  const payload = event.payload || { level: 'info', message: '' }
-  // Trim trailing newline to avoid double spacing
-  const msg = String(payload.message).replace(/\n$/, '')
-  area.textContent += `[${payload.level}] ${msg}\n`
-  area.scrollTop = area.scrollHeight
-})
-
-
-// Periodic refresh
-refreshStatus()
-setInterval(refreshStatus, 3000)
-
-
-// Start sidecar on load if not running (optional)
-invoke('get_status').then((s: any) => { if (!s || !s.running) invoke('start_sidecar') })
-
+  window.addEventListener('DOMContentLoaded', () => {
+    try {
+      initGui()
+    } catch (err) {
+      console.error('Failed to initialize GUI', err)
+    }
+  })
+}
 
 // TODO: Add authentication flow wiring and permission icons handlers
