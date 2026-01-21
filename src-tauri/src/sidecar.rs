@@ -2,9 +2,10 @@ use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_shell::ShellExt;
+use tauri_plugin_opener::OpenerExt;
 
 // GIO prelude brings methods like `mounts`, `root`, `uri`, etc. into scope
-use gio::prelude::*;
+use gio::prelude::*; 
 
 #[derive(Default)]
 pub struct SidecarState {
@@ -354,54 +355,80 @@ pub async fn purge_cache(app: AppHandle) -> Result<(), String> {
     }
 }
 
+fn should_open_with_path(uri: &str) -> bool {
+    // Treat absolute filesystem paths, file:// URIs (converted to paths),
+    // and dav:// URIs as paths that should be opened with `open_path` so the
+    // system file manager / GIO can mount or open them. This preserves the
+    // dav:// scheme when passed to `open_path`.
+    uri.starts_with('/') || uri.starts_with("file://") || uri.starts_with("dav://")
+}
+
+// Testable helper that accepts callbacks to perform the actual open actions.
+// This avoids the need to mock `AppHandle`/`Opener` in unit tests.
+fn open_uri_with<FPath, FUrl>(uri: &str, mut open_path: FPath, mut open_url: FUrl) -> Result<(), String>
+where
+    FPath: FnMut(&str) -> Result<(), String>,
+    FUrl: FnMut(&str) -> Result<(), String>,
+{
+    if uri.starts_with("file://") {
+        let path = uri.trim_start_matches("file://");
+        open_path(path)
+    } else if should_open_with_path(uri) {
+        open_path(uri)
+    } else {
+        open_url(uri)
+    }
+}
+
 #[tauri::command]
 pub async fn open_in_files(
     app: AppHandle,
     state: State<'_, SidecarState>,
     mount_path: Option<String>,
 ) -> Result<(), String> {
-    // If a specific path is provided, open it. Otherwise prefer opening the
-    // sidecar's DAV URL (so gvfs can mount it). If neither is available, fall
-    // back to a sensible default path.
+    // If a specific path is provided, open it. Otherwise construct a DAV URI
+    // using the sidecar config (preferred) or convert the server URL to a
+    // dav:// form if necessary so the file manager is used instead of a
+    // browser.
     let uri = if let Some(p) = mount_path {
         p
     } else {
         // Ask for status and obtain the server URL (if available)
         let status = get_status(app.clone(), state).await.unwrap_or_else(|_| default_status_response());
-        status
-            .server
-            .url
-            .unwrap_or_else(|| format!("dav://localhost:{}", status.config.webdav.port))
+        // Prefer a dav:// URI. If `server.url` is present and looks like http(s),
+        // convert to dav://host:port. Otherwise prefer `server.url` if it's already
+        // dav://, or fall back to config-derived dav://localhost:port.
+        if let Some(surl) = status.server.url {
+            if surl.starts_with("dav://") {
+                surl
+            } else if surl.starts_with("http://") || surl.starts_with("https://") {
+                // crude parse: extract host[:port] from the authority component
+                // e.g., http://127.0.0.1:8080/ -> host_port = 127.0.0.1:8080
+                let stripped = surl.splitn(3, '/').nth(2).unwrap_or("");
+                let host_port = stripped.split('/').next().unwrap_or("");
+                if !host_port.is_empty() {
+                    format!("dav://{}", host_port)
+                } else {
+                    format!("dav://localhost:{}", status.config.webdav.port)
+                }
+            } else {
+                // Unknown scheme: fall back to config-derived dav://
+                format!("dav://localhost:{}", status.config.webdav.port)
+            }
+        } else {
+            format!("dav://localhost:{}", status.config.webdav.port)
+        }
     };
 
-    #[cfg(target_os = "linux")]
-    {
-        // If it's a local path, turn it into a file:// URI
-        let final_uri = if uri.starts_with("/") && !uri.starts_with("file://") {
-            format!("file://{}", uri)
-        } else {
-            uri
-        };
+    // Use the Tauri opener plugin to open files/URLs with the system default app
+    let opener = app.opener();
 
-        gio::AppInfo::launch_default_for_uri(&final_uri, None::<&gio::AppLaunchContext>)
-            .map_err(|e| e.to_string())?;
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg(&uri)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new("explorer")
-            .arg(&uri)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
+    // Delegate to the testable helper which accepts callbacks for path/url
+    open_uri_with(
+        &uri,
+        |p: &str| opener.open_path(p, None::<&str>).map_err(|e| e.to_string()),
+        |u: &str| opener.open_url(u, None::<&str>).map_err(|e| e.to_string()),
+    )?;
 
     Ok(())
 }
@@ -686,5 +713,83 @@ mod tests {
         let res2 = find_mount_by_uri(mounts.clone(), "dav://localhost:12345/");
         assert_eq!(res1, Some(true));
         assert_eq!(res2, Some(true));
+    }
+
+    #[test]
+    fn test_should_open_with_path() {
+        assert!(should_open_with_path("/some/path"));
+        assert!(should_open_with_path("file:///some/path"));
+        assert!(should_open_with_path("dav://localhost:12345"));
+        assert!(!should_open_with_path("http://example.com"));
+    }
+
+    #[test]
+    fn test_open_uri_with_callbacks_uses_open_path_for_dav() {
+        use std::rc::Rc;
+        use std::cell::RefCell;
+
+        let recorded = Rc::new(RefCell::new(Vec::new()));
+        let recorded_path = recorded.clone();
+        let open_path = move |p: &str| {
+            recorded_path.borrow_mut().push(format!("path:{}", p));
+            Ok(())
+        };
+        let open_url = |_u: &str| {
+            recorded.borrow_mut().push("url_called".to_string());
+            Err("should not be called".into())
+        };
+
+        open_uri_with("dav://localhost:12345", open_path, open_url).unwrap();
+        let v = recorded.borrow();
+        assert_eq!(v.len(), 1);
+        assert_eq!(v[0], "path:dav://localhost:12345");
+    }
+
+    #[test]
+    fn test_choose_open_uri_prefers_converted_dav_for_http_server_url() {
+        let mut status = default_status_response();
+        status.server.url = Some("http://127.0.0.1:8080/".to_string());
+        // Use the same logic as open_in_files to compute uri
+        let uri = if let Some(surl) = status.server.url.clone() {
+            if surl.starts_with("dav://") {
+                surl
+            } else if surl.starts_with("http://") || surl.starts_with("https://") {
+                let stripped = surl.splitn(3, '/').nth(2).unwrap_or("");
+                let host_port = stripped.split('/').next().unwrap_or("");
+                if !host_port.is_empty() {
+                    format!("dav://{}", host_port)
+                } else {
+                    format!("dav://localhost:{}", status.config.webdav.port)
+                }
+            } else {
+                format!("dav://localhost:{}", status.config.webdav.port)
+            }
+        } else {
+            format!("dav://localhost:{}", status.config.webdav.port)
+        };
+
+        assert_eq!(uri, "dav://127.0.0.1:8080");
+    }
+
+    #[test]
+    fn test_open_uri_with_callbacks_uses_open_url_for_http() {
+        use std::rc::Rc;
+        use std::cell::RefCell;
+
+        let recorded = Rc::new(RefCell::new(Vec::new()));
+        let recorded_url = recorded.clone();
+        let open_path = |_p: &str| {
+            recorded.borrow_mut().push("path_called".to_string());
+            Err("should not be called".into())
+        };
+        let open_url = move |u: &str| {
+            recorded_url.borrow_mut().push(format!("url:{}", u));
+            Ok(())
+        };
+
+        open_uri_with("http://example.com", open_path, open_url).unwrap();
+        let v = recorded.borrow();
+        assert_eq!(v.len(), 1);
+        assert_eq!(v[0], "url:http://example.com");
     }
 }

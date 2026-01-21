@@ -23,6 +23,7 @@ pub fn run() {
       Ok(())
     })
     .plugin(tauri_plugin_shell::init())
+    .plugin(tauri_plugin_opener::init())
     .manage(SidecarState::new());
 
   // Conditionally include dev-only commands in debug builds
