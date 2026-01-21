@@ -2,26 +2,24 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "proton-drive-webdav-bridge",
   "version": "0.1.0",
-  "identifier": "com.tauri.dev",
+  "identifier": "io.gitlab.secure-system.proton-drive-webdav-bridge",
+  "app": {
+    "windows": [
+      {
+        "title": "Proton Drive WebDAV Bridge",
+        "width": 900,
+        "height": 700,
+        "minWidth": 400,
+        "minHeight": 300,
+        "devtools": true
+      }
+    ]
+  },
   "build": {
     "frontendDist": "../dist/gui",
     "devUrl": "http://localhost:5173",
     "beforeDevCommand": "bun run build:bin --outfile ./dist/proton-drive-webdav-bridge-${TAURI_ENV_TARGET_TRIPLE} && bun run gui:dev",
     "beforeBuildCommand": "bun run build:bin --outfile ./dist/proton-drive-webdav-bridge-${TAURI_ENV_TARGET_TRIPLE} && bun run gui:build"
-  },
-  "app": {
-    "windows": [
-      {
-        "title": "Proton Drive WebDAV Bridge",
-        "width": 800,
-        "height": 600,
-        "resizable": true,
-        "fullscreen": false
-      }
-    ],
-    "security": {
-      "csp": null
-    }
   },
   "bundle": {
     "active": true,

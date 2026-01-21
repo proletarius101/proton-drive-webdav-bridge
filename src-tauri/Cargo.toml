@@ -1,10 +1,18 @@
 [package]
-name = "proton_drive_webdav_bridge_tauri"
+name = "app"
 version = "0.1.0"
 edition = "2021"
 
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
 [dependencies]
-tauri = { version = "1", features = ["api-all"] }
-anyhow = "1.0"
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+tauri-plugin-log = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+log = "0.4"
+glib = "0.21.5"
+gio = "0.21.5"
+tokio = "1.49.0"

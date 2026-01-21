@@ -18,6 +18,7 @@ export function registerStatusCommand(program: Command): void {
     .option('-j, --json', 'Output status as JSON')
     .action(async (options) => {
       try {
+        const config = getConfig();
         const status = {
           server: {
             running: false,
@@ -28,7 +29,15 @@ export function registerStatusCommand(program: Command): void {
             loggedIn: false,
             username: null as string | null,
           },
-          config: getConfig(),
+          config: {
+            webdav: {
+              host: config.webdav.host,
+              port: config.webdav.port,
+              https: config.webdav.https,
+              requireAuth: config.webdav.requireAuth,
+            },
+            remotePath: config.remotePath,
+          },
           logFile: getLogFilePath(),
         };
 

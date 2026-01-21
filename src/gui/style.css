@@ -27,3 +27,7 @@ main{padding:20px;max-width:960px;margin:0 auto}
 button{background:#111;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
 button.secondary{background:#eee;color:#111}
 .error{color:var(--red);margin-top:8px}
+
+.mount-status{margin-left:8px;color:var(--muted);font-size:0.9rem}
+.mount-status.ok{color:var(--green)}
+.mount-status.err{color:var(--red);font-weight:600}

@@ -1,5 +1,6 @@
-import { invoke } from '@tauri-apps/api/tauri'
-import { event } from '@tauri-apps/api/event'
+import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
+
 
 // Utilities
 const $ = (id: string) => document.getElementById(id) as HTMLElement
@@ -8,6 +9,7 @@ const setBadge = (state: 'active' | 'connecting' | 'stopped', text: string) => {
   b.className = 'badge ' + state
   b.textContent = text
 }
+
 
 async function refreshStatus() {
   try {
@@ -25,10 +27,29 @@ async function refreshStatus() {
     dav.value = `dav://localhost:${s.port || 12345}`
     const mountToggle = $('mount-toggle') as HTMLInputElement
     mountToggle.checked = !!s.mounted
+
+    // Mount status (more explicit than badge)
+    try {
+      const m: any = await invoke('check_mount_status')
+      const ms = $('mount-status')
+      if (m) {
+        ms.textContent = `Mounted: ${m}`
+        ms.className = 'mount-status ok'
+      } else {
+        ms.textContent = mountToggle.checked ? 'Pending...' : 'Not mounted'
+        ms.className = 'mount-status'
+      }
+  } catch (err) {
+      const ms = $('mount-status') as HTMLElement
+      ms.textContent = 'Mount: error checking status'
+      ms.className = 'mount-status err'
+      console.debug('check_mount_status error:', err)
+    }
   } catch (e) {
     setBadge('stopped', 'Error')
   }
 }
+
 
 function formatBytes(n = 0) {
   if (n === 0) return '0 B'
@@ -37,11 +58,51 @@ function formatBytes(n = 0) {
   return `${(n / Math.pow(1024, i)).toFixed(1)} ${units[i]}`
 }
 
+
 // UI actions
-$('open-files').addEventListener('click', () => invoke('open_in_files'))
-$('mount-toggle').addEventListener('change', (e) => {
+$('open-files').addEventListener('click', async () => {
+  try {
+    await invoke('open_in_files')
+  } catch (err) {
+    console.error('open_in_files failed', err)
+    setBadge('stopped', 'Error')
+  }
+})
+$('mount-toggle').addEventListener('change', async (e) => {
   const on = (e.target as HTMLInputElement).checked
-  invoke(on ? 'mount_drive' : 'unmount_drive').then(() => refreshStatus())
+  const ms = $('mount-status') as HTMLElement
+  try {
+    if (on) {
+      ms.textContent = 'Mounting...'
+      ms.className = 'mount-status'
+    } else {
+      ms.textContent = 'Unmounting...'
+      ms.className = 'mount-status'
+    }
+    
+    await invoke(on ? 'mount_drive' : 'unmount_drive')
+    
+    // Success: update explicit message and refresh status
+    if (on) {
+      ms.textContent = 'Mounted successfully'
+      ms.className = 'mount-status ok'
+    } else {
+      ms.textContent = 'Unmounted'
+      ms.className = 'mount-status'
+    }
+    // Wait a bit for GIO mount to complete before refreshing
+    await new Promise(r => setTimeout(r, 1000))
+    await refreshStatus()
+  } catch (err: any) {
+    console.error('mount action failed', err)
+    // show actionable error message to the user
+    const errorMsg = typeof err === 'string' ? err : (err?.message || String(err) || 'Mount action failed')
+    ms.textContent = `Mount error: ${errorMsg}`
+    ms.className = 'mount-status err'
+    // revert toggle to previous state on failure
+    (e.target as HTMLInputElement).checked = !on
+    await refreshStatus()
+  }
 })
 $('copy-url').addEventListener('click', async () => {
   const dav = ($('dav-url') as HTMLInputElement).value
@@ -58,18 +119,25 @@ $('apply-port').addEventListener('click', () => {
   invoke('set_network_port', { port: p }).then(() => refreshStatus())
 })
 
-// Log streaming
-event.listen('log_line', (e: any) => {
+
+// Log streaming - listen to sidecar logs with payload { level, message }
+listen<{ level: string; message: string }>('sidecar:log', (event) => {
   const area = $('log-area') as HTMLPreElement
-  area.textContent += `${e.payload.line}\n`
+  const payload = event.payload || { level: 'info', message: '' }
+  // Trim trailing newline to avoid double spacing
+  const msg = String(payload.message).replace(/\n$/, '')
+  area.textContent += `[${payload.level}] ${msg}\n`
   area.scrollTop = area.scrollHeight
 })
+
 
 // Periodic refresh
 refreshStatus()
 setInterval(refreshStatus, 3000)
 
+
 // Start sidecar on load if not running (optional)
 invoke('get_status').then((s: any) => { if (!s || !s.running) invoke('start_sidecar') })
+
 
 // TODO: Add authentication flow wiring and permission icons handlers
