@@ -17,3 +17,6 @@ log = "0.4"
 glib = "0.21.5"
 gio = "0.21.5"
 tokio = "1.49.0"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-autostart = "2"

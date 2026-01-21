@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { enable as autostartEnable, isEnabled as autostartIsEnabled, disable as autostartDisable } from '@tauri-apps/plugin-autostart'
 
 
 // Utilities
@@ -171,6 +172,59 @@ export function initGui(opts?: { invoke?: typeof invoke; listen?: typeof listen;
       await refreshStatus(invokeFn, opts?.checkTimeoutMs ?? 1000)
     }
   })
+
+  // Autostart toggle wiring - uses @tauri-apps/plugin-autostart
+  ;(async () => {
+    const autostartToggle = $safe('autostart-toggle') as HTMLInputElement | null
+    if (!autostartToggle) return
+
+    try {
+      // Disable while probing the current state
+      autostartToggle.disabled = true
+      const enabled = await autostartIsEnabled()
+      autostartToggle.checked = !!enabled
+    } catch (err) {
+      if (typeof console !== 'undefined' && (console.error as any)) (console.error as any)('autostart isEnabled failed', err)
+      // Fallback: plugin may not be available in this environment (tests/SSR).
+      // Try to read the persisted preference from the backend and allow persisting
+      // the preference even if system autostart is unsupported.
+      try {
+        const persisted: any = await invokeFn('get_autostart').catch(() => ({ enabled: false }))
+        autostartToggle.checked = !!persisted
+      } catch (e) {
+        // If that also fails, keep it disabled and show a tooltip
+        autostartToggle.title = 'Autostart unsupported in this environment'
+        autostartToggle.disabled = true
+        return
+      }
+    } finally {
+      autostartToggle.disabled = false
+    }
+
+    autostartToggle.addEventListener('change', async (e) => {
+      const on = (e.target as HTMLInputElement).checked
+      autostartToggle.disabled = true
+      try {
+        if (on) await autostartEnable()
+        else await autostartDisable()
+
+        // Persist preference in config via Rust command
+        try {
+          await invokeFn('set_autostart', { enabled: on })
+        } catch (err) {
+          if (typeof console !== 'undefined' && (console.error as any)) (console.error as any)('set_autostart failed', err)
+          // If persisting fails, revert toggle to previous state to avoid divergence
+          (e.target as HTMLInputElement).checked = !on
+        }
+      } catch (err) {
+        if (typeof console !== 'undefined' && (console.error as any)) (console.error as any)('autostart toggle failed', err)
+        // revert toggle on failure
+        (e.target as HTMLInputElement).checked = !on
+      } finally {
+        autostartToggle.disabled = false
+      }
+    })
+  })();
 
   $safe('copy-url')?.addEventListener('click', async () => {
     const dav = ($safe('dav-url') as HTMLInputElement | null)?.value

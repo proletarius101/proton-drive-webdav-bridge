@@ -8,10 +8,11 @@ pub fn run() {
   use crate::sidecar::{
     SidecarState, start_sidecar, stop_sidecar, get_status, login,
     set_network_port, purge_cache, open_in_files,
-    mount_drive, unmount_drive, check_mount_status, logout
+    mount_drive, unmount_drive, check_mount_status, logout, get_autostart, set_autostart
   };
 
   let builder = tauri::Builder::default()
+    .plugin(tauri_plugin_autostart::Builder::new().build())
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -24,6 +25,7 @@ pub fn run() {
     })
     .plugin(tauri_plugin_shell::init())
     .plugin(tauri_plugin_opener::init())
+    .plugin(tauri_plugin_autostart::Builder::new().build())
     .manage(SidecarState::new());
 
   // Conditionally include dev-only commands in debug builds
@@ -40,6 +42,8 @@ pub fn run() {
       unmount_drive,
       check_mount_status,
       logout,
+      get_autostart,
+      set_autostart,
       emit_test_log,
   ]);
 
@@ -56,6 +60,8 @@ pub fn run() {
       unmount_drive,
       check_mount_status,
       logout,
+      get_autostart,
+      set_autostart,
   ]);
 
   builder

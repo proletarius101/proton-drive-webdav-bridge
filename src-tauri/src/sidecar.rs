@@ -355,6 +355,52 @@ pub async fn purge_cache(app: AppHandle) -> Result<(), String> {
     }
 }
 
+// Helper to compute config file path similar to the JS side
+fn get_config_file_path() -> Result<std::path::PathBuf, String> {
+    use std::path::PathBuf;
+
+    // Respect XDG_CONFIG_HOME if present, fallback to $HOME/.config
+    let base: PathBuf = if let Ok(p) = std::env::var("XDG_CONFIG_HOME") {
+        PathBuf::from(p)
+    } else if let Ok(home) = std::env::var("HOME") {
+        PathBuf::from(home).join(".config")
+    } else {
+        return Err("Could not determine config directory".into());
+    };
+
+    let app_dir = base.join("proton-drive-webdav-bridge");
+    std::fs::create_dir_all(&app_dir).map_err(|e| e.to_string())?;
+    Ok(app_dir.join("config.json"))
+}
+
+#[tauri::command]
+pub async fn get_autostart() -> Result<bool, String> {
+    let path = get_config_file_path()?;
+    if !path.exists() {
+        return Ok(false);
+    }
+    let contents = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let v: serde_json::Value = serde_json::from_str(&contents).map_err(|e| e.to_string())?;
+    Ok(v.get("autoStart").and_then(|x| x.as_bool()).unwrap_or(false))
+}
+
+#[tauri::command]
+pub async fn set_autostart(enabled: bool) -> Result<bool, String> {
+    let path = get_config_file_path()?;
+    let mut v = if path.exists() {
+        let contents = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        serde_json::from_str::<serde_json::Value>(&contents).unwrap_or(serde_json::json!({}))
+    } else {
+        serde_json::json!({})
+    };
+
+    v["autoStart"] = serde_json::json!(enabled);
+
+    let s = serde_json::to_string_pretty(&v).map_err(|e| e.to_string())?;
+    std::fs::write(&path, s).map_err(|e| e.to_string())?;
+    Ok(enabled)
+}
+
 fn should_open_with_path(uri: &str) -> bool {
     // Treat absolute filesystem paths, file:// URIs (converted to paths),
     // and dav:// URIs as paths that should be opened with `open_path` so the
