@@ -31,18 +31,44 @@ async function refreshStatus(invokeFn: typeof invoke = invoke, checkTimeoutMs = 
       return
     }
 
-    setBadge(s.running ? 'active' : 'stopped', s.running ? 'Active' : (s.connecting ? 'Connecting' : 'Stopped'))
+    const running = s?.server?.running ?? s?.running ?? false
+    setBadge(running ? 'active' : 'stopped', running ? 'Active' : (s?.connecting ? 'Connecting' : 'Stopped'))
     const live = $('live-status')
     if (live) live.textContent = s.liveStatusString ? s.liveStatusString : 'Live status: N/A'
     // quota
-    const quotaPercent = s.storage && s.storage.total > 0 ? Math.round((s.storage.used / s.storage.total) * 100) : 0
+    const used = s?.storage?.used ?? 0
+    const total = s?.storage?.total ?? 0
+    const quotaPercent = total > 0 ? Math.round((used / total) * 100) : 0
     const bar = $('quota-bar') as HTMLProgressElement | null
     if (bar) bar.value = quotaPercent
     const qt = $('quota-text')
-    if (qt) qt.textContent = `${formatBytes(s.storage.used)} / ${formatBytes(s.storage.total)} (${quotaPercent}%)`
-    // address
+    if (qt) qt.textContent = total > 0 ? `${formatBytes(used)} / ${formatBytes(total)} (${quotaPercent}%)` : '--'
+    // address and network port
     const dav = $('dav-url') as HTMLInputElement | null
-    if (dav) dav.value = `dav://localhost:${s.port || 12345}`
+    const portInput = ($('network-port') as HTMLInputElement | null)
+
+    // Prefer server.url if available but normalize it to a dav:// host:port form.
+    // Fall back to config.webdav.host/port or legacy s.port values.
+    const defaultPort = s?.config?.webdav?.port ?? s?.port ?? 12345
+    let host = s?.config?.webdav?.host ?? 'localhost'
+    let port = defaultPort
+    let davUrl = `dav://${host}:${port}`
+
+    if (s?.server?.url) {
+      try {
+        const parsed = new URL(s.server.url)
+        const parsedHost = parsed.hostname
+        const parsedPort = parsed.port || String(port)
+        host = parsedHost
+        port = parsedPort
+        davUrl = `dav://${host}${parsedPort ? `:${parsedPort}` : ''}`
+      } catch (e) {
+        // If parsing fails, fall back to config-derived URL
+      }
+    }
+
+    if (dav) dav.value = davUrl
+    if (portInput) portInput.value = String(port)
     const mountToggle = $('mount-toggle') as HTMLInputElement | null
     if (mountToggle) mountToggle.checked = !!s.mounted
 
@@ -200,20 +226,62 @@ export function initGui(opts?: { invoke?: typeof invoke; listen?: typeof listen;
 
   // Start sidecar on load if not running (optional)
   invokeFn('get_status').then(async (s: any) => {
-    if (!s || !s.running) {
+    if (!s || !(s?.server?.running ?? s?.running)) {
       try {
         await invokeFn('start_sidecar')
+        // After starting, refresh status immediately so address/port are populated
+        await refreshStatus(invokeFn, opts?.checkTimeoutMs ?? 1000, opts?.statusTimeoutMs ?? 2000)
+
+        // Extra safety: fetch current status and directly populate address/port
+        try {
+          const fresh: any = await invokeFn('get_status').catch(() => null)
+          if (fresh) {
+            const host = fresh?.config?.webdav?.host ?? 'localhost'
+            const port = fresh?.config?.webdav?.port ?? fresh?.port ?? 12345
+            const url = fresh?.server?.url ?? `dav://${host}:${port}`
+            const davEl = $safe('dav-url') as HTMLInputElement | null
+            const portEl = $safe('network-port') as HTMLInputElement | null
+            if (davEl) davEl.value = url
+            if (portEl) portEl.value = String(port)
+          }
+        } catch (e) {
+          // Ignore errors from this secondary probe
+        }
       } catch (err: any) {
         // Common benign error — don't surface as an unhandled rejection in the UI
         const msg = String(err?.message ?? err ?? '')
         if (msg.toLowerCase().includes('already')) {
           console.debug('start_sidecar: already running')
+          // Ensure UI reflects the current status even if sidecar was already running
+          await refreshStatus(invokeFn, opts?.checkTimeoutMs ?? 1000, opts?.statusTimeoutMs ?? 2000)
+
+          try {
+            const fresh: any = await invokeFn('get_status').catch(() => null)
+            if (fresh) {
+              const host = fresh?.config?.webdav?.host ?? 'localhost'
+              const port = fresh?.config?.webdav?.port ?? fresh?.port ?? 12345
+              const url = fresh?.server?.url ?? `dav://${host}:${port}`
+              const davEl = $safe('dav-url') as HTMLInputElement | null
+              const portEl = $safe('network-port') as HTMLInputElement | null
+              if (davEl) davEl.value = url
+              if (portEl) portEl.value = String(port)
+            }
+          } catch (e) {}
         } else {
           console.error('start_sidecar failed:', err)
         }
       }
     }
   }).catch(() => {})
+
+  // When the sidecar process terminates, refresh status so the UI updates accordingly
+  try {
+    listenFn('sidecar:terminated', async () => {
+      await refreshStatus(invokeFn, opts?.checkTimeoutMs ?? 1000, opts?.statusTimeoutMs ?? 2000)
+    })
+  } catch (err) {
+    // listening may not be available in tests; ignore
+  }
 
   // Return a stop() function to help tests/cleanup
   return {
