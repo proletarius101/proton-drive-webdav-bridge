@@ -7,6 +7,7 @@
 import envPaths from 'env-paths';
 import { join } from 'path';
 import { mkdirSync } from 'fs';
+import { tmpdir } from 'os';
 
 // ============================================================================
 // Path Constants
@@ -15,9 +16,21 @@ import { mkdirSync } from 'fs';
 const APP_NAME = 'proton-drive-webdav-bridge';
 const paths = envPaths(APP_NAME, { suffix: '' });
 
-const ensureDir = (dirPath: string): string => {
-  mkdirSync(dirPath, { recursive: true });
-  return dirPath;
+const ensureDir = (dirPath?: string): string => {
+  try {
+    if (!dirPath) {
+      const fallback = join(tmpdir(), APP_NAME);
+      mkdirSync(fallback, { recursive: true });
+      return fallback;
+    }
+    mkdirSync(dirPath, { recursive: true });
+    return dirPath;
+  } catch (err) {
+    // As a last resort, ensure we have a sane fallback in /tmp
+    const fallback = join(tmpdir(), APP_NAME);
+    try { mkdirSync(fallback, { recursive: true }); } catch (e) {}
+    return fallback;
+  }
 };
 
 /**
