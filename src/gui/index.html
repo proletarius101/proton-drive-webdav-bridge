@@ -46,6 +46,7 @@
                     <div class="subtitle">Start at login</div>
                   </div>
                   <div>
+                    <!-- Sidebar mirrored autostart control (kept in sync with main control) -->
                     <adw-switch id="autostart-switch-side" active="false"></adw-switch>
                     <input id="autostart-toggle-side" type="checkbox" hidden aria-hidden="true" />
                   </div>
@@ -77,56 +78,6 @@
                 </div>
               </div>
 
-              <div class="list settings-list" style="margin-top: 12px">
-                <div class="list-element settings-row">
-                  <div class="settings-desc">
-                    <div class="label">Mount</div>
-                    <div class="subtitle">Mount the WebDAV share for this account</div>
-                  </div>
-                  <div class="settings-control">
-                    <adw-switch id="account-mount-switch" active="false"></adw-switch>
-                    <input id="account-mount-toggle" type="checkbox" hidden aria-hidden="true" />
-                  </div>
-                </div>
-
-                <div class="list-element settings-row">
-                  <div class="settings-desc">
-                    <div class="label">Address</div>
-                    <div class="subtitle">Local WebDAV address for account</div>
-                  </div>
-                  <div
-                    class="settings-control"
-                    style="display: flex; align-items: center; gap: 8px"
-                  >
-                    <adw-input id="account-dav-url" class="input" readonly></adw-input>
-                    <input
-                      id="account-dav-url-fallback"
-                      class="input"
-                      type="text"
-                      readonly
-                      style="display: none"
-                    />
-                    <button id="account-copy-url" class="btn flat">Copy</button>
-                  </div>
-                </div>
-
-                <div class="list-element settings-row">
-                  <div class="settings-desc">
-                    <div class="label">Network Port</div>
-                    <div class="subtitle">Local port used by this account</div>
-                  </div>
-                  <div class="settings-control">
-                    <adw-input id="account-network-port" class="input" readonly></adw-input>
-                    <input
-                      id="account-network-port-fallback"
-                      class="input"
-                      type="text"
-                      readonly
-                      style="display: none"
-                    />
-                  </div>
-                </div>
-              </div>
             </section>
 
             <!-- Login / Setup -->
@@ -176,8 +127,7 @@
                     <label class="switch" title="Mount">
                       <adw-switch id="mount-switch" active="false"></adw-switch>
                       <input id="mount-toggle" type="checkbox" hidden aria-hidden="true" />
-                    </label>
-                    <div id="mount-status" class="mount-status">Checking mount status...</div>
+                    </label> 
                   </div>
                 </div>
 
@@ -200,41 +150,6 @@
                       style="display: none"
                     />
                     <button id="copy-url" class="btn flat">Copy</button>
-                  </div>
-                </div>
-
-                <div class="list-element settings-row">
-                  <div class="settings-desc">
-                    <div class="label">Startup</div>
-                    <div class="subtitle">Autostart and persistence preferences</div>
-                  </div>
-                  <div
-                    class="settings-control"
-                    style="display: flex; gap: 12px; align-items: center"
-                  >
-                    <div
-                      style="display: flex; flex-direction: column; gap: 6px; align-items: flex-end"
-                    >
-                      <div style="display: flex; gap: 8px; align-items: center">
-                        <label class="label">Autostart</label>
-                        <label class="switch">
-                          <adw-switch id="autostart-switch" active="false"></adw-switch>
-                          <input id="autostart-toggle" type="checkbox" hidden aria-hidden="true" />
-                        </label>
-                      </div>
-                      <div style="display: flex; gap: 8px; align-items: center">
-                        <label class="label">Persistence</label>
-                        <label class="switch">
-                          <adw-switch id="persistence-switch" active="false"></adw-switch>
-                          <input
-                            id="persistence-toggle"
-                            type="checkbox"
-                            hidden
-                            aria-hidden="true"
-                          />
-                        </label>
-                      </div>
-                    </div>
                   </div>
                 </div>
               </div>

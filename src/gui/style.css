@@ -152,18 +152,7 @@ button.secondary {
   margin-top: 8px;
 }
 
-.mount-status {
-  margin-left: 8px;
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-.mount-status.ok {
-  color: var(--green);
-}
-.mount-status.err {
-  color: var(--red);
-  font-weight: 600;
-}
+/* mount status styles removed — element was removed from the UI */
 
 /* Dashboard layout adjustments */
 .dashboard-grid {

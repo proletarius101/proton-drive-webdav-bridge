@@ -22,7 +22,7 @@ describe('Accounts UI', () => {
   it('renders accounts and shows per-account details', async () => {
     const elements = new Map<string, any>()
     ;[
-      'service-badge', 'live-status', 'dav-url', 'mount-toggle', 'mount-status',
+      'service-badge', 'live-status', 'dav-url', 'mount-toggle',
       'account-list', 'account-email', 'account-status-text', 'account-dav-url', 'account-network-port', 'account-mount-toggle'
     ].forEach((id) => elements.set(id, makeEl()))
 

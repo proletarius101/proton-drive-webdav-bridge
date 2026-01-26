@@ -19,7 +19,7 @@ describe('GUI E2E with sidecar stub', () => {
   it('shows Unavailable if sidecar status command hangs', async () => {
     const elements = new Map<string, any>()
     ;[
-      'service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle', 'mount-status',
+      'service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle',
       'open-files', 'copy-url', 'toggle-log', 'log-area', 'purge-cache', 'logout', 'apply-port', 'network-port'
     ].forEach((id) => elements.set(id, makeEl()))
 
@@ -53,9 +53,7 @@ describe('GUI E2E with sidecar stub', () => {
     // wait for status timeout to happen
     await new Promise((r) => setTimeout(r, 100))
 
-    const ms = elements.get('mount-status')
     const badge = elements.get('service-badge')
-    expect(ms.textContent).toBe('Mount: timed out')
     expect(badge.textContent).toBe('Unavailable')
 
     stop()
@@ -64,7 +62,7 @@ describe('GUI E2E with sidecar stub', () => {
   it('uses real sidecar output to show mounted state', async () => {
     const elements = new Map<string, any>()
     ;[
-      'service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle', 'mount-status',
+      'service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle',
       'open-files', 'copy-url', 'toggle-log', 'log-area', 'purge-cache', 'logout', 'apply-port', 'network-port'
     ].forEach((id) => elements.set(id, makeEl()))
 
@@ -100,33 +98,18 @@ describe('GUI E2E with sidecar stub', () => {
 
     const { stop } = initGui({ invoke: invoke as any, listen: (_: string, __: any) => ({}) as any, checkTimeoutMs: 2000, statusTimeoutMs: 2000 })
 
-    // wait for refresh to complete (poll until mount-status is set)
-    const start = Date.now()
-    let msText = ''
-    while (Date.now() - start < 1000) {
-      const ms = elements.get('mount-status')
-      msText = ms?.textContent || ''
-      if (msText && msText.length > 0) break
-      await new Promise((r) => setTimeout(r, 20))
-    }
-
-    const ms = elements.get('mount-status')
+    // Wait for badge to become 'Active'
     const badge = elements.get('service-badge')
-    // Ensure check_mount_status was invoked
-    expect(calls.includes('check_mount_status')).toBe(true)
-
-    // Wait for badge to become 'Active' and mount-status to be set
     const startWait = Date.now()
-    let lastBadge = badge.textContent
     while (Date.now() - startWait < 1000) {
-      if (badge.textContent === 'Active' && ms.textContent === 'Mounted: dav-mount-1') break
-      lastBadge = badge.textContent
+      if (badge.textContent === 'Active') break
       await new Promise((r) => setTimeout(r, 20))
     }
 
     expect(calls.includes('get_status')).toBe(true)
-    expect(calls.includes('check_mount_status')).toBe(true)
-    expect(ms.textContent).toBe('Mounted: dav-mount-1')
+    // GUI no longer calls check_mount_status; ensure we didn't invoke it
+    expect(calls.includes('check_mount_status')).toBe(false)
+    expect(badge.textContent).toBe('Active')
 
     // No unexpected console errors
     console.error = originalErr

@@ -215,21 +215,17 @@ function renderAccountDetails(account: any | null) {
   if (!account) {
     emailEl.textContent = 'No account selected';
     statusEl.textContent = '—';
-    setInputValue('account-dav-url', '');
-    setInputValue('account-network-port', '');
     setSwitchState('account-mount', false);
     return;
   }
   emailEl.textContent = account.email ?? account.id ?? 'Account';
   statusEl.textContent = account.status ?? 'Live status: N/A';
-  setInputValue('account-dav-url', account.address ?? account.url ?? '');
-  setInputValue('account-network-port', String(account.port ?? ''));
   setSwitchState('account-mount', !!account.mounted);
 }
 
 async function refreshStatus(
   invokeFn: typeof invoke = invoke,
-  checkTimeoutMs = 1000,
+  _checkTimeoutMs = 1000,
   statusTimeoutMs = 2000
 ) {
   try {
@@ -241,15 +237,10 @@ async function refreshStatus(
     ]);
 
     if (s === '__timeout__') {
-      // Mark as unavailable and set mount as timed out so the user isn't left at 'Checking mount status...'
+      // Mark as unavailable so the user isn't left waiting on status
       setBadge('stopped', 'Unavailable');
       const live = $('live-status');
       if (live) live.textContent = 'Status unavailable';
-      const ms = $('mount-status') as HTMLElement | null;
-      if (ms) {
-        ms.textContent = 'Mount: timed out';
-        ms.className = 'mount-status err';
-      }
       return;
     }
 
@@ -297,46 +288,13 @@ async function refreshStatus(
     setInputValue('network-port', String(port));
     // prefer ADWave switch, fall back to legacy input
     setSwitchState('mount', !!s.mounted);
+    // keep the per-account switch in sync with global mount state
+    setSwitchState('account-mount', !!s.mounted);
 
-    // Mount status (more explicit than badge)
-    try {
-      // Race the mount-check with a timeout so the UI doesn't hang forever
-      const checkPromise = invokeFn('check_mount_status');
-      const res = await Promise.race([
-        checkPromise,
-        new Promise((r) => setTimeout(() => r('__timeout__'), checkTimeoutMs)),
-      ]);
-
-      const ms = $('mount-status') as HTMLElement | null;
-      if (!ms) return;
-
-      if (res === '__timeout__') {
-        ms.textContent = 'Mount: timed out';
-        ms.className = 'mount-status err';
-      } else if (res) {
-        ms.textContent = `Mounted: ${res}`;
-        ms.className = 'mount-status ok';
-      } else {
-        const cur = getSwitchState('mount');
-        ms.textContent = cur ? 'Pending...' : 'Not mounted';
-        ms.className = 'mount-status';
-      }
-    } catch (err) {
-      const ms = $('mount-status') as HTMLElement | null;
-      if (ms) {
-        ms.textContent = 'Mount: error checking status';
-        ms.className = 'mount-status err';
-      }
-      console.debug('check_mount_status error:', err);
-    }
+    // Mount status UI was removed; backend check omitted in UI.
+    // (If needed in future, expose a lightweight status via the badge or dedicated UI.)
   } catch (e) {
     setBadge('stopped', 'Error');
-    // Ensure mount status is updated on global failures so the UI doesn't stay at the initial placeholder.
-    const ms = $('mount-status');
-    if (ms) {
-      ms.textContent = 'Mount: error checking status';
-      ms.className = 'mount-status err';
-    }
   }
 }
 
@@ -371,46 +329,14 @@ export function initGui(opts?: {
   });
 
   addSwitchListener('mount', async (on) => {
-    const ms = $safe('mount-status') as HTMLElement | null;
     try {
-      if (on) {
-        if (ms) {
-          ms.textContent = 'Mounting...';
-          ms.className = 'mount-status';
-        }
-      } else {
-        if (ms) {
-          ms.textContent = 'Unmounting...';
-          ms.className = 'mount-status';
-        }
-      }
-
       await invokeFn(on ? 'mount_drive' : 'unmount_drive');
 
-      // Success: update explicit message and refresh status
-      if (on) {
-        if (ms) {
-          ms.textContent = 'Mounted successfully';
-          ms.className = 'mount-status ok';
-        }
-      } else {
-        if (ms) {
-          ms.textContent = 'Unmounted';
-          ms.className = 'mount-status';
-        }
-      }
       // Wait a bit for GIO mount to complete before refreshing
       await new Promise((r) => setTimeout(r, 1000));
       await refreshStatus(invokeFn, opts?.checkTimeoutMs ?? 1000);
     } catch (err: any) {
       console.error('mount action failed', err);
-      // show actionable error message to the user
-      const errorMsg =
-        typeof err === 'string' ? err : err?.message || String(err) || 'Mount action failed';
-      if (ms) {
-        ms.textContent = `Mount error: ${errorMsg}`;
-        ms.className = 'mount-status err';
-      }
       // revert toggle to previous state on failure
       setSwitchState('mount', !on);
       await refreshStatus(invokeFn, opts?.checkTimeoutMs ?? 1000);
@@ -429,6 +355,7 @@ export function initGui(opts?: {
       if (input) input.disabled = true;
       const enabled = await autostartIsEnabled();
       setSwitchState('autostart', !!enabled);
+      setSwitchState('autostart-side', !!enabled);
     } catch (err) {
       if (typeof console !== 'undefined' && (console.error as any))
         (console.error as any)('autostart isEnabled failed', err);
@@ -438,6 +365,7 @@ export function initGui(opts?: {
       try {
         const persisted: any = await invokeFn('get_autostart').catch(() => ({ enabled: false }));
         setSwitchState('autostart', !!persisted);
+        setSwitchState('autostart-side', !!persisted);
       } catch (e) {
         // If that also fails, keep it disabled and show a tooltip
         if (input) {
@@ -452,9 +380,18 @@ export function initGui(opts?: {
       if (input) input.disabled = false;
     }
 
-    addSwitchListener('autostart', async (on) => {
-      if (adw) adw.disabled = true;
-      if (input) input.disabled = true;
+    // Shared autostart toggle helper used by both main and sidebar switches
+    async function doAutostartToggle(on: boolean) {
+      const mainAdw = document.getElementById('autostart-switch') as any;
+      const mainInput = $safe('autostart-toggle') as HTMLInputElement | null;
+      const sideAdw = document.getElementById('autostart-switch-side') as any;
+      const sideInput = $safe('autostart-toggle-side') as HTMLInputElement | null;
+
+      if (mainAdw) mainAdw.disabled = true;
+      if (mainInput) mainInput.disabled = true;
+      if (sideAdw) sideAdw.disabled = true;
+      if (sideInput) sideInput.disabled = true;
+
       try {
         if (on) await autostartEnable();
         else await autostartDisable();
@@ -462,21 +399,36 @@ export function initGui(opts?: {
         // Persist preference in config via Rust command
         try {
           await invokeFn('set_autostart', { enabled: on });
+          // Keep both switches in sync
+          setSwitchState('autostart', !!on);
+          setSwitchState('autostart-side', !!on);
         } catch (err) {
           if (typeof console !== 'undefined' && (console.error as any))
             (console.error as any)('set_autostart failed', err);
-          // If persisting fails, revert toggle to previous state to avoid divergence
+          // If persisting fails, revert toggles to previous state to avoid divergence
           setSwitchState('autostart', !on);
+          setSwitchState('autostart-side', !on);
         }
       } catch (err) {
         if (typeof console !== 'undefined' && (console.error as any))
           (console.error as any)('autostart toggle failed', err);
         // revert toggle on failure
         setSwitchState('autostart', !on);
+        setSwitchState('autostart-side', !on);
       } finally {
-        if (adw) adw.disabled = false;
-        if (input) input.disabled = false;
+        if (mainAdw) mainAdw.disabled = false;
+        if (mainInput) mainInput.disabled = false;
+        if (sideAdw) sideAdw.disabled = false;
+        if (sideInput) sideInput.disabled = false;
       }
+    }
+
+    // Wire both the main control and the sidebar mirror to the shared handler
+    addSwitchListener('autostart', (on: boolean) => {
+      void doAutostartToggle(on);
+    });
+    addSwitchListener('autostart-side', (on: boolean) => {
+      void doAutostartToggle(on);
     });
   })();
 
@@ -486,10 +438,6 @@ export function initGui(opts?: {
   });
 
   // per-account actions
-  $safe('account-copy-url')?.addEventListener('click', async () => {
-    const dav = getInputValue('account-dav-url');
-    if (dav && navigator?.clipboard) await navigator.clipboard.writeText(dav);
-  });
   $safe('configure-account')?.addEventListener('click', async () => {
     if (!_selectedAccountId) return;
     try {
@@ -504,6 +452,46 @@ export function initGui(opts?: {
       await _invokeFn?.('signout_account', { id: _selectedAccountId });
     } catch (e) {
       console.error('signout failed', e);
+    }
+  });
+
+  // Per-account mount switch proxies global mount/unmount commands. Backend currently
+  // exposes only global mount/unmount, so we proxy those and keep UI consistent.
+  addSwitchListener('account-mount', async (on) => {
+    const statusEl = $safe('account-status-text');
+    if (!_selectedAccountId) {
+      // No account selected – revert and inform
+      setSwitchState('account-mount', !on);
+      if (statusEl) statusEl.textContent = 'No account selected';
+      return;
+    }
+
+    try {
+      if (on) {
+        if (statusEl) {
+          statusEl.textContent = 'Mounting...';
+        }
+      } else {
+        if (statusEl) {
+          statusEl.textContent = 'Unmounting...';
+        }
+      }
+
+      await invokeFn(on ? 'mount_drive' : 'unmount_drive');
+
+      if (on) {
+        if (statusEl) statusEl.textContent = 'Mounted successfully';
+      } else {
+        if (statusEl) statusEl.textContent = 'Unmounted';
+      }
+
+      // Refresh global status so both switches reflect the true state
+      await refreshStatus(invokeFn, opts?.checkTimeoutMs ?? 1000);
+    } catch (err: any) {
+      console.error('account mount failed', err);
+      setSwitchState('account-mount', !on);
+      if (statusEl) statusEl.textContent = `Mount error: ${err?.message ?? String(err)}`;
+      await refreshStatus(invokeFn, opts?.checkTimeoutMs ?? 1000);
     }
   });
 
@@ -548,23 +536,7 @@ export function initGui(opts?: {
       area.scrollTop = area.scrollHeight;
     });
 
-    // Mount status updates - the sidecar emits intermediate events like "Checking mount: ..."
-    listenFn('mount-status', (event: any) => {
-      const ms = $safe('mount-status') as HTMLElement | null;
-      if (!ms) return;
-      const payload = event.payload ?? event;
-      const msg = typeof payload === 'string' ? payload : String(payload);
-      ms.textContent = msg;
-      // Class heuristics: if it's checking, leave plain; if it mentions 'No matching', mark as err
-      if (msg.toLowerCase().includes('no matching') || msg.toLowerCase().includes('error')) {
-        ms.className = 'mount-status err';
-      } else if (msg.toLowerCase().includes('checking')) {
-        ms.className = 'mount-status';
-      } else {
-        // otherwise assume it's a final result like 'Mounted: NAME'
-        ms.className = 'mount-status ok';
-      }
-    });
+    // Mount status events are ignored by the UI (explicit mount-status element removed).
 
     // Accounts change updates
     listenFn('accounts:changed', (event: any) => {
@@ -579,10 +551,9 @@ export function initGui(opts?: {
       if (payload.id === _selectedAccountId) renderAccountDetails(payload);
     });
 
-    // Global switch in sidebar (mirror autostart)
+    // Global autostart status - update sidebar control only
     listenFn('global:autostart', (event: any) => {
       const val = event.payload ?? event ?? false;
-      setSwitchState('autostart', !!val);
       setSwitchState('autostart-side', !!val);
     });
   } catch (err) {

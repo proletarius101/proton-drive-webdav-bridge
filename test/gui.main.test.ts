@@ -19,7 +19,7 @@ describe('GUI init', () => {
   it('initializes without throwing and updates mount status', async () => {
     const elements = new Map<string, any>()
     ;[
-      'service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle', 'mount-status',
+      'service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle',
       'open-files', 'copy-url', 'toggle-log', 'log-area', 'purge-cache', 'logout', 'apply-port', 'network-port'
     ].forEach((id) => elements.set(id, makeEl()))
 
@@ -62,8 +62,7 @@ describe('GUI init', () => {
     // wait for async refreshStatus to complete
     await new Promise((r) => setTimeout(r, 20))
 
-    const ms = elements.get('mount-status')
-    expect(ms.textContent).toBe('Not mounted')
+
     // Ensure address and network port were loaded from status
     const portEl = elements.get('network-port')
     const davEl = elements.get('dav-url')
@@ -76,7 +75,7 @@ describe('GUI init', () => {
   it('handles start_sidecar rejection without unhandledrejection', async () => {
     const elements = new Map<string, any>()
     ;[
-      'service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle', 'mount-status',
+      'service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle',
       'open-files', 'copy-url', 'toggle-log', 'log-area', 'purge-cache', 'logout', 'apply-port', 'network-port'
     ].forEach((id) => elements.set(id, makeEl()))
 
@@ -130,7 +129,7 @@ describe('GUI init', () => {
   it('starts sidecar and refreshes status to populate address and port', async () => {
     const elements = new Map<string, any>()
     ;[
-      'service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle', 'mount-status',
+      'service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle',
       'open-files', 'copy-url', 'toggle-log', 'log-area', 'purge-cache', 'logout', 'apply-port', 'network-port'
     ].forEach((id) => elements.set(id, makeEl()))
 
@@ -174,7 +173,7 @@ describe('GUI init', () => {
   it('prefers server.url and converts to dav://host:port', async () => {
     const elements = new Map<string, any>()
     ;[
-      'service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle', 'mount-status',
+      'service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle',
       'open-files', 'copy-url', 'toggle-log', 'log-area', 'purge-cache', 'logout', 'apply-port', 'network-port'
     ].forEach((id) => elements.set(id, makeEl()))
 
@@ -216,7 +215,7 @@ describe('GUI init', () => {
   it('handles get_status timeout without hanging', async () => {
     const elements = new Map<string, any>()
     ;[
-      'service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle', 'mount-status',
+      'service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle',
       'open-files', 'copy-url', 'toggle-log', 'log-area', 'purge-cache', 'logout', 'apply-port', 'network-port'
     ].forEach((id) => elements.set(id, makeEl()))
 
@@ -238,9 +237,7 @@ describe('GUI init', () => {
     // wait long enough for the short timeout to fire
     await new Promise((r) => setTimeout(r, 50))
 
-    const ms = elements.get('mount-status')
     const badge = elements.get('service-badge')
-    expect(ms.textContent).toBe('Mount: timed out')
     expect(badge.textContent).toBe('Unavailable')
 
     stop()
