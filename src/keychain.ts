@@ -254,57 +254,191 @@ function deleteCredentialsFromKeyring(): void {
 }
 
 // ============================================================================
-// Public API
+// Public API - with caching/coalescing/debounce and instrumentation
 // ============================================================================
 
-/**
- * Store credentials securely
- */
-export async function storeCredentials(credentials: StoredCredentials): Promise<void> {
+// Cache & debounce configuration
+const CACHE_TTL_MS = 30_000; // 30s cache
+const WRITE_DEBOUNCE_MS = 1_000; // 1s debounce for writes
+
+// In-memory state
+let _cachedCreds: StoredCredentials | null = null;
+let _cacheExpiresAt = 0;
+let _inFlightGet: Promise<StoredCredentials | null> | null = null;
+
+// Write queue state
+let _pendingWrite: StoredCredentials | null = null;
+let _writeTimer: NodeJS.Timeout | null = null;
+let _writeInProgress: Promise<void> | null = null;
+
+// Instrumentation
+// _getCallCount counts top-level getStoredCredentials() calls
+let _getCallCount = 0;
+// _backendReadCount counts actual keyring/file reads
+let _backendReadCount = 0;
+let _writeCount = 0;
+
+function callerStack(): string {
+  const stack = new Error().stack || '';
+  return stack
+    .split('\n')
+    .slice(2, 5)
+    .map((s) => s.trim())
+    .join(' | ');
+}
+
+export function getKeyringReadCount(): number {
+  // Expose actual backend read count (keyring/file reads)
+  return _backendReadCount;
+}
+
+export function getGetStoredCallCount(): number {
+  return _getCallCount;
+}
+
+export function getKeyringWriteCount(): number {
+  return _writeCount;
+}
+
+export function resetKeyringInstrumentation(): void {
+  _getCallCount = 0;
+  _backendReadCount = 0;
+  _writeCount = 0;
+}
+
+async function performPersist(creds: StoredCredentials | null): Promise<void> {
+  if (!creds) return;
+  _writeCount++;
+  logger.debug(`[keychain] performPersist (count=${_writeCount}) caller=${callerStack()}`);
+
+  // Try preferred storage first
   if (shouldUseFileStorage()) {
-    storeCredentialsToFile(credentials, getKeyringPassword());
-  } else {
     try {
-      await storeCredentialsToKeyring(credentials);
+      storeCredentialsToFile(creds, getKeyringPassword());
+      return;
     } catch (error) {
-      logger.warn(`Native keyring failed, falling back to file storage: ${error}`);
-      storeCredentialsToFile(credentials, getKeyringPassword());
+      logger.warn(`File-based storage persist failed: ${error}`);
+      return; // If file storage fails, no further fallback
+    }
+  }
+
+  try {
+    await storeCredentialsToKeyring(creds);
+  } catch (error) {
+    logger.warn(`Native keyring persist failed, falling back to file storage: ${error}`);
+    try {
+      storeCredentialsToFile(creds, getKeyringPassword());
+    } catch (err) {
+      logger.error(`Failed to persist credentials to fallback file storage: ${err}`);
+      throw err;
     }
   }
 }
 
+function schedulePersist(): void {
+  if (_writeTimer) clearTimeout(_writeTimer);
+  _writeTimer = setTimeout(() => {
+    _writeTimer = null;
+    if (_pendingWrite) {
+      _writeInProgress = performPersist(_pendingWrite).finally(() => {
+        _writeInProgress = null;
+        _pendingWrite = null;
+      });
+    }
+  }, WRITE_DEBOUNCE_MS);
+}
+
 /**
- * Get stored credentials
+ * Store credentials securely (uses debounce + coalescing)
+ */
+export async function storeCredentials(credentials: StoredCredentials): Promise<void> {
+  // Update in-memory cache immediately
+  _cachedCreds = credentials;
+  _cacheExpiresAt = Date.now() + CACHE_TTL_MS;
+
+  // Coalesce writes: keep latest and debounce persistence
+  _pendingWrite = credentials;
+  schedulePersist();
+}
+
+/**
+ * Flush any pending writes immediately (useful in tests)
+ */
+export async function flushPendingWrites(): Promise<void> {
+  if (_writeTimer) {
+    clearTimeout(_writeTimer);
+    _writeTimer = null;
+  }
+  if (_pendingWrite) {
+    _writeInProgress = performPersist(_pendingWrite).finally(() => {
+      _writeInProgress = null;
+      _pendingWrite = null;
+    });
+  }
+  if (_writeInProgress) await _writeInProgress;
+}
+
+/**
+ * Get stored credentials (with cache + coalescing for concurrent reads)
  */
 export async function getStoredCredentials(): Promise<StoredCredentials | null> {
-  if (shouldUseFileStorage()) {
-    return getCredentialsFromFile(getKeyringPassword());
+  _getCallCount++;
+  logger.debug(`[keychain] getStoredCredentials called (calls=${_getCallCount}) caller=${callerStack()}`);
+
+  const now = Date.now();
+  if (_cachedCreds && now < _cacheExpiresAt) {
+    return _cachedCreds;
   }
 
-  try {
-    return getCredentialsFromKeyring();
-  } catch (error) {
-    logger.warn(`Native keyring failed, trying file storage: ${error}`);
-    return getCredentialsFromFile(getKeyringPassword());
-  }
+  if (_inFlightGet) return _inFlightGet;
+
+  _inFlightGet = (async () => {
+    try {
+      let result: StoredCredentials | null;
+      _backendReadCount++;
+      if (shouldUseFileStorage()) {
+        result = getCredentialsFromFile(getKeyringPassword());
+      } else {
+        try {
+          result = getCredentialsFromKeyring();
+        } catch (error) {
+          logger.warn(`Native keyring failed, trying file storage: ${error}`);
+          result = getCredentialsFromFile(getKeyringPassword());
+        }
+      }
+
+      _cachedCreds = result;
+      _cacheExpiresAt = Date.now() + CACHE_TTL_MS;
+      return result;
+    } finally {
+      _inFlightGet = null;
+    }
+  })();
+
+  return _inFlightGet;
 }
 
 /**
  * Delete stored credentials
  */
 export async function deleteStoredCredentials(): Promise<void> {
-  // Try to delete from both locations
-  if (shouldUseFileStorage()) {
-    deleteCredentialsFile();
-  } else {
-    try {
-      deleteCredentialsFromKeyring();
-    } catch (error) {
-      // Log deletion failure but continue
-      logger.debug(`Failed to delete credentials from keyring: ${error}`);
-    }
+  // Cancel pending write
+  if (_writeTimer) {
+    clearTimeout(_writeTimer);
+    _writeTimer = null;
+    _pendingWrite = null;
   }
-  // Also try to delete file in case of previous fallback
+
+  // Clear in-memory cache
+  _cachedCreds = null;
+  _cacheExpiresAt = 0;
+
+  // Try to delete from keyring (best-effort) and file
+  try {
+    deleteCredentialsFromKeyring();
+  } catch (error) {
+    logger.debug(`Failed to delete credentials from keyring: ${error}`);
+  }
   deleteCredentialsFile();
 }
 
@@ -324,4 +458,8 @@ export default {
   getStoredCredentials,
   deleteStoredCredentials,
   hasStoredCredentials,
+  flushPendingWrites,
+  getKeyringReadCount,
+  getKeyringWriteCount,
+  resetKeyringInstrumentation,
 };

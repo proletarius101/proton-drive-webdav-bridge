@@ -5,11 +5,12 @@
  */
 
 import { Command } from 'commander';
-import { hasStoredCredentials, getStoredCredentials } from '../keychain.js';
-import { getLogFilePath } from '../paths.js';
+import { getStoredCredentials } from '../keychain.js';
+import { getLogFilePath, getCredentialsFilePath } from '../paths.js';
 import { getConfig } from '../config.js';
 import { logger } from '../logger.js';
 import { readPidFile, isProcessRunning } from './daemon-utils.js';
+import { existsSync } from 'fs';
 
 export function registerStatusCommand(program: Command): void {
   program
@@ -52,15 +53,23 @@ export function registerStatusCommand(program: Command): void {
           status.server.url = `${protocol}://${config.webdav.host}:${config.webdav.port}`;
         }
 
-        // Check auth status
-        if (await hasStoredCredentials()) {
+        // Check auth status (without reading credentials - just check file exists)
+        // This avoids keyring/DBus calls on every status check
+        const credsFileExists = existsSync(getCredentialsFilePath());
+        if (credsFileExists) {
           status.auth.loggedIn = true;
-          try {
-            const creds = await getStoredCredentials();
-            status.auth.username = creds?.username || null;
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            logger.warn(`Failed to retrieve stored credentials: ${message}`);
+          // Only read credentials if not running as JSON (for display purposes)
+          if (!options.json) {
+            try {
+              const creds = await getStoredCredentials();
+              status.auth.username = creds?.username || null;
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              logger.warn(`Failed to retrieve stored credentials: ${message}`);
+            }
+          } else {
+            // For JSON output, we can skip username if it causes keyring calls
+            status.auth.username = null;
           }
         }
 
