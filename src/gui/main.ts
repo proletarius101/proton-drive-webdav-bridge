@@ -5,6 +5,70 @@ import {
   isEnabled as autostartIsEnabled,
   disable as autostartDisable,
 } from '@tauri-apps/plugin-autostart';
+import { isCommandError, getErrorMessage, ErrorCodes, ErrorMessages } from '../errors/types.js';
+
+// ============================================================================
+// Error Handling Utilities
+// ============================================================================
+
+/**
+ * Show error notification to user
+ */
+function showError(error: unknown) {
+  const message = isCommandError(error)
+    ? ErrorMessages[error.code]
+    : getErrorMessage(error);
+  
+  const alertEl = document.getElementById('error-alert');
+  if (alertEl) {
+    alertEl.textContent = message;
+    alertEl.style.display = 'block';
+    setTimeout(() => {
+      alertEl.style.display = 'none';
+    }, 5000);
+  } else {
+    console.error('Error:', message);
+  }
+}
+
+/**
+ * Handle command invocation with error discrimination
+ */
+async function invokeCommand<T>(
+  command: string,
+  args?: Record<string, unknown>
+): Promise<T | null> {
+  try {
+    return await invoke<T>(command, args);
+  } catch (error) {
+    if (isCommandError(error)) {
+      // Handle specific error codes
+      switch (error.code) {
+        case ErrorCodes.SIDECAR_ALREADY_RUNNING:
+          console.log('Server already running');
+          break;
+        case ErrorCodes.SERVER_NOT_RUNNING:
+          setBadge('stopped', 'Stopped');
+          break;
+        case ErrorCodes.MOUNT_TIMEOUT:
+        case ErrorCodes.SERVER_INIT_TIMEOUT:
+          setBadge('stopped', 'Timeout');
+          break;
+        case ErrorCodes.PORT_IN_USE:
+        case ErrorCodes.INVALID_PORT:
+          console.warn('Port configuration error:', error.message);
+          break;
+        case ErrorCodes.AUTH_FAILED:
+          console.warn('Authentication error:', error.message);
+          break;
+        default:
+          console.error(`[${error.code}] ${error.message}`);
+      }
+    }
+    showError(error);
+    return null;
+  }
+}
 
 // Utilities
 const $ = (id: string) => document.getElementById(id) as HTMLElement | null;
@@ -332,13 +396,52 @@ export function initGui(opts?: {
     try {
       await invokeFn(on ? 'mount_drive' : 'unmount_drive');
 
-      // Wait a bit for GIO mount to complete before refreshing
-      await new Promise((r) => setTimeout(r, 1000));
+      // Wait for GIO mount/unmount to stabilize with retries
+      // GIO operations can take time and may need multiple checks
+      const maxRetries = 5;
+      const retryDelayMs = 1000;
+      let mountStatus: string | null = null;
+      let lastError: any = null;
+
+      for (let i = 0; i < maxRetries; i++) {
+        await new Promise((r) => setTimeout(r, retryDelayMs));
+        try {
+          mountStatus = await invokeFn('check_mount_status');
+          const isMounted = mountStatus !== null;
+          
+          // If mount status matches desired state, we're done
+          if (isMounted === on) {
+            break;
+          }
+          // If this is the last retry and status doesn't match, log it
+          if (i === maxRetries - 1) {
+            lastError = new Error(
+              `Mount status mismatch: expected ${on ? 'mounted' : 'unmounted'}, ` +
+              `got ${isMounted ? 'mounted' : 'unmounted'}`
+            );
+          }
+        } catch (err) {
+          lastError = err;
+          // Continue retrying
+        }
+      }
+
+      // Update the switch based on the final mount status
+      setSwitchState('mount', mountStatus !== null);
+      setSwitchState('account-mount', mountStatus !== null);
+      
+      // Refresh other status info
       await refreshStatus(invokeFn, opts?.checkTimeoutMs ?? 1000);
+      
+      // Log any persistent errors for debugging
+      if (lastError) {
+        console.warn('Mount status check completed with warnings:', lastError);
+      }
     } catch (err: any) {
       console.error('mount action failed', err);
       // revert toggle to previous state on failure
       setSwitchState('mount', !on);
+      // Refresh status to show actual state
       await refreshStatus(invokeFn, opts?.checkTimeoutMs ?? 1000);
     }
   });
@@ -536,7 +639,7 @@ export function initGui(opts?: {
       area.scrollTop = area.scrollHeight;
     });
 
-    // Mount status events are ignored by the UI (explicit mount-status element removed).
+    // Mount status events are ignored by the UI (explicit mount:status element removed).
 
     // Accounts change updates
     listenFn('accounts:changed', (event: any) => {
@@ -555,6 +658,23 @@ export function initGui(opts?: {
     listenFn('global:autostart', (event: any) => {
       const val = event.payload ?? event ?? false;
       setSwitchState('autostart-side', !!val);
+    });
+
+    // Mount status events from the sidecar — display briefly and log
+    listenFn('mount:status', (event: any) => {
+      const payload = event.payload ?? event ?? '';
+      try {
+        const msg = String(payload);
+        const live = $('live-status');
+        if (live) live.textContent = msg;
+        const area = $('log-area') as HTMLPreElement | null;
+        if (area) {
+          area.textContent += `[mount] ${msg}\n`;
+          area.scrollTop = area.scrollHeight;
+        }
+      } catch (e) {
+        // ignore
+      }
     });
   } catch (err) {
     // listen may not be available in tests; ignore failures

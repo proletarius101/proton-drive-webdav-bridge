@@ -3,9 +3,104 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_opener::OpenerExt;
+use thiserror::Error;
 
 // GIO prelude brings methods like `mounts`, `root`, `uri`, etc. into scope
-use gio::prelude::*; 
+use gio::prelude::*;
+
+// ============================================================================
+// Error Types
+// ============================================================================
+
+/// Structured error type for Tauri command execution.
+/// Serializes to JSON with error code and message for client discrimination.
+#[derive(Error, Debug, Deserialize, Clone)]
+pub enum CommandError {
+    #[error("Sidecar already running")]
+    SidecarAlreadyRunning,
+
+    #[error("Sidecar not running")]
+    SidecarNotRunning,
+
+    #[error("Failed to spawn sidecar: {0}")]
+    SidecarSpawnFailed(String),
+
+    #[error("Sidecar command failed: {0}")]
+    SidecarCommandFailed(String),
+
+    #[error("Invalid port number: {0}")]
+    InvalidPort(String),
+
+    #[error("Port already in use: {0}")]
+    PortInUse(u16),
+
+    #[error("Invalid email format: {0}")]
+    InvalidEmail(String),
+
+    #[error("Authentication failed: {0}")]
+    AuthFailed(String),
+
+    #[error("Server initialization timeout")]
+    ServerInitTimeout,
+
+    #[error("Mount operation timeout")]
+    MountTimeout,
+
+    #[error("Server not running")]
+    ServerNotRunning,
+
+    #[error("GIO error: {0}")]
+    GioError(String),
+
+    #[error("IO error: {0}")]
+    IoError(String),
+
+    #[error("Unknown error: {0}")]
+    Unknown(String),
+}
+
+impl CommandError {
+    /// Get the error code for client-side discrimination
+    pub fn code(&self) -> &'static str {
+        match self {
+            CommandError::SidecarAlreadyRunning => "SIDECAR_ALREADY_RUNNING",
+            CommandError::SidecarNotRunning => "SIDECAR_NOT_RUNNING",
+            CommandError::SidecarSpawnFailed(_) => "SIDECAR_SPAWN_FAILED",
+            CommandError::SidecarCommandFailed(_) => "SIDECAR_COMMAND_FAILED",
+            CommandError::InvalidPort(_) => "INVALID_PORT",
+            CommandError::PortInUse(_) => "PORT_IN_USE",
+            CommandError::InvalidEmail(_) => "INVALID_EMAIL",
+            CommandError::AuthFailed(_) => "AUTH_FAILED",
+            CommandError::ServerInitTimeout => "SERVER_INIT_TIMEOUT",
+            CommandError::MountTimeout => "MOUNT_TIMEOUT",
+            CommandError::ServerNotRunning => "SERVER_NOT_RUNNING",
+            CommandError::GioError(_) => "GIO_ERROR",
+            CommandError::IoError(_) => "IO_ERROR",
+            CommandError::Unknown(_) => "UNKNOWN_ERROR",
+        }
+    }
+}
+
+// Implement From<io::Error> for easier error conversion
+impl From<std::io::Error> for CommandError {
+    fn from(err: std::io::Error) -> Self {
+        CommandError::IoError(err.to_string())
+    }
+}
+
+// Custom serialize to include error code in JSON response
+impl Serialize for CommandError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("CommandError", 2)?;
+        state.serialize_field("code", self.code())?;
+        state.serialize_field("message", &self.to_string())?;
+        state.end()
+    }
+} 
 
 #[derive(Default)]
 pub struct SidecarState {
@@ -90,13 +185,18 @@ pub async fn start_sidecar(
     app: AppHandle,
     state: State<'_, SidecarState>,
     port: Option<u16>,
-) -> Result<u32, String> {
+) -> Result<u32, CommandError> {
     let mut lock = state.pid.lock().unwrap();
     if lock.is_some() {
-        return Err("Sidecar already running".into());
+        return Err(CommandError::SidecarAlreadyRunning);
     }
 
     let mut args = vec!["start".to_string()];
+    // In dev/GUI context, prefer starting without auth to allow mounting
+    // even before the user completes login; credentials can be added later.
+    args.push("--no-auth".to_string());
+    // Explicitly run in foreground so stdout/stderr are captured
+    args.push("--no-daemon".to_string());
     if let Some(p) = port {
         args.push("--port".to_string());
         args.push(p.to_string());
@@ -105,10 +205,10 @@ pub async fn start_sidecar(
     let sidecar_cmd = app
         .shell()
         .sidecar("proton-drive-webdav-bridge")
-        .map_err(|e| e.to_string())?
+        .map_err(|e| CommandError::SidecarSpawnFailed(e.to_string()))?
         .args(&args);
 
-    let (mut rx, child) = sidecar_cmd.spawn().map_err(|e| e.to_string())?;
+    let (mut rx, child) = sidecar_cmd.spawn().map_err(|e| CommandError::SidecarSpawnFailed(e.to_string()))?;
     let pid = child.pid();
     *lock = Some(pid);
 
@@ -155,22 +255,24 @@ pub async fn start_sidecar(
 pub async fn stop_sidecar(
     app: AppHandle,
     state: State<'_, SidecarState>,
-) -> Result<(), String> {
+) -> Result<(), CommandError> {
     let output = app
         .shell()
         .sidecar("proton-drive-webdav-bridge")
-        .map_err(|e| e.to_string())?
+        .map_err(|e| CommandError::SidecarSpawnFailed(e.to_string()))?
         .args(["stop"])
         .output()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| CommandError::IoError(e.to_string()))?;
 
     if output.status.success() {
         let mut lock = state.pid.lock().unwrap();
         *lock = None;
         Ok(())
     } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
+        Err(CommandError::SidecarCommandFailed(
+            String::from_utf8_lossy(&output.stderr).to_string(),
+        ))
     }
 }
 
@@ -178,7 +280,7 @@ pub async fn stop_sidecar(
 pub async fn get_status(
     app: AppHandle,
     state: State<'_, SidecarState>,
-) -> Result<StatusResponse, String> {
+) -> Result<StatusResponse, CommandError> {
     use tokio::time::{timeout, Duration};
 
     // Emit an intermediate "loading" status to the UI
@@ -247,7 +349,8 @@ fn default_status_response() -> StatusResponse {
         config: ConfigStatus {
             webdav: WebdavConfig {
                 host: "localhost".to_string(),
-                port: 12345,
+                // Align with app default port to avoid early mismatches
+                port: 8080,
                 https: false,
                 require_auth: false,
                 username: None,
@@ -271,57 +374,78 @@ fn find_mount_by_uri(mounts: impl IntoIterator<Item = (String, bool)>, target: &
         format!("{}/", target)
     };
 
-    for (uri, can_unmount) in mounts {
-        // Normalize mount URI too
-        let normalized_uri = if uri.ends_with('/') {
-            uri
-        } else {
-            format!("{}/", uri)
-        };
+    // Materialize mounts into a Vec so we can iterate multiple times
+    let mounts_vec: Vec<(String, bool)> = mounts.into_iter().collect();
 
+    // First try exact match (with trailing slash normalization)
+    for (uri, can_unmount) in mounts_vec.iter() {
+        let normalized_uri = if uri.ends_with('/') { uri.clone() } else { format!("{}/", uri) };
         if normalized_uri == normalized_target {
-            return Some(can_unmount);
+            return Some(*can_unmount);
         }
     }
+
+    // Fallback: try matching by port only. This handles cases where GIO
+    // normalizes hostnames (e.g. 127.0.0.1 vs localhost) or uses http(s) scheme.
+    // Extract port from the target (if any) and look for mounts that contain
+    // ":<port>" in their URI.
+    if let Some(colon_pos) = target.rfind(':') {
+        // get substring after last ':' up to optional trailing '/'
+        let after = &target[colon_pos + 1..];
+        let port_str = after.trim_end_matches('/');
+        if port_str.chars().all(|c| c.is_ascii_digit()) {
+            for (uri, can_unmount) in mounts_vec.iter() {
+                if uri.contains(&format!(":{}", port_str)) {
+                    return Some(*can_unmount);
+                }
+            }
+        }
+    }
+
     None
 }
 
 #[tauri::command]
-pub async fn login(app: AppHandle, email: String) -> Result<(), String> {
+pub async fn login(app: AppHandle, email: String) -> Result<(), CommandError> {
     let output = app
         .shell()
         .sidecar("proton-drive-webdav-bridge")
-        .map_err(|e| e.to_string())?
-        .args(["auth", "--email", &email])
+        .map_err(|e| CommandError::SidecarSpawnFailed(e.to_string()))?
+        // Use the correct CLI signature: auth login --username <email>
+        .args(["auth", "login", "--username", &email])
         .output()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| CommandError::IoError(e.to_string()))?;
 
     if output.status.success() {
         Ok(())
     } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
+        Err(CommandError::AuthFailed(
+            String::from_utf8_lossy(&output.stderr).to_string(),
+        ))
     }
 }
 
 #[tauri::command]
-pub async fn logout(app: AppHandle, state: State<'_, SidecarState>) -> Result<(), String> {
+pub async fn logout(app: AppHandle, state: State<'_, SidecarState>) -> Result<(), CommandError> {
     // Stop sidecar first if running
     let _ = stop_sidecar(app.clone(), state).await;
 
     let output = app
         .shell()
         .sidecar("proton-drive-webdav-bridge")
-        .map_err(|e| e.to_string())?
+        .map_err(|e| CommandError::SidecarSpawnFailed(e.to_string()))?
         .args(["auth", "--logout"])
         .output()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| CommandError::IoError(e.to_string()))?;
 
     if output.status.success() {
         Ok(())
     } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
+        Err(CommandError::AuthFailed(
+            String::from_utf8_lossy(&output.stderr).to_string(),
+        ))
     }
 }
 
@@ -330,7 +454,7 @@ pub async fn set_network_port(
     app: AppHandle,
     state: State<'_, SidecarState>,
     port: u16,
-) -> Result<(), String> {
+) -> Result<(), CommandError> {
     // Restart sidecar with new port
     let _ = stop_sidecar(app.clone(), state.clone()).await;
     start_sidecar(app, state, Some(port)).await?;
@@ -338,25 +462,27 @@ pub async fn set_network_port(
 }
 
 #[tauri::command]
-pub async fn purge_cache(app: AppHandle) -> Result<(), String> {
+pub async fn purge_cache(app: AppHandle) -> Result<(), CommandError> {
     let output = app
         .shell()
         .sidecar("proton-drive-webdav-bridge")
-        .map_err(|e| e.to_string())?
+        .map_err(|e| CommandError::SidecarSpawnFailed(e.to_string()))?
         .args(["config", "--purge-cache"])
         .output()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| CommandError::IoError(e.to_string()))?;
 
     if output.status.success() {
         Ok(())
     } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
+        Err(CommandError::SidecarCommandFailed(
+            String::from_utf8_lossy(&output.stderr).to_string(),
+        ))
     }
 }
 
 // Helper to compute config file path similar to the JS side
-fn get_config_file_path() -> Result<std::path::PathBuf, String> {
+fn get_config_file_path() -> Result<std::path::PathBuf, CommandError> {
     use std::path::PathBuf;
 
     // Respect XDG_CONFIG_HOME if present, fallback to $HOME/.config
@@ -365,30 +491,30 @@ fn get_config_file_path() -> Result<std::path::PathBuf, String> {
     } else if let Ok(home) = std::env::var("HOME") {
         PathBuf::from(home).join(".config")
     } else {
-        return Err("Could not determine config directory".into());
+        return Err(CommandError::Unknown("Could not determine config directory".into()));
     };
 
     let app_dir = base.join("proton-drive-webdav-bridge");
-    std::fs::create_dir_all(&app_dir).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&app_dir).map_err(|e| CommandError::IoError(e.to_string()))?;
     Ok(app_dir.join("config.json"))
 }
 
 #[tauri::command]
-pub async fn get_autostart() -> Result<bool, String> {
+pub async fn get_autostart() -> Result<bool, CommandError> {
     let path = get_config_file_path()?;
     if !path.exists() {
         return Ok(false);
     }
-    let contents = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let v: serde_json::Value = serde_json::from_str(&contents).map_err(|e| e.to_string())?;
+    let contents = std::fs::read_to_string(&path).map_err(|e| CommandError::IoError(e.to_string()))?;
+    let v: serde_json::Value = serde_json::from_str(&contents).map_err(|e| CommandError::Unknown(e.to_string()))?;
     Ok(v.get("autoStart").and_then(|x| x.as_bool()).unwrap_or(false))
 }
 
 #[tauri::command]
-pub async fn set_autostart(enabled: bool) -> Result<bool, String> {
+pub async fn set_autostart(enabled: bool) -> Result<bool, CommandError> {
     let path = get_config_file_path()?;
     let mut v = if path.exists() {
-        let contents = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        let contents = std::fs::read_to_string(&path).map_err(|e| CommandError::IoError(e.to_string()))?;
         serde_json::from_str::<serde_json::Value>(&contents).unwrap_or(serde_json::json!({}))
     } else {
         serde_json::json!({})
@@ -396,8 +522,8 @@ pub async fn set_autostart(enabled: bool) -> Result<bool, String> {
 
     v["autoStart"] = serde_json::json!(enabled);
 
-    let s = serde_json::to_string_pretty(&v).map_err(|e| e.to_string())?;
-    std::fs::write(&path, s).map_err(|e| e.to_string())?;
+    let s = serde_json::to_string_pretty(&v).map_err(|e| CommandError::Unknown(e.to_string()))?;
+    std::fs::write(&path, s).map_err(|e| CommandError::IoError(e.to_string()))?;
     Ok(enabled)
 }
 
@@ -411,10 +537,10 @@ fn should_open_with_path(uri: &str) -> bool {
 
 // Testable helper that accepts callbacks to perform the actual open actions.
 // This avoids the need to mock `AppHandle`/`Opener` in unit tests.
-fn open_uri_with<FPath, FUrl>(uri: &str, mut open_path: FPath, mut open_url: FUrl) -> Result<(), String>
+fn open_uri_with<FPath, FUrl>(uri: &str, mut open_path: FPath, mut open_url: FUrl) -> Result<(), CommandError>
 where
-    FPath: FnMut(&str) -> Result<(), String>,
-    FUrl: FnMut(&str) -> Result<(), String>,
+    FPath: FnMut(&str) -> Result<(), CommandError>,
+    FUrl: FnMut(&str) -> Result<(), CommandError>,
 {
     if uri.starts_with("file://") {
         let path = uri.trim_start_matches("file://");
@@ -431,7 +557,7 @@ pub async fn open_in_files(
     app: AppHandle,
     state: State<'_, SidecarState>,
     mount_path: Option<String>,
-) -> Result<(), String> {
+) -> Result<(), CommandError> {
     // If a specific path is provided, open it. Otherwise construct a DAV URI
     // using the sidecar config (preferred) or convert the server URL to a
     // dav:// form if necessary so the file manager is used instead of a
@@ -472,15 +598,15 @@ pub async fn open_in_files(
     // Delegate to the testable helper which accepts callbacks for path/url
     open_uri_with(
         &uri,
-        |p: &str| opener.open_path(p, None::<&str>).map_err(|e| e.to_string()),
-        |u: &str| opener.open_url(u, None::<&str>).map_err(|e| e.to_string()),
+        |p: &str| opener.open_path(p, None::<&str>).map_err(|e| CommandError::Unknown(e.to_string())),
+        |u: &str| opener.open_url(u, None::<&str>).map_err(|e| CommandError::Unknown(e.to_string())),
     )?;
 
     Ok(())
 }
 
 #[tauri::command]
-pub async fn mount_drive(app: AppHandle, state: State<'_, SidecarState>) -> Result<(), String> {
+pub async fn mount_drive(app: AppHandle, state: State<'_, SidecarState>) -> Result<(), CommandError> {
     let status = get_status(app.clone(), state).await.unwrap_or_else(|_| default_status_response());
 
     // Always construct dav:// URI for mounting (status.server.url is http://)
@@ -495,6 +621,9 @@ pub async fn mount_drive(app: AppHandle, state: State<'_, SidecarState>) -> Resu
 
         let (tx, rx) = channel();
         let uri_clone = uri.clone();
+
+        // Emit mounting start event to UI and then spawn blocking operation
+        let _ = app.emit("mount:status", "Mounting...");
 
         // Spawn blocking operation in a thread with its own GLib context
         std::thread::spawn(move || {
@@ -544,9 +673,6 @@ pub async fn mount_drive(app: AppHandle, state: State<'_, SidecarState>) -> Resu
                 // Run the loop - this blocks until quit() is called
                 loop_obj.run();
 
-                // Placeholder: Notify UI asynchronously (to be implemented)
-                // Example: app.emit("mount-status", "Mounting in progress...").unwrap();
-
                 inner_rx.try_recv().unwrap_or_else(|_| Err("Mount timed out".into()))
             });
 
@@ -555,10 +681,22 @@ pub async fn mount_drive(app: AppHandle, state: State<'_, SidecarState>) -> Resu
         });
 
         match rx.recv_timeout(Duration::from_secs(20)) {
-            Ok(Ok(())) => Ok(()),
-            Ok(Err(e)) => Err(format!("Failed to mount: {}", e)),
-            Err(_) => Err("Mount operation timed out".into()),
+            Ok(Ok(())) => {
+                let _ = app.emit("mount:status", "Mounted");
+                Ok(())
+            }
+            Ok(Err(e)) => {
+                let msg = format!("Failed to mount: {}", e);
+                let _ = app.emit("mount:status", msg.clone());
+                Err(CommandError::GioError(msg))
+            }
+            Err(_) => {
+                let _ = app.emit("mount:status", "Mount operation timed out");
+                Err(CommandError::MountTimeout)
+            },
         }
+
+
     }
 
     #[cfg(target_os = "macos")]
@@ -566,7 +704,7 @@ pub async fn mount_drive(app: AppHandle, state: State<'_, SidecarState>) -> Resu
         std::process::Command::new("open")
             .arg(&uri)
             .spawn()
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| CommandError::IoError(e.to_string()))?;
         Ok(())
     }
 
@@ -592,7 +730,7 @@ fn get_cached_mounts() -> Vec<gio::Mount> {
 }
 
 #[tauri::command]
-pub async fn unmount_drive(app: AppHandle, state: State<'_, SidecarState>) -> Result<(), String> {
+pub async fn unmount_drive(app: AppHandle, state: State<'_, SidecarState>) -> Result<(), CommandError> {
     let status = get_status(app.clone(), state.clone()).await.unwrap_or_else(|_| default_status_response());
     let target_uri = format!("dav://localhost:{}", status.config.webdav.port);
 
@@ -610,7 +748,10 @@ pub async fn unmount_drive(app: AppHandle, state: State<'_, SidecarState>) -> Re
             .collect();
 
         match find_mount_by_uri(mounts_vec.clone(), &target_uri) {
-            Some(false) => return Err("Mount cannot be unmounted via GIO".into()),
+            Some(false) => {
+                let _ = app.emit("mount:status", "Mount cannot be unmounted via GIO");
+                return Err(CommandError::GioError("Mount cannot be unmounted via GIO".into()))
+            }
             Some(true) => {
                 let normalized_target = if target_uri.ends_with('/') {
                     target_uri.clone()
@@ -634,31 +775,37 @@ pub async fn unmount_drive(app: AppHandle, state: State<'_, SidecarState>) -> Re
                             .arg("-u")
                             .arg(&uri)
                             .output()
-                            .map_err(|e| format!("Failed to execute gio command: {}", e))?;
+                            .map_err(|e| CommandError::IoError(format!("Failed to execute gio command: {}", e)))?;
 
                         if !output.status.success() {
-                            return Err(format!("Failed to unmount: {}", String::from_utf8_lossy(&output.stderr)));
+                            let msg = format!("Failed to unmount: {}", String::from_utf8_lossy(&output.stderr));
+                            let _ = app.emit("mount:status", msg.clone());
+                            return Err(CommandError::GioError(msg));
                         }
 
+                        let _ = app.emit("mount:status", "Unmounted");
                         return Ok(());
                     }
                 }
             }
-            None => return Err("Mount not found".into()),
+            None => {
+                let _ = app.emit("mount:status", "Mount not found");
+                return Err(CommandError::GioError("Mount not found".into()))
+            }
         }
         Ok(())
     }
 
     #[cfg(not(target_os = "linux"))]
     {
-        Err("Platform not supported".into())
+        Err(CommandError::Unknown("Platform not supported".into()))
     }
 }
 
 // Dev helper: emit a test sidecar log event. Only compiled in debug builds.
 #[cfg(debug_assertions)]
 #[tauri::command]
-pub async fn emit_test_log(app: AppHandle, level: Option<String>, message: Option<String>) -> Result<(), String> {
+pub async fn emit_test_log(app: AppHandle, level: Option<String>, message: Option<String>) -> Result<(), CommandError> {
     let _ = app.emit(
         "sidecar:log",
         LogEvent {
@@ -673,7 +820,7 @@ pub async fn emit_test_log(app: AppHandle, level: Option<String>, message: Optio
 // return an identifying string (mount name or mount root) if so.
 #[tauri::command]
 #[allow(dead_code)]
-pub async fn check_mount_status(app: AppHandle, state: State<'_, SidecarState>) -> Result<Option<String>, String> {
+pub async fn check_mount_status(app: AppHandle, state: State<'_, SidecarState>) -> Result<Option<String>, CommandError> {
     let status = get_status(app.clone(), state).await.unwrap_or_else(|_| default_status_response());
     let target_uri = format!("dav://localhost:{}", status.config.webdav.port);
 
@@ -696,7 +843,7 @@ pub async fn check_mount_status(app: AppHandle, state: State<'_, SidecarState>) 
             };
 
             // Emit intermediate results to the UI
-            app.emit("mount-status", format!("Checking mount: {}", uri.clone())).unwrap();
+            app.emit("mount:status", format!("Checking mount: {}", uri.clone())).unwrap();
 
             if normalized_uri == normalized_target {
                 let name = m.name();
@@ -705,7 +852,7 @@ pub async fn check_mount_status(app: AppHandle, state: State<'_, SidecarState>) 
         }
 
         // Emit final result to the UI
-        app.emit("mount-status", "No matching mount found").unwrap();
+        app.emit("mount:status", "No matching mount found").unwrap();
         Ok(None)
     }
 
@@ -759,6 +906,18 @@ mod tests {
         let res2 = find_mount_by_uri(mounts.clone(), "dav://localhost:12345/");
         assert_eq!(res1, Some(true));
         assert_eq!(res2, Some(true));
+    }
+
+    #[test]
+    fn test_find_mount_by_uri_host_variants() {
+        // The target may use "localhost" but GIO may report "127.0.0.1" or http scheme
+        let mounts = vec![
+            ("http://127.0.0.1:12345/".to_string(), true),
+            ("dav://127.0.0.1:12345/".to_string(), true),
+        ];
+        // Should find a match when target uses localhost
+        let res = find_mount_by_uri(mounts.clone(), "dav://localhost:12345");
+        assert_eq!(res, Some(true));
     }
 
     #[test]
