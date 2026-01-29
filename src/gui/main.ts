@@ -350,13 +350,19 @@ async function refreshStatus(
     // set address and port on ADWave inputs or fallbacks
     setInputValue('dav-url', davUrl);
     setInputValue('network-port', String(port));
-    // prefer ADWave switch, fall back to legacy input
-    setSwitchState('mount', !!s.mounted);
-    // keep the per-account switch in sync with global mount state
-    setSwitchState('account-mount', !!s.mounted);
-
-    // Mount status UI was removed; backend check omitted in UI.
-    // (If needed in future, expose a lightweight status via the badge or dedicated UI.)
+    
+    // Check actual mount status via check_mount_status command
+    // (not via s.mounted which doesn't exist in the status response)
+    try {
+      const mountStatus = await invokeFn('check_mount_status');
+      const isMounted = mountStatus !== null;
+      setSwitchState('mount', isMounted);
+      setSwitchState('account-mount', isMounted);
+    } catch (err) {
+      // If check_mount_status fails, don't crash the status update
+      // Just leave the mount switches in their current state
+      console.warn('Failed to check mount status:', err);
+    }
   } catch (e) {
     setBadge('stopped', 'Error');
   }
@@ -394,12 +400,19 @@ export function initGui(opts?: {
 
   addSwitchListener('mount', async (on) => {
     try {
-      await invokeFn(on ? 'mount_drive' : 'unmount_drive');
+      // Try the mount/unmount operation
+      // This may fail temporarily due to GIO timing, but we'll verify the actual state after
+      try {
+        await invokeFn(on ? 'mount_drive' : 'unmount_drive');
+      } catch (err: any) {
+        // Log the error but continue - we'll verify the actual mount state
+        console.warn(`${on ? 'mount' : 'unmount'} command returned error, verifying actual state:`, err);
+      }
 
       // Wait for GIO mount/unmount to stabilize with retries
       // GIO operations can take time and may need multiple checks
-      const maxRetries = 5;
-      const retryDelayMs = 1000;
+      const maxRetries = 8;
+      const retryDelayMs = 1500;
       let mountStatus: string | null = null;
       let lastError: any = null;
 
@@ -411,6 +424,7 @@ export function initGui(opts?: {
           
           // If mount status matches desired state, we're done
           if (isMounted === on) {
+            console.info(`Mount status verified: ${on ? 'mounted' : 'unmounted'}`);
             break;
           }
           // If this is the last retry and status doesn't match, log it
@@ -422,26 +436,40 @@ export function initGui(opts?: {
           }
         } catch (err) {
           lastError = err;
+          console.warn(`Mount status check attempt ${i + 1}/${maxRetries} failed:`, err);
           // Continue retrying
         }
       }
 
       // Update the switch based on the final mount status
-      setSwitchState('mount', mountStatus !== null);
-      setSwitchState('account-mount', mountStatus !== null);
+      const finalMountStatus = mountStatus !== null;
+      setSwitchState('mount', finalMountStatus);
+      setSwitchState('account-mount', finalMountStatus);
       
       // Refresh other status info
       await refreshStatus(invokeFn, opts?.checkTimeoutMs ?? 1000);
       
       // Log any persistent errors for debugging
       if (lastError) {
-        console.warn('Mount status check completed with warnings:', lastError);
+        console.warn('Mount operation completed with status:', { 
+          requested: on, 
+          actual: mountStatus !== null,
+          error: lastError.message 
+        });
       }
     } catch (err: any) {
-      console.error('mount action failed', err);
-      // revert toggle to previous state on failure
-      setSwitchState('mount', !on);
-      // Refresh status to show actual state
+      console.error('mount action failed with unexpected error:', err);
+      // Try to determine actual mount state before reverting
+      try {
+        const actualMountStatus = await invokeFn('check_mount_status');
+        const isMounted = actualMountStatus !== null;
+        setSwitchState('mount', isMounted);
+        setSwitchState('account-mount', isMounted);
+      } catch (statusErr) {
+        // If we can't determine state, revert the switch
+        setSwitchState('mount', !on);
+        setSwitchState('account-mount', !on);
+      }
       await refreshStatus(invokeFn, opts?.checkTimeoutMs ?? 1000);
     }
   });
