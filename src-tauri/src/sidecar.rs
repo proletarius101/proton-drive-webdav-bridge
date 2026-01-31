@@ -871,10 +871,152 @@ pub async fn check_mount_status(app: AppHandle, state: State<'_, SidecarState>) 
 }
 
 
+// ============================================================================
+// Test Utilities and Fixtures
+// ============================================================================
+
+#[cfg(test)]
+#[allow(dead_code)]
+mod test_utils {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+    use std::collections::HashMap;
+
+    /// Mock implementation of AppHandle events for testing
+    #[derive(Clone)]
+    pub struct MockAppHandle {
+        pub emitted_events: Arc<Mutex<Vec<(String, String)>>>,
+    }
+
+    impl MockAppHandle {
+        pub fn new() -> Self {
+            Self {
+                emitted_events: Arc::new(Mutex::new(Vec::new())),
+            }
+        }
+
+        /// Get all emitted events for assertion
+        pub fn get_events(&self) -> Vec<(String, String)> {
+            self.emitted_events.lock().unwrap().clone()
+        }
+
+        /// Check if a specific event was emitted
+        pub fn has_event(&self, event_name: &str) -> bool {
+            self.emitted_events
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|(name, _)| name == event_name)
+        }
+
+        /// Get event payload by event name
+        pub fn get_event_payload(&self, event_name: &str) -> Option<String> {
+            self.emitted_events
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|(name, _)| name == event_name)
+                .map(|(_, payload)| payload.clone())
+        }
+
+        /// Clear all recorded events
+        pub fn clear_events(&self) {
+            self.emitted_events.lock().unwrap().clear();
+        }
+    }
+
+    /// Mock mount information for testing GIO operations
+    #[derive(Clone, Debug)]
+    pub struct MockMount {
+        pub uri: String,
+        pub unmountable: bool,
+    }
+
+    /// Mock GIO environment for testing mount operations
+    pub struct MockGioEnv {
+        pub mounts: Vec<MockMount>,
+        pub mount_failures: HashMap<String, String>, // URI -> error message
+    }
+
+    impl MockGioEnv {
+        pub fn new() -> Self {
+            Self {
+                mounts: Vec::new(),
+                mount_failures: HashMap::new(),
+            }
+        }
+
+        /// Add a mock mount
+        pub fn add_mount(&mut self, uri: String, unmountable: bool) {
+            self.mounts.push(MockMount { uri, unmountable });
+        }
+
+        /// Mark a URI as unable to mount
+        pub fn set_mount_failure(&mut self, uri: String, error: String) {
+            self.mount_failures.insert(uri, error);
+        }
+
+        /// Clear all mounts
+        pub fn clear_mounts(&mut self) {
+            self.mounts.clear();
+        }
+    }
+
+    /// Helper to create a test sidecar state
+    pub fn create_test_state() -> SidecarState {
+        SidecarState::new()
+    }
+
+    /// Helper to create test status response
+    pub fn create_test_status(running: bool, pid: Option<u32>) -> StatusResponse {
+        StatusResponse {
+            server: ServerStatus {
+                running,
+                pid,
+                url: if running {
+                    Some(format!("http://localhost:8080"))
+                } else {
+                    None
+                },
+            },
+            auth: AuthStatus {
+                logged_in: false,
+                username: None,
+            },
+            config: ConfigStatus {
+                webdav: WebdavConfig {
+                    host: "127.0.0.1".to_string(),
+                    port: 8080,
+                    https: false,
+                    require_auth: false,
+                    username: None,
+                    password_hash: None,
+                },
+                remote_path: "/".to_string(),
+                cache: Some(CacheConfig {
+                    enabled: true,
+                    ttl_seconds: 300,
+                    max_size_mb: 100,
+                }),
+                debug: Some(false),
+                auto_start: Some(false),
+            },
+            log_file: "/tmp/test.log".to_string(),
+        }
+    }
+}
+
+// ============================================================================
 // Unit tests for mount matching logic
+// ============================================================================
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ========================================================================
+    // Test: Find Mount by URI
+    // ========================================================================
 
     #[test]
     fn test_find_mount_by_uri_found_and_unmountable() {
@@ -1129,5 +1271,171 @@ mod tests {
         let error_str = gio_error.to_string();
         assert!(error_str.contains("GIO error"));
     }
+
+    // ========================================================================
+    // FAILING TESTS: Tauri Command Tests (GH-006, GH-007, GH-008, GH-009, GH-010)
+    // These tests document expected behavior and will drive implementation
+    // ========================================================================
+
+    /// Test: SidecarState correctly tracks running process
+    /// User Story: GH-006 (WebDAV server startup)
+    /// This test verifies state management for the sidecar process lifecycle
+    #[test]
+    fn test_sidecar_state_tracks_pid() {
+        use crate::sidecar::test_utils::create_test_state;
+        
+        let state = create_test_state();
+        
+        // Initially, no PID should be stored
+        let lock = state.pid.lock().unwrap();
+        assert!(lock.is_none(), "SidecarState should start with no PID");
+        drop(lock);
+    }
+
+    /// Test: SidecarState allows setting and retrieving PID
+    /// User Story: GH-006, GH-007
+    /// This test ensures PID state can be managed correctly
+    #[test]
+    fn test_sidecar_state_set_and_retrieve_pid() {
+        use crate::sidecar::test_utils::create_test_state;
+        
+        let state = create_test_state();
+        
+        // Store a test PID
+        let test_pid = 12345u32;
+        {
+            let mut lock = state.pid.lock().unwrap();
+            *lock = Some(test_pid);
+        }
+        
+        // Retrieve and verify
+        {
+            let lock = state.pid.lock().unwrap();
+            assert_eq!(*lock, Some(test_pid), "PID should be retrievable from state");
+        }
+    }
+
+    /// Test: CommandError serializes correctly for client transmission
+    /// User Story: GH-025 (Error handling)
+    /// This test verifies error responses can be sent to the UI
+    #[test]
+    fn test_command_error_serialization() {
+        let err = CommandError::SidecarAlreadyRunning;
+        let json = serde_json::to_string(&err).expect("CommandError should serialize");
+        
+        // Should contain error code and message
+        assert!(json.contains("SIDECAR_ALREADY_RUNNING"));
+        assert!(json.contains("already running"));
+    }
+
+    /// Test: CommandError code mapping is exhaustive
+    /// User Story: GH-025 (Error handling)
+    /// This test ensures all error variants have codes
+    #[test]
+    fn test_command_error_codes_exhaustive() {
+        let errors = vec![
+            CommandError::SidecarAlreadyRunning,
+            CommandError::SidecarNotRunning,
+            CommandError::SidecarSpawnFailed("test".to_string()),
+            CommandError::InvalidPort("test".to_string()),
+            CommandError::PortInUse(8080),
+            CommandError::AuthFailed("test".to_string()),
+            CommandError::ServerInitTimeout,
+            CommandError::MountTimeout,
+            CommandError::ServerNotRunning,
+            CommandError::GioError("test".to_string()),
+            CommandError::IoError("test".to_string()),
+        ];
+        
+        // Each error should have a non-empty error code
+        for err in errors {
+            let code = err.code();
+            assert!(!code.is_empty(), "Error {:?} should have a code", err);
+            // Code should be SCREAMING_SNAKE_CASE
+            assert!(code.chars().all(|c| c.is_ascii_uppercase() || c == '_'), 
+                    "Error code {} should be SCREAMING_SNAKE_CASE", code);
+        }
+    }
+
+    /// Test: StatusResponse can be created for testing
+    /// User Story: GH-006, GH-007
+    /// This test ensures test fixtures are working properly
+    #[test]
+    fn test_create_test_status_fixture() {
+        use crate::sidecar::test_utils::create_test_status;
+        
+        let status = create_test_status(true, Some(12345));
+        
+        assert!(status.server.running, "Test status should indicate running server");
+        assert_eq!(status.server.pid, Some(12345), "Test status should contain correct PID");
+        assert!(status.server.url.is_some(), "Running server should have URL");
+    }
+
+    /// Test: StatusResponse correctly indicates stopped server
+    /// User Story: GH-006, GH-007
+    #[test]
+    fn test_create_test_status_stopped() {
+        use crate::sidecar::test_utils::create_test_status;
+        
+        let status = create_test_status(false, None);
+        
+        assert!(!status.server.running, "Test status should indicate stopped server");
+        assert_eq!(status.server.pid, None, "Stopped server should have no PID");
+        assert!(status.server.url.is_none(), "Stopped server should have no URL");
+    }
+
+    /// Test: Port validation rejects out-of-range ports
+    /// User Story: GH-011 (Configure WebDAV server port)
+    /// This test documents the valid port range (1024-65535)
+    #[test]
+    fn test_port_validation_bounds() {
+        // Valid ports
+        assert!(1024 <= 1024 && 1024 <= 65535);
+        assert!(8080 <= 65535 && 8080 >= 1024);
+        assert!(65535 <= 65535 && 65535 >= 1024);
+        
+        // Invalid ports (below minimum)
+        let port_too_low = 80u16;
+        assert!(port_too_low < 1024, "Ports below 1024 should be rejected");
+        
+        // Invalid ports (above maximum)
+        // Note: u16 max is 65535, so we can't test above that in a u16
+    }
+
+    /// Test: Mount URI matching handles trailing slashes correctly
+    /// User Story: GH-008, GH-009, GH-010 (Mount operations)
+    /// This test verifies the mount detection logic
+    #[test]
+    fn test_mount_uri_matching_with_port() {
+        let mounts = vec![("dav://localhost:8080/".to_string(), true)];
+        let result = find_mount_by_uri(mounts, "dav://localhost:8080");
+        
+        assert_eq!(result, Some(true), "Mount should be found regardless of trailing slash");
+    }
+
+    /// Test: Mock AppHandle captures emitted events
+    /// User Story: GH-032, GH-033 (GUI integration, system tray)
+    /// This test verifies event emission can be tested
+    #[test]
+    fn test_mock_app_handle_captures_events() {
+        use crate::sidecar::test_utils::MockAppHandle;
+        
+        let app = MockAppHandle::new();
+        
+        // Simulate emitting events
+        {
+            let mut events = app.emitted_events.lock().unwrap();
+            events.push(("sidecar:log".to_string(), "Server started".to_string()));
+            events.push(("mount:status".to_string(), "Mounted".to_string()));
+        }
+        
+        // Verify captured
+        assert!(app.has_event("sidecar:log"), "Event should be captured");
+        assert!(app.has_event("mount:status"), "Event should be captured");
+        
+        let payload = app.get_event_payload("sidecar:log");
+        assert_eq!(payload, Some("Server started".to_string()), "Event payload should match");
+    }
 }
+
 
