@@ -19,7 +19,8 @@
     "frontendDist": "../dist/gui",
     "devUrl": "http://localhost:5173",
     "beforeDevCommand": "bun run build:bin --outfile ./dist/proton-drive-webdav-bridge-${TAURI_ENV_TARGET_TRIPLE} && bun run gui:dev",
-    "beforeBuildCommand": "bun run build:bin --outfile ./dist/proton-drive-webdav-bridge-${TAURI_ENV_TARGET_TRIPLE} && bun run gui:build"
+    "beforeBuildCommand": "bun run build:bin --outfile ./dist/proton-drive-webdav-bridge-${TAURI_ENV_TARGET_TRIPLE} && bun run gui:build",
+    "additionalWatchFolders": ["../src"]
   },
   "bundle": {
     "active": true,

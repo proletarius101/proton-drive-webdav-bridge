@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { initGui } from '../src/gui/main'
+import { initGui } from '../src/gui/main.ts'
 
 // Minimal fake element used in tests
 function makeEl() {
@@ -17,28 +17,32 @@ function makeEl() {
 
 describe('GUI init', () => {
   it('initializes without throwing and updates mount status', async () => {
-    const elements = new Map<string, any>()
-    ;[
-      'service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle',
-      'open-files', 'copy-url', 'toggle-log', 'log-area', 'purge-cache', 'logout', 'apply-port', 'network-port'
-    ].forEach((id) => elements.set(id, makeEl()))
+      // Create actual DOM elements provided by happy-dom
+    const ids = ['service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle',
+      'open-files', 'copy-url', 'toggle-log', 'log-area', 'purge-cache', 'logout', 'apply-port', 'network-port']
 
-    // make network-port present and provide value
-    elements.get('network-port').value = '123'
+    // Ensure document is clean
+    document.body.innerHTML = ''
 
-    // Provide a minimal global document
-    // @ts-ignore - test harness
-    global.document = {
-      getElementById: (id: string) => elements.get(id) || null
-    }
+    ids.forEach((id) => {
+      let el: HTMLElement
+      if (id === 'quota-bar') el = document.createElement('progress')
+      else if (id === 'dav-url' || id === 'network-port') el = document.createElement('input')
+      else if (id === 'log-area') el = document.createElement('pre')
+      else el = document.createElement('div')
+      el.id = id
+      if (el instanceof HTMLInputElement) el.value = ''
+      document.body.appendChild(el)
+    })
 
-    // Provide minimal navigator.clipboard
-    // @ts-ignore
-    global.navigator = { clipboard: { writeText: async () => {} } }
+    // Set initial network-port value
+    const portInput = document.getElementById('network-port') as HTMLInputElement
+    portInput.value = '123'
 
-    // Provide minimal window for event handlers
-    // @ts-ignore
-    global.window = { addEventListener: (_: string, __: any) => {} }
+    // Ensure navigator.clipboard exists (do not replace navigator)
+    if (!(navigator as any).clipboard) (navigator as any).clipboard = { writeText: async () => {} }
+
+    // Ensure window has addEventListener (happy-dom provides it)
 
     const mockInvoke = async (cmd: string) => {
       if (cmd === 'get_status') {
@@ -64,8 +68,8 @@ describe('GUI init', () => {
 
 
     // Ensure address and network port were loaded from status
-    const portEl = elements.get('network-port')
-    const davEl = elements.get('dav-url')
+    const portEl = document.getElementById('network-port') as HTMLInputElement
+    const davEl = document.getElementById('dav-url') as HTMLInputElement
     expect(portEl.value).toBe('12345')
     expect(davEl.value).toBe('dav://localhost:12345')
 
@@ -73,26 +77,29 @@ describe('GUI init', () => {
   })
 
   it('handles start_sidecar rejection without unhandledrejection', async () => {
-    const elements = new Map<string, any>()
-    ;[
-      'service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle',
-      'open-files', 'copy-url', 'toggle-log', 'log-area', 'purge-cache', 'logout', 'apply-port', 'network-port'
-    ].forEach((id) => elements.set(id, makeEl()))
+    // Create actual DOM elements provided by happy-dom
+    const ids = ['service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle',
+      'open-files', 'copy-url', 'toggle-log', 'log-area', 'purge-cache', 'logout', 'apply-port', 'network-port']
 
-    // @ts-ignore
-    global.document = { getElementById: (id: string) => elements.get(id) || null }
-    // @ts-ignore
-    global.navigator = { clipboard: { writeText: async () => {} } }
+    document.body.innerHTML = ''
+    ids.forEach((id) => {
+      let el: HTMLElement
+      if (id === 'quota-bar') el = document.createElement('progress')
+      else if (id === 'dav-url' || id === 'network-port') el = document.createElement('input')
+      else if (id === 'log-area') el = document.createElement('pre')
+      else el = document.createElement('div')
+      el.id = id
+      document.body.appendChild(el)
+    })
+
+    if (!(navigator as any).clipboard) (navigator as any).clipboard = { writeText: async () => {} }
 
     let unhandledCalled = false
-    // @ts-ignore
-    global.window = {
-      addEventListener: (event: string, handler: any) => {
-        if (event === 'unhandledrejection') {
-          // store a handler that would be invoked if an unhandled rejection occurs
-          (global as any).__unhandled = handler
-        }
-      }
+    // Capture registered unhandledrejection handler by temporarily wrapping addEventListener
+    const originalAddEventListener = window.addEventListener
+    ;(window as any).addEventListener = (event: string, handler: any, options?: any) => {
+      if (event === 'unhandledrejection') (global as any).__unhandled = handler
+      return originalAddEventListener.call(window, event, handler, options)
     }
 
     let startCalled = false
@@ -127,19 +134,21 @@ describe('GUI init', () => {
   })
 
   it('starts sidecar and refreshes status to populate address and port', async () => {
-    const elements = new Map<string, any>()
-    ;[
-      'service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle',
-      'open-files', 'copy-url', 'toggle-log', 'log-area', 'purge-cache', 'logout', 'apply-port', 'network-port'
-    ].forEach((id) => elements.set(id, makeEl()))
+    // Create DOM elements via happy-dom
+    const ids = ['service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle',
+      'open-files', 'copy-url', 'toggle-log', 'log-area', 'purge-cache', 'logout', 'apply-port', 'network-port']
+    document.body.innerHTML = ''
+    ids.forEach((id) => {
+      let el: HTMLElement
+      if (id === 'quota-bar') el = document.createElement('progress')
+      else if (id === 'dav-url' || id === 'network-port') el = document.createElement('input')
+      else if (id === 'log-area') el = document.createElement('pre')
+      else el = document.createElement('div')
+      el.id = id
+      document.body.appendChild(el)
+    })
 
-    // @ts-ignore
-    global.document = { getElementById: (id: string) => elements.get(id) || null }
-    // @ts-ignore
-    global.navigator = { clipboard: { writeText: async () => {} } }
-    // @ts-ignore
-    global.window = { addEventListener: (_: string, __: any) => {} }
-
+    if (!(navigator as any).clipboard) (navigator as any).clipboard = { writeText: async () => {} }
     let started = false
     const calls: string[] = []
     const mockInvoke = async (cmd: string) => {
@@ -158,8 +167,8 @@ describe('GUI init', () => {
     // wait long enough for start_sidecar and refresh to occur
     await new Promise((r) => setTimeout(r, 200))
 
-    const portEl = elements.get('network-port')
-    const davEl = elements.get('dav-url')
+    const portEl = document.getElementById('network-port') as HTMLInputElement
+    const davEl = document.getElementById('dav-url') as HTMLInputElement
 
     // Ensure we invoked get_status after start_sidecar
     expect(calls.some(c => c.startsWith('get_status:after-start'))).toBe(true)
@@ -171,18 +180,21 @@ describe('GUI init', () => {
   })
 
   it('prefers server.url and converts to dav://host:port', async () => {
-    const elements = new Map<string, any>()
-    ;[
-      'service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle',
-      'open-files', 'copy-url', 'toggle-log', 'log-area', 'purge-cache', 'logout', 'apply-port', 'network-port'
-    ].forEach((id) => elements.set(id, makeEl()))
+    // Create DOM elements via happy-dom
+    const ids = ['service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle',
+      'open-files', 'copy-url', 'toggle-log', 'log-area', 'purge-cache', 'logout', 'apply-port', 'network-port']
+    document.body.innerHTML = ''
+    ids.forEach((id) => {
+      let el: HTMLElement
+      if (id === 'quota-bar') el = document.createElement('progress')
+      else if (id === 'dav-url' || id === 'network-port') el = document.createElement('input')
+      else if (id === 'log-area') el = document.createElement('pre')
+      else el = document.createElement('div')
+      el.id = id
+      document.body.appendChild(el)
+    })
 
-    // @ts-ignore
-    global.document = { getElementById: (id: string) => elements.get(id) || null }
-    // @ts-ignore
-    global.navigator = { clipboard: { writeText: async () => {} } }
-    // @ts-ignore
-    global.window = { addEventListener: (_: string, __: any) => {} }
+    if (!(navigator as any).clipboard) (navigator as any).clipboard = { writeText: async () => {} }
 
     const responses: any[] = []
     const mockInvoke = async (cmd: string) => {
@@ -203,8 +215,8 @@ describe('GUI init', () => {
     expect(responses.length).toBeGreaterThan(0)
     expect(responses[0].server.url).toBe('http://127.0.0.1:8080')
 
-    const portEl = elements.get('network-port')
-    const davEl = elements.get('dav-url')
+    const portEl = document.getElementById('network-port') as HTMLInputElement
+    const davEl = document.getElementById('dav-url') as HTMLInputElement
 
     expect(portEl.value).toBe('8080')
     expect(davEl.value).toBe('dav://127.0.0.1:8080')
@@ -213,18 +225,21 @@ describe('GUI init', () => {
   })
 
   it('handles get_status timeout without hanging', async () => {
-    const elements = new Map<string, any>()
-    ;[
-      'service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle',
-      'open-files', 'copy-url', 'toggle-log', 'log-area', 'purge-cache', 'logout', 'apply-port', 'network-port'
-    ].forEach((id) => elements.set(id, makeEl()))
+    // Create DOM elements via happy-dom
+    const ids = ['service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle',
+      'open-files', 'copy-url', 'toggle-log', 'log-area', 'purge-cache', 'logout', 'apply-port', 'network-port']
+    document.body.innerHTML = ''
+    ids.forEach((id) => {
+      let el: HTMLElement
+      if (id === 'quota-bar') el = document.createElement('progress')
+      else if (id === 'dav-url' || id === 'network-port') el = document.createElement('input')
+      else if (id === 'log-area') el = document.createElement('pre')
+      else el = document.createElement('div')
+      el.id = id
+      document.body.appendChild(el)
+    })
 
-    // @ts-ignore
-    global.document = { getElementById: (id: string) => elements.get(id) || null }
-    // @ts-ignore
-    global.navigator = { clipboard: { writeText: async () => {} } }
-    // @ts-ignore
-    global.window = { addEventListener: (_: string, __: any) => {} }
+    if (!(navigator as any).clipboard) (navigator as any).clipboard = { writeText: async () => {} }
 
     const mockInvoke = async (cmd: string) => {
       if (cmd === 'get_status') return new Promise(() => {}) // never resolves
@@ -237,7 +252,7 @@ describe('GUI init', () => {
     // wait long enough for the short timeout to fire
     await new Promise((r) => setTimeout(r, 50))
 
-    const badge = elements.get('service-badge')
+    const badge = document.getElementById('service-badge') as HTMLElement
     expect(badge.textContent).toBe('Unavailable')
 
     stop()

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { initGui, renderAccounts } from '../src/gui/main'
+import { initGui, renderAccounts } from '../src/gui/main.ts'
 
 // Minimal fake element used in tests
 function makeEl() {
@@ -20,18 +20,20 @@ function makeEl() {
 
 describe('Accounts UI', () => {
   it('renders accounts and shows per-account details', async () => {
-    const elements = new Map<string, any>()
-    ;[
-      'service-badge', 'live-status', 'dav-url', 'mount-toggle',
-      'account-list', 'account-email', 'account-status-text', 'account-dav-url', 'account-network-port', 'account-mount-toggle'
-    ].forEach((id) => elements.set(id, makeEl()))
+    // Create real DOM elements
+    const ids = ['service-badge', 'live-status', 'dav-url', 'mount-toggle',
+      'account-list', 'account-email', 'account-status-text', 'account-dav-url', 'account-network-port', 'account-mount-toggle']
+    document.body.innerHTML = ''
+    ids.forEach((id) => {
+      let el: HTMLElement
+      if (id === 'account-list') el = document.createElement('div')
+      else if (id === 'account-network-port') el = document.createElement('input')
+      else el = document.createElement('div')
+      el.id = id
+      document.body.appendChild(el)
+    })
 
-    // @ts-ignore
-    global.document = { getElementById: (id: string) => elements.get(id) || null }
-    // @ts-ignore
-    global.navigator = { clipboard: { writeText: async () => {} } }
-    // @ts-ignore
-    global.window = { addEventListener: (_: string, __: any) => {} }
+    if (!(navigator as any).clipboard) (navigator as any).clipboard = { writeText: async () => {} }
 
     // Mock invoke to provide accounts and per-account details
     const calls: string[] = []
@@ -56,7 +58,7 @@ describe('Accounts UI', () => {
 
     // wait for async activity (poll until badge is updated)
     // Check that per-account details are rendered (avoid asserting badge which may be updated by status refreshes)
-    const email = elements.get('account-email')
+    const email = document.getElementById('account-email') as HTMLElement
     const start = Date.now()
     while (Date.now() - start < 1000) {
       if (email.textContent === 'me@example.com') break
@@ -67,8 +69,8 @@ describe('Accounts UI', () => {
     expect(calls.includes('list_accounts')).toBe(true)
 
     // ensure account list was populated
-    const accList = elements.get('account-list')
-    expect(Array.isArray(accList.children)).toBe(true)
+    const accList = document.getElementById('account-list') as HTMLElement
+    expect(Array.isArray(Array.prototype.slice.call(accList.children))).toBe(true)
     expect(accList.children.length).toBeGreaterThan(0)
 
     // ensure renderAccounts ran and selected first account
@@ -76,7 +78,7 @@ describe('Accounts UI', () => {
     expect(global.__test_hook_calls && global.__test_hook_calls.includes('renderAccounts:1')).toBe(true)
 
     // selectAccount should run to set the account header (but selection may be overwritten by status refreshes)
-    const badge = elements.get('service-badge')
+    const badge = document.getElementById('service-badge') as HTMLElement
     // We can't assert badge reliably because status refresh may overwrite it; prefer checking the account details instead
 
     // ensure fetch was attempted
@@ -85,10 +87,10 @@ describe('Accounts UI', () => {
 
     expect(email.textContent).toBe('me@example.com')
 
-    const dav = elements.get('account-dav-url')
+    const dav = document.getElementById('account-dav-url') as HTMLInputElement
     expect(dav.value).toBe('dav://127.0.0.1:7777')
 
-    const port = elements.get('account-network-port')
+    const port = document.getElementById('account-network-port') as HTMLInputElement
     expect(port.value).toBe('7777')
 
     stop()

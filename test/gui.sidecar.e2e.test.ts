@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { initGui } from '../src/gui/main'
+import { initGui } from '../src/gui/main.ts'
 import { runSidecarCommand } from './fixtures/sidecar-stub'
 
 function makeEl() {
@@ -17,18 +17,21 @@ function makeEl() {
 
 describe('GUI E2E with sidecar stub', () => {
   it('shows Unavailable if sidecar status command hangs', async () => {
-    const elements = new Map<string, any>()
-    ;[
-      'service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle',
-      'open-files', 'copy-url', 'toggle-log', 'log-area', 'purge-cache', 'logout', 'apply-port', 'network-port'
-    ].forEach((id) => elements.set(id, makeEl()))
+    // Create DOM elements via happy-dom
+    const ids = ['service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle',
+      'open-files', 'copy-url', 'toggle-log', 'log-area', 'purge-cache', 'logout', 'apply-port', 'network-port']
+    document.body.innerHTML = ''
+    ids.forEach((id) => {
+      let el: HTMLElement
+      if (id === 'quota-bar') el = document.createElement('progress')
+      else if (id === 'dav-url' || id === 'network-port') el = document.createElement('input')
+      else if (id === 'log-area') el = document.createElement('pre')
+      else el = document.createElement('div')
+      el.id = id
+      document.body.appendChild(el)
+    })
 
-    // @ts-ignore
-    global.document = { getElementById: (id: string) => elements.get(id) || null }
-    // @ts-ignore
-    global.navigator = { clipboard: { writeText: async () => {} } }
-    // @ts-ignore
-    global.window = { addEventListener: (_: string, __: any) => {} }
+    if (!(navigator as any).clipboard) (navigator as any).clipboard = { writeText: async () => {} }
 
     // Implement an invoke function that shells out to the sidecar stub
     const invoke = async (cmd: string) => {
@@ -53,25 +56,28 @@ describe('GUI E2E with sidecar stub', () => {
     // wait for status timeout to happen
     await new Promise((r) => setTimeout(r, 100))
 
-    const badge = elements.get('service-badge')
+    const badge = document.getElementById('service-badge') as HTMLElement
     expect(badge.textContent).toBe('Unavailable')
 
     stop()
   })
 
   it('uses real sidecar output to show mounted state', async () => {
-    const elements = new Map<string, any>()
-    ;[
-      'service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle',
-      'open-files', 'copy-url', 'toggle-log', 'log-area', 'purge-cache', 'logout', 'apply-port', 'network-port'
-    ].forEach((id) => elements.set(id, makeEl()))
+    // Create DOM elements via happy-dom
+    const ids = ['service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle',
+      'open-files', 'copy-url', 'toggle-log', 'log-area', 'purge-cache', 'logout', 'apply-port', 'network-port']
+    document.body.innerHTML = ''
+    ids.forEach((id) => {
+      let el: HTMLElement
+      if (id === 'quota-bar') el = document.createElement('progress')
+      else if (id === 'dav-url' || id === 'network-port') el = document.createElement('input')
+      else if (id === 'log-area') el = document.createElement('pre')
+      else el = document.createElement('div')
+      el.id = id
+      document.body.appendChild(el)
+    })
 
-    // @ts-ignore
-    global.document = { getElementById: (id: string) => elements.get(id) || null }
-    // @ts-ignore
-    global.navigator = { clipboard: { writeText: async () => {} } }
-    // @ts-ignore
-    global.window = { addEventListener: (_: string, __: any) => {} }
+    if (!(navigator as any).clipboard) (navigator as any).clipboard = { writeText: async () => {} }
 
     const calls: string[] = []
     const invoke = async (cmd: string) => {
@@ -99,7 +105,7 @@ describe('GUI E2E with sidecar stub', () => {
     const { stop } = initGui({ invoke: invoke as any, listen: (_: string, __: any) => ({}) as any, checkTimeoutMs: 2000, statusTimeoutMs: 2000 })
 
     // Wait for badge to become 'Active'
-    const badge = elements.get('service-badge')
+    const badge = document.getElementById('service-badge') as HTMLElement
     const startWait = Date.now()
     while (Date.now() - startWait < 1000) {
       if (badge.textContent === 'Active') break

@@ -5,15 +5,16 @@ import {
   isEnabled as autostartIsEnabled,
   disable as autostartDisable,
 } from '@tauri-apps/plugin-autostart';
-import { isCommandError, getErrorMessage, ErrorCodes, ErrorMessages } from '../errors/types.js';
+import { isCommandError, getErrorMessage, ErrorMessages } from '../errors/types.js';
 
 // ============================================================================
 // Error Handling Utilities
 // ============================================================================
 
 /**
- * Show error notification to user
+ * Show error notification to user (currently unused - errors logged to console)
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function showError(error: unknown) {
   const message = isCommandError(error)
     ? ErrorMessages[error.code]
@@ -34,41 +35,42 @@ function showError(error: unknown) {
 /**
  * Handle command invocation with error discrimination
  */
-async function invokeCommand<T>(
-  command: string,
-  args?: Record<string, unknown>
-): Promise<T | null> {
-  try {
-    return await invoke<T>(command, args);
-  } catch (error) {
-    if (isCommandError(error)) {
-      // Handle specific error codes
-      switch (error.code) {
-        case ErrorCodes.SIDECAR_ALREADY_RUNNING:
-          console.log('Server already running');
-          break;
-        case ErrorCodes.SERVER_NOT_RUNNING:
-          setBadge('stopped', 'Stopped');
-          break;
-        case ErrorCodes.MOUNT_TIMEOUT:
-        case ErrorCodes.SERVER_INIT_TIMEOUT:
-          setBadge('stopped', 'Timeout');
-          break;
-        case ErrorCodes.PORT_IN_USE:
-        case ErrorCodes.INVALID_PORT:
-          console.warn('Port configuration error:', error.message);
-          break;
-        case ErrorCodes.AUTH_FAILED:
-          console.warn('Authentication error:', error.message);
-          break;
-        default:
-          console.error(`[${error.code}] ${error.message}`);
-      }
-    }
-    showError(error);
-    return null;
-  }
-}
+// Note: invokeCommand is kept for reference but not used; code uses invoke() directly
+// async function invokeCommand<T>(
+//   command: string,
+//   args?: Record<string, unknown>
+// ): Promise<T | null> {
+//   try {
+//     return await invoke<T>(command, args);
+//   } catch (error) {
+//     if (isCommandError(error)) {
+//       // Handle specific error codes
+//       switch (error.code) {
+//         case ErrorCodes.SIDECAR_ALREADY_RUNNING:
+//           console.log('Server already running');
+//           break;
+//         case ErrorCodes.SERVER_NOT_RUNNING:
+//           setBadge('stopped', 'Stopped');
+//           break;
+//         case ErrorCodes.MOUNT_TIMEOUT:
+//         case ErrorCodes.SERVER_INIT_TIMEOUT:
+//           setBadge('stopped', 'Timeout');
+//           break;
+//         case ErrorCodes.PORT_IN_USE:
+//         case ErrorCodes.INVALID_PORT:
+//           console.warn('Port configuration error:', error.message);
+//           break;
+//         case ErrorCodes.AUTH_FAILED:
+//           console.warn('Authentication error:', error.message);
+//           break;
+//         default:
+//           console.error(`[${error.code}] ${error.message}`);
+//       }
+//     }
+//     showError(error);
+//     return null;
+//   }
+// }
 
 // Utilities
 const $ = (id: string) => document.getElementById(id) as HTMLElement | null;
@@ -719,20 +721,22 @@ export function initGui(opts?: {
   // expose invokeFn for account helpers
   _invokeFn = invokeFn;
 
-  // Try to populate accounts list early (do this immediately so selection is available quickly)
-  (async () => {
-    try {
-      const accounts = await invokeFn('list_accounts').catch(() => null);
-      if (accounts && Array.isArray(accounts)) {
-        renderAccounts(accounts);
-        // ensure details are fetched early
-        try {
-          if (accounts.length > 0)
-            fetchAccountDetails(accounts[0].id ?? accounts[0].email ?? String(accounts[0]));
-        } catch (e) {}
-      }
-    } catch (e) {}
-  })();
+  // NOTE: renderAccounts() is no longer called here since React now owns the account list.
+  // The account list will be populated by React event listeners from the 'accounts:changed' event
+  // that fires when the Rust backend sends account updates via Tauri events.
+  // (async () => {
+  //   try {
+  //     const accounts = await invokeFn('list_accounts').catch(() => null);
+  //     if (accounts && Array.isArray(accounts)) {
+  //       renderAccounts(accounts);
+  //       // ensure details are fetched early
+  //       try {
+  //         if (accounts.length > 0)
+  //           fetchAccountDetails(accounts[0].id ?? accounts[0].email ?? String(accounts[0]));
+  //       } catch (e) {}
+  //     }
+  //   } catch (e) {}
+  // })();
 
   // Start sidecar on load if not running (optional)
   invokeFn('get_status')
@@ -844,28 +848,8 @@ if (typeof window !== 'undefined') {
     console.error('Unhandled promise rejection in UI', e.reason ?? e);
   });
 
-  window.addEventListener('DOMContentLoaded', async () => {
-    // Load ADWave assets only in a real browser runtime to avoid test/runtime errors
-    try {
-      // @ts-ignore - dynamic CSS import for bundler
-      await import('adwavecss/dist/styles.css');
-    } catch (e) {
-      // ignore in test / SSR environments
-      console.debug('adwavecss load skipped or failed', e);
-    }
-    try {
-      // @ts-ignore - dynamic import web components
-      await import('adwaveui');
-    } catch (e) {
-      console.debug('adwaveui load skipped or failed', e);
-    }
-
-    try {
-      initGui();
-    } catch (err) {
-      console.error('Failed to initialize GUI', err);
-    }
-  });
+  // Note: initGui() is called from main.tsx after React components mount
+  // to ensure DOM elements are available for event listener attachment
 }
 
 // TODO: Add authentication flow wiring and permission icons handlers

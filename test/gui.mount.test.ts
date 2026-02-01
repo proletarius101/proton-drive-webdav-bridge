@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
-import { initGui } from '../src/gui/main'
+import { initGui } from '../src/gui/main.ts'
 
 // Minimal fake element used in tests
 function makeEl() {
@@ -20,28 +20,30 @@ describe('GUI Mount Toggle', () => {
   let invokeCalls: Array<{ cmd: string; time: number }>
 
   beforeEach(() => {
-    elements = new Map<string, any>()
-    ;[
-      'service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle',
-      'open-files', 'copy-url', 'toggle-log', 'log-area', 'purge-cache', 'logout', 'apply-port', 'network-port'
-    ].forEach((id) => elements.set(id, makeEl()))
+    // Create real DOM elements
+    const ids = ['service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle',
+      'open-files', 'copy-url', 'toggle-log', 'log-area', 'purge-cache', 'logout', 'apply-port', 'network-port']
+    document.body.innerHTML = ''
+    ids.forEach((id) => {
+      let el: HTMLElement
+      if (id === 'quota-bar') el = document.createElement('progress')
+      else if (id === 'dav-url' || id === 'network-port') el = document.createElement('input')
+      else if (id === 'log-area') el = document.createElement('pre')
+      else el = document.createElement('div')
+      el.id = id
+      document.body.appendChild(el)
+    })
 
-    elements.get('network-port').value = '7777'
+    const portEl = document.getElementById('network-port') as HTMLInputElement
+    portEl.value = '7777'
 
-    // @ts-ignore
-    global.document = { getElementById: (id: string) => elements.get(id) || null }
-    // @ts-ignore
-    global.navigator = { clipboard: { writeText: async () => {} } }
-    // @ts-ignore
-    global.window = { addEventListener: (_: string, __: any) => {} }
+    if (!(navigator as any).clipboard) (navigator as any).clipboard = { writeText: async () => {} }
 
     invokeCalls = []
   })
 
   afterEach(() => {
-    delete (global as any).document
-    delete (global as any).navigator
-    delete (global as any).window
+    document.body.innerHTML = ''
   })
 
   it('handles mount_drive error gracefully and still verifies actual mount status', async () => {
