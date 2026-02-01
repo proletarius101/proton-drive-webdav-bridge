@@ -113,8 +113,8 @@ describe('GUI E2E with sidecar stub', () => {
     }
 
     expect(calls.includes('get_status')).toBe(true)
-    // GUI no longer calls check_mount_status; ensure we didn't invoke it
-    expect(calls.includes('check_mount_status')).toBe(false)
+    // GUI calls check_mount_status to verify mount; ensure it invoked it
+    expect(calls.includes('check_mount_status')).toBe(true)
     expect(badge.textContent).toBe('Active')
 
     // No unexpected console errors

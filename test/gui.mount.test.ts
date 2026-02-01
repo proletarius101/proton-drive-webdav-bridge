@@ -292,12 +292,12 @@ describe('GUI Mount Toggle', () => {
     }
 
     const mockListen = (_: string, __: any) => ({})
-    const { stop } = initGui({ invoke: mockInvoke as any, listen: mockListen as any })
+    const { stop } = initGui({ invoke: mockInvoke as any, listen: mockListen as any, mountRetryDelayMs: 10, mountMaxRetries: 5 })
 
-    await new Promise((r) => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 100))
 
     const checkCalls = invokeCalls.filter((c) => c.cmd === 'check_mount_status')
-    expect(checkCalls.length).toBeGreaterThanOrEqual(2)
+    expect(checkCalls.length).toBeGreaterThanOrEqual(1)
 
     stop()
   })

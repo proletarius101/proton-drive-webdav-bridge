@@ -171,50 +171,8 @@ let _invokeFn: typeof invoke | undefined;
 
 // Account list rendering & selection
 let _selectedAccountId: string | null = null;
-export function renderAccounts(accounts: Array<any>) {
-  // test hook
-  try {
-    if ((globalThis as any).__test_hook_calls)
-      (globalThis as any).__test_hook_calls.push(`renderAccounts:${accounts.length}`);
-  } catch (e) {}
-
-  const list = document.getElementById('account-list');
-  if (!list) return;
-  list.innerHTML = '';
-  accounts.forEach((a: any) => {
-    // create a button for the sidebar
-    let btn: any;
-    try {
-      btn = document.createElement('button');
-      btn.className = 'nav-sidebar-btn';
-      btn.type = 'button';
-    } catch (e) {
-      btn = {
-        addEventListener: (_: string, __: Function) => {},
-        setAttribute: (_: string, __: string) => {},
-        dataset: {},
-        className: '',
-      };
-    }
-
-    if (btn.setAttribute) btn.setAttribute('role', 'option');
-    btn.innerHTML = `<span class="nav-icon" aria-hidden="true">👤</span><div style="display:inline-block;margin-left:8px"><div class="nav-label">${a.email ?? a.name ?? String(a)}</div><div class="nav-subtitle">${a.email ?? ''}</div></div>`;
-    btn.dataset['aid'] = a.id ?? a.email ?? String(a);
-    btn.addEventListener('click', () => selectAccount(btn.dataset['aid']!, a));
-    // keyboard activation (Enter / Space)
-    btn.addEventListener('keydown', (e: KeyboardEvent) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        (btn as HTMLButtonElement).click();
-      }
-    });
-
-    if (list.appendChild) list.appendChild(btn);
-  });
-  // pick first if available (force selection so headless tests and early render get details)
-  if (accounts.length > 0)
-    selectAccount(accounts[0].id ?? accounts[0].email ?? String(accounts[0]), accounts[0]);
-}
+// NOTE: `renderAccounts` was removed. The React `Sidebar` now owns account rendering.
+// Legacy DOM-based rendering removed as part of migration to React components.
 function selectAccount(id: string, account?: any) {
   // test hook
   try {
@@ -252,42 +210,12 @@ function selectAccount(id: string, account?: any) {
   }
   const live = document.getElementById('live-status');
   if (live) live.textContent = account?.status ?? 'Live status: N/A';
-
-  // fetch and render per-account details
-  fetchAccountDetails(id);
 }
 
-export async function fetchAccountDetails(id: string) {
-  // test hook: allow tests to detect fetch attempts
-  try {
-    if ((globalThis as any).__test_hook_calls)
-      (globalThis as any).__test_hook_calls.push(`fetchAccountDetails:${id}`);
-  } catch (e) {}
+// Per-account details are now rendered by React components; do not fetch here.
 
-  const invokeF = _invokeFn ?? invoke;
-  try {
-    const acc: any = await invokeF('get_account', { id }).catch(() => null);
-    renderAccountDetails(acc);
-  } catch (e) {
-    // ignore
-    renderAccountDetails(null);
-  }
-}
-
-function renderAccountDetails(account: any | null) {
-  const emailEl = document.getElementById('account-email');
-  const statusEl = document.getElementById('account-status-text');
-  if (!emailEl || !statusEl) return;
-  if (!account) {
-    emailEl.textContent = 'No account selected';
-    statusEl.textContent = '—';
-    setSwitchState('account-mount', false);
-    return;
-  }
-  emailEl.textContent = account.email ?? account.id ?? 'Account';
-  statusEl.textContent = account.status ?? 'Live status: N/A';
-  setSwitchState('account-mount', !!account.mounted);
-}
+// Account detail fetch and rendering moved to React `AccountDetails` component.
+// Legacy `fetchAccountDetails` and `renderAccountDetails` removed.
 
 async function refreshStatus(
   invokeFn: typeof invoke = invoke,
@@ -383,6 +311,8 @@ export function initGui(opts?: {
   listen?: typeof listen;
   checkTimeoutMs?: number;
   statusTimeoutMs?: number;
+  mountRetryDelayMs?: number;
+  mountMaxRetries?: number;
 }) {
   const invokeFn = opts?.invoke ?? invoke;
   const listenFn = opts?.listen ?? listen;
@@ -413,8 +343,8 @@ export function initGui(opts?: {
 
       // Wait for GIO mount/unmount to stabilize with retries
       // GIO operations can take time and may need multiple checks
-      const maxRetries = 8;
-      const retryDelayMs = 1500;
+      const maxRetries = opts?.mountMaxRetries ?? 8;
+      const retryDelayMs = opts?.mountRetryDelayMs ?? 1500;
       let mountStatus: string | null = null;
       let lastError: any = null;
 
@@ -671,17 +601,15 @@ export function initGui(opts?: {
 
     // Mount status events are ignored by the UI (explicit mount:status element removed).
 
-    // Accounts change updates
-    listenFn('accounts:changed', (event: any) => {
-      const payload = event.payload ?? event;
-      if (Array.isArray(payload)) renderAccounts(payload);
+    // Accounts change updates: React `Sidebar` will listen and update UI.
+    // We keep these listeners for compatibility but do not perform DOM rendering here.
+    listenFn('accounts:changed', (_event: any) => {
+      // No-op: React components handle account list updates via their own listeners
     });
 
-    // Account updated event (update details if currently selected)
-    listenFn('account:updated', (event: any) => {
-      const payload = event.payload ?? event;
-      if (!payload || !payload.id) return;
-      if (payload.id === _selectedAccountId) renderAccountDetails(payload);
+    // Account updated event: React `AccountDetails` handles updates directly.
+    listenFn('account:updated', (_event: any) => {
+      // No-op: React components will react to this event
     });
 
     // Global autostart status - update sidebar control only

@@ -1,37 +1,20 @@
 import { describe, it, expect } from 'bun:test'
-import { initGui, renderAccounts } from '../src/gui/main.ts'
+import * as React from 'react'
+import { createRoot } from 'react-dom/client'
+import { App } from '../src/gui/App'
+import * as event from '@tauri-apps/api/event'
+import { initGui } from '../src/gui/main'
 
-// Minimal fake element used in tests
-function makeEl() {
-  return {
-    textContent: '',
-    className: '',
-    value: '',
-    checked: false,
-    innerHTML: '',
-    children: [],
-    addEventListener: (_: string, __: Function) => {},
-    setAttribute: (_: string, __: string) => {},
-    appendChild: function (c: any) { this.children.push(c); },
-    querySelector: () => null,
-    dataset: {},
-  }
-}
+// This test ensures the React-driven account list and details work end-to-end
+// using the test invoke/listen hooks (so we don't rely on Tauri internals).
 
-describe('Accounts UI', () => {
+describe('Accounts UI (React)', () => {
   it('renders accounts and shows per-account details', async () => {
-    // Create real DOM elements
-    const ids = ['service-badge', 'live-status', 'dav-url', 'mount-toggle',
-      'account-list', 'account-email', 'account-status-text', 'account-dav-url', 'account-network-port', 'account-mount-toggle']
+    // Minimal DOM root for the SPA
     document.body.innerHTML = ''
-    ids.forEach((id) => {
-      let el: HTMLElement
-      if (id === 'account-list') el = document.createElement('div')
-      else if (id === 'account-network-port') el = document.createElement('input')
-      else el = document.createElement('div')
-      el.id = id
-      document.body.appendChild(el)
-    })
+    const root = document.createElement('div')
+    root.id = 'root'
+    document.body.appendChild(root)
 
     if (!(navigator as any).clipboard) (navigator as any).clipboard = { writeText: async () => {} }
 
@@ -51,40 +34,39 @@ describe('Accounts UI', () => {
       return true
     }
 
-    const { stop } = initGui({ invoke: mockInvoke as any, listen: (_: string, __: any) => ({}) as any, checkTimeoutMs: 20, statusTimeoutMs: 20 })
+    // stub listen so initGui doesn't rely on Tauri internals
+    const mockListen = async (_: string, __: any) => { return async () => {} }
 
-    // Force render accounts (some environments may not call list RPC synchronously)
-    renderAccounts([{ id: 'a1', email: 'me@example.com' }])
+    // Provide test invoke to components and init gui wiring
+    (globalThis as any).__test_invoke__ = mockInvoke
+    // @ts-ignore
+    global.__test_hook_calls = []
 
-    // wait for async activity (poll until badge is updated)
-    // Check that per-account details are rendered (avoid asserting badge which may be updated by status refreshes)
-    const email = document.getElementById('account-email') as HTMLElement
+    const gui = (initGui as any)({ invoke: mockInvoke as any, listen: mockListen as any, checkTimeoutMs: 20, statusTimeoutMs: 20 })
+
+    // render the SPA
+    const container = document.getElementById('root')!
+    createRoot(container).render(React.createElement(App, null))
+
+    // wait for async activity and rendered list and details
     const start = Date.now()
-    while (Date.now() - start < 1000) {
-      if (email.textContent === 'me@example.com') break
+    while (Date.now() - start < 2000) {
+      const list = document.getElementById('account-list')
+      const email = document.getElementById('account-email')
+      if (list && list.children && list.children.length > 0 && email && email.textContent === 'me@example.com') break
       await new Promise((r) => setTimeout(r, 20))
     }
 
-    // ensure backend calls happened
+    const accList = document.getElementById('account-list') as HTMLElement
+    expect(accList).toBeDefined()
+    expect(accList.children.length).toBeGreaterThan(0)
     expect(calls.includes('list_accounts')).toBe(true)
 
-    // ensure account list was populated
-    const accList = document.getElementById('account-list') as HTMLElement
-    expect(Array.isArray(Array.prototype.slice.call(accList.children))).toBe(true)
-    expect(accList.children.length).toBeGreaterThan(0)
-
-    // ensure renderAccounts ran and selected first account
-    // @ts-ignore
-    expect(global.__test_hook_calls && global.__test_hook_calls.includes('renderAccounts:1')).toBe(true)
-
-    // selectAccount should run to set the account header (but selection may be overwritten by status refreshes)
-    const badge = document.getElementById('service-badge') as HTMLElement
-    // We can't assert badge reliably because status refresh may overwrite it; prefer checking the account details instead
-
-    // ensure fetch was attempted
+    // ensure details fetched and rendered (test hook)
     // @ts-ignore
     expect(global.__test_hook_calls && global.__test_hook_calls.includes('fetchAccountDetails:a1')).toBe(true)
 
+    const email = document.getElementById('account-email') as HTMLElement
     expect(email.textContent).toBe('me@example.com')
 
     const dav = document.getElementById('account-dav-url') as HTMLInputElement
@@ -93,6 +75,7 @@ describe('Accounts UI', () => {
     const port = document.getElementById('account-network-port') as HTMLInputElement
     expect(port.value).toBe('7777')
 
-    stop()
+    // stop gui interval (if returned)
+    try { if (gui && typeof gui.stop === 'function') gui.stop(); } catch (e) {}
   })
 })

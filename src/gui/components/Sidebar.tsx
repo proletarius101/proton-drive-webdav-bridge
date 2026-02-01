@@ -37,15 +37,14 @@ export function Sidebar({ onViewChange, onAccountSelect }: SidebarProps) {
 
     loadAccounts();
 
-    // Subscribe to 'accounts:changed' events from backend
+    // Subscribe to 'accounts:changed' events from backend and notify parent
     const accountsChangedHandler = (event: any) => {
       const payload = event.payload ?? event;
       if (Array.isArray(payload)) {
         setAccounts(payload);
-        if (payload.length > 0) {
-          (async () => {
-            try { (await import('../main.js')).fetchAccountDetails(payload[0].id ?? payload[0].email ?? String(payload[0])); } catch (e) {}
-          })();
+        // Let parent (App) know the first account so it can drive AccountDetails
+        if (payload.length > 0 && onAccountSelect) {
+          onAccountSelect(payload[0].id ?? payload[0].email ?? String(payload[0]));
         }
       }
     };
