@@ -4,7 +4,7 @@ Quick, focused notes to help an AI coding agent be productive in this repo.
 
 ## TL;DR
 - Use Bun to run, build and test this project (not plain Node). Commands below. ✅
-- Key areas: CLI (`src/cli/*`), Drive client (`src/drive.ts`), WebDAV adapter/resource (`src/webdav/*`), Keychain (`src/keychain.ts`), Lock/metadata DB (`src/webdav/*Manager.ts`). 🔧
+- Key areas: CLI (`src/cli/*`), Drive client (`src/drive.ts`), WebDAV adapter/resource (`src/webdav/*`), Keychain (`src/keychain.ts`), Lock/metadata DB (`src/webdav/*Manager.ts`), Frontend: React (`src/gui/`) using Mielo UI for an Adwaita look & feel. 🔧
 
 ## Quick commands
 - Install: `bun install`
@@ -22,11 +22,13 @@ Quick, focused notes to help an AI coding agent be productive in this repo.
 - Drive SDK wrapper: `src/drive.ts` (DriveClientManager) — see `listFolder`, `resolvePath`, `uploadFile`, `downloadFile` for core patterns
 - WebDAV interface: `src/webdav/server.ts`, `ProtonDriveAdapter.ts`, `ProtonDriveResource.ts` — Nephele adapter & resource mapping
 - Locking & metadata persistence: `src/webdav/LockManager.ts`, `src/webdav/MetadataManager.ts` (uses `bun:sqlite`) 💾
+- Frontend/UI: React components live in `src/gui/` (see `src/gui/components/`), styled with Mielo UI to provide the Adwaita look & feel — see `MIGRATION_TO_MIELO_UI.md` for migration notes
 - Reference implementations: `https://github.com/sciactive/nephele/tree/master/packages/adapter-s3` (WebDAV server & adapter examples) and `https://github.com/ProtonMail/WebClients` (Drive API usage, pagination, and client-side patterns)
 
 ## Project-specific patterns & gotchas ⚠️
 - Bun-first: code uses `bun:sqlite` and Bun's test runner; run and test with `bun`, not Node.
 - ESM imports include `.js` extension in source imports (keep `./foo.js` in imports).
+- Frontend: the UI is implemented with React and styled using Mielo UI to achieve an Adwaita look & feel. See `src/gui/` and `MIGRATION_TO_MIELO_UI.md` for guidance when modifying UI components and styles.
 - Streaming: prefer streaming for uploads/downloads (avoid buffering). See `getFileDownloader()` + `downloadToStream(...)` and `uploadFile(...)` which accepts ReadableStream / Buffer / Uint8Array.
 - Large-folder listing: `drive.ts::listFolder` uses a direct API pagination path when UIDs contain `~`, and then `iterateNodes` to preserve order — changing this can affect performance and ordering.
 - Cache invalidation: after mutations call `adapter.invalidateFolderCache(parentUid)` and clear cached node/metadata (`this._node = undefined; this._metaReady = null; this._cachedProps = null`) — see `ProtonDriveResource.create/setStream/delete/move`.
