@@ -5,72 +5,10 @@ import {
   isEnabled as autostartIsEnabled,
   disable as autostartDisable,
 } from '@tauri-apps/plugin-autostart';
-import { isCommandError, getErrorMessage, ErrorMessages } from '../errors/types.js';
 
 // ============================================================================
-// Error Handling Utilities
+// DOM Utilities
 // ============================================================================
-
-/**
- * Show error notification to user (currently unused - errors logged to console)
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function showError(error: unknown) {
-  const message = isCommandError(error)
-    ? ErrorMessages[error.code]
-    : getErrorMessage(error);
-  
-  const alertEl = document.getElementById('error-alert');
-  if (alertEl) {
-    alertEl.textContent = message;
-    alertEl.style.display = 'block';
-    setTimeout(() => {
-      alertEl.style.display = 'none';
-    }, 5000);
-  } else {
-    console.error('Error:', message);
-  }
-}
-
-/**
- * Handle command invocation with error discrimination
- */
-// Note: invokeCommand is kept for reference but not used; code uses invoke() directly
-// async function invokeCommand<T>(
-//   command: string,
-//   args?: Record<string, unknown>
-// ): Promise<T | null> {
-//   try {
-//     return await invoke<T>(command, args);
-//   } catch (error) {
-//     if (isCommandError(error)) {
-//       // Handle specific error codes
-//       switch (error.code) {
-//         case ErrorCodes.SIDECAR_ALREADY_RUNNING:
-//           console.log('Server already running');
-//           break;
-//         case ErrorCodes.SERVER_NOT_RUNNING:
-//           setBadge('stopped', 'Stopped');
-//           break;
-//         case ErrorCodes.MOUNT_TIMEOUT:
-//         case ErrorCodes.SERVER_INIT_TIMEOUT:
-//           setBadge('stopped', 'Timeout');
-//           break;
-//         case ErrorCodes.PORT_IN_USE:
-//         case ErrorCodes.INVALID_PORT:
-//           console.warn('Port configuration error:', error.message);
-//           break;
-//         case ErrorCodes.AUTH_FAILED:
-//           console.warn('Authentication error:', error.message);
-//           break;
-//         default:
-//           console.error(`[${error.code}] ${error.message}`);
-//       }
-//     }
-//     showError(error);
-//     return null;
-//   }
-// }
 
 // Utilities
 const $ = (id: string) => document.getElementById(id) as HTMLElement | null;
@@ -166,56 +104,6 @@ function addInputListener(id: string, handler: (value: string) => void) {
     if (fb) fb.addEventListener('change', () => handler(getInputValue(id)));
   }
 }
-// Local invoke reference for account fetches
-let _invokeFn: typeof invoke | undefined;
-
-// Account list rendering & selection
-let _selectedAccountId: string | null = null;
-// NOTE: `renderAccounts` was removed. The React `Sidebar` now owns account rendering.
-// Legacy DOM-based rendering removed as part of migration to React components.
-function selectAccount(id: string, account?: any) {
-  // test hook
-  try {
-    if ((globalThis as any).__test_hook_calls)
-      (globalThis as any).__test_hook_calls.push(`selectAccount:${id}`);
-  } catch (e) {}
-
-  _selectedAccountId = id;
-  const list = document.getElementById('account-list');
-  if (!list) return;
-  Array.from(list.children).forEach((c: any) => {
-    try {
-      const btn = c;
-      const isSelected = btn && btn.dataset && btn.dataset['aid'] === id;
-      if (btn && btn.setAttribute) btn.setAttribute('aria-selected', isSelected ? 'true' : 'false');
-      try {
-        if (btn && btn.classList && typeof btn.classList.toggle === 'function')
-          btn.classList.toggle('active', isSelected);
-        else {
-          if (isSelected && btn && !String(btn.className).includes('active'))
-            btn.className = (String(btn.className) + ' active').trim();
-          if (!isSelected && btn)
-            btn.className = String(btn.className)
-              .replace(/\bactive\b/g, '')
-              .trim();
-        }
-      } catch (e) {}
-    } catch (e) {}
-  });
-  // Update UI to reflect selected account
-  const b = document.getElementById('service-badge');
-  if (b && account && account.email) {
-    b.className = 'badge active';
-    b.textContent = account.email;
-  }
-  const live = document.getElementById('live-status');
-  if (live) live.textContent = account?.status ?? 'Live status: N/A';
-}
-
-// Per-account details are now rendered by React components; do not fetch here.
-
-// Account detail fetch and rendering moved to React `AccountDetails` component.
-// Legacy `fetchAccountDetails` and `renderAccountDetails` removed.
 
 async function refreshStatus(
   invokeFn: typeof invoke = invoke,
@@ -287,7 +175,6 @@ async function refreshStatus(
       const mountStatus = await invokeFn('check_mount_status');
       const isMounted = mountStatus !== null;
       setSwitchState('mount', isMounted);
-      setSwitchState('account-mount', isMounted);
     } catch (err) {
       // If check_mount_status fails, don't crash the status update
       // Just leave the mount switches in their current state
@@ -376,7 +263,6 @@ export function initGui(opts?: {
       // Update the switch based on the final mount status
       const finalMountStatus = mountStatus !== null;
       setSwitchState('mount', finalMountStatus);
-      setSwitchState('account-mount', finalMountStatus);
       
       // Refresh other status info
       await refreshStatus(invokeFn, opts?.checkTimeoutMs ?? 1000);
@@ -396,11 +282,9 @@ export function initGui(opts?: {
         const actualMountStatus = await invokeFn('check_mount_status');
         const isMounted = actualMountStatus !== null;
         setSwitchState('mount', isMounted);
-        setSwitchState('account-mount', isMounted);
       } catch (statusErr) {
         // If we can't determine state, revert the switch
         setSwitchState('mount', !on);
-        setSwitchState('account-mount', !on);
       }
       await refreshStatus(invokeFn, opts?.checkTimeoutMs ?? 1000);
     }
@@ -500,63 +384,6 @@ export function initGui(opts?: {
     if (dav && navigator?.clipboard) await navigator.clipboard.writeText(dav);
   });
 
-  // per-account actions
-  $safe('configure-account')?.addEventListener('click', async () => {
-    if (!_selectedAccountId) return;
-    try {
-      await _invokeFn?.('configure_account', { id: _selectedAccountId });
-    } catch (e) {
-      console.error('configure failed', e);
-    }
-  });
-  $safe('signout-account')?.addEventListener('click', async () => {
-    if (!_selectedAccountId) return;
-    try {
-      await _invokeFn?.('signout_account', { id: _selectedAccountId });
-    } catch (e) {
-      console.error('signout failed', e);
-    }
-  });
-
-  // Per-account mount switch proxies global mount/unmount commands. Backend currently
-  // exposes only global mount/unmount, so we proxy those and keep UI consistent.
-  addSwitchListener('account-mount', async (on) => {
-    const statusEl = $safe('account-status-text');
-    if (!_selectedAccountId) {
-      // No account selected – revert and inform
-      setSwitchState('account-mount', !on);
-      if (statusEl) statusEl.textContent = 'No account selected';
-      return;
-    }
-
-    try {
-      if (on) {
-        if (statusEl) {
-          statusEl.textContent = 'Mounting...';
-        }
-      } else {
-        if (statusEl) {
-          statusEl.textContent = 'Unmounting...';
-        }
-      }
-
-      await invokeFn(on ? 'mount_drive' : 'unmount_drive');
-
-      if (on) {
-        if (statusEl) statusEl.textContent = 'Mounted successfully';
-      } else {
-        if (statusEl) statusEl.textContent = 'Unmounted';
-      }
-
-      // Refresh global status so both switches reflect the true state
-      await refreshStatus(invokeFn, opts?.checkTimeoutMs ?? 1000);
-    } catch (err: any) {
-      console.error('account mount failed', err);
-      setSwitchState('account-mount', !on);
-      if (statusEl) statusEl.textContent = `Mount error: ${err?.message ?? String(err)}`;
-      await refreshStatus(invokeFn, opts?.checkTimeoutMs ?? 1000);
-    }
-  });
 
   $safe('toggle-log')?.addEventListener('click', () => {
     $safe('log-area')?.classList.toggle('hidden');
@@ -598,8 +425,6 @@ export function initGui(opts?: {
       area.textContent += `[${payload.level}] ${msg}\n`;
       area.scrollTop = area.scrollHeight;
     });
-
-    // Mount status events are ignored by the UI (explicit mount:status element removed).
 
     // Accounts change updates: React `Sidebar` will listen and update UI.
     // We keep these listeners for compatibility but do not perform DOM rendering here.
@@ -645,26 +470,6 @@ export function initGui(opts?: {
   );
   // Run initial refresh now
   refreshStatus(invokeFn, opts?.checkTimeoutMs ?? 1000, opts?.statusTimeoutMs ?? 2000);
-
-  // expose invokeFn for account helpers
-  _invokeFn = invokeFn;
-
-  // NOTE: renderAccounts() is no longer called here since React now owns the account list.
-  // The account list will be populated by React event listeners from the 'accounts:changed' event
-  // that fires when the Rust backend sends account updates via Tauri events.
-  // (async () => {
-  //   try {
-  //     const accounts = await invokeFn('list_accounts').catch(() => null);
-  //     if (accounts && Array.isArray(accounts)) {
-  //       renderAccounts(accounts);
-  //       // ensure details are fetched early
-  //       try {
-  //         if (accounts.length > 0)
-  //           fetchAccountDetails(accounts[0].id ?? accounts[0].email ?? String(accounts[0]));
-  //       } catch (e) {}
-  //     }
-  //   } catch (e) {}
-  // })();
 
   // Start sidecar on load if not running (optional)
   invokeFn('get_status')
@@ -779,5 +584,3 @@ if (typeof window !== 'undefined') {
   // Note: initGui() is called from main.tsx after React components mount
   // to ensure DOM elements are available for event listener attachment
 }
-
-// TODO: Add authentication flow wiring and permission icons handlers

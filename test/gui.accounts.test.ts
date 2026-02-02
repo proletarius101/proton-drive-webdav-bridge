@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'bun:test'
 import * as React from 'react'
-import { createRoot } from 'react-dom/client'
 import { App } from '../src/gui/App'
 import { initGui } from '../src/gui/main'
-import { TauriProvider } from '../src/gui/tauri/TauriProvider'
+import { renderWithTauri } from './helpers/renderWithTauri'
+import type { TauriApi } from '../src/gui/tauri/TauriProvider'
 
 // This test ensures the React-driven account list and details work end-to-end
 // using the test invoke/listen hooks (so we don't rely on Tauri internals).
@@ -21,31 +21,23 @@ describe('Accounts UI (React)', () => {
     // Mock invoke to provide accounts and per-account details
     const calls: string[] = []
 
-    const mockInvoke = async (cmd: string, args?: any) => {
+    const mockInvoke = (async (cmd: string, args?: Record<string, unknown>) => {
       calls.push(cmd + (args ? ':' + JSON.stringify(args) : ''))
-      // @ts-ignore
-      if (global.__test_hook_calls) global.__test_hook_calls.push(cmd)
       if (cmd === 'get_status') return { server: { running: false, pid: null, url: null } }
       if (cmd === 'list_accounts') return [{ id: 'a1', email: 'me@example.com' }]
       if (cmd === 'get_account') return { id: 'a1', email: 'me@example.com', status: 'OK', mounted: true, address: 'dav://127.0.0.1:7777', port: 7777 }
       return true
-    }
+    }) as TauriApi['invoke']
 
     // stub listen so initGui doesn't rely on Tauri internals
-    const mockListen = async (_: string, __: any) => { return async () => {} }
+    const mockListen: TauriApi['listen'] = async (_: string, __: any) => { return async () => {} }
 
     // ensure init wiring uses our invoke and stubbed listen
     const gui = (initGui as any)({ invoke: mockInvoke as any, listen: mockListen as any, checkTimeoutMs: 20, statusTimeoutMs: 20 })
 
     // render the SPA within a provider so components use our mock API
     const container = document.getElementById('root')!
-    createRoot(container).render(
-      React.createElement(
-        TauriProvider,
-        { invoke: mockInvoke, listen: mockListen },
-        React.createElement(App, null)
-      )
-    )
+    renderWithTauri(container, React.createElement(App, null), { invoke: mockInvoke, listen: mockListen })
 
     // wait for async activity and rendered list and details
     const start = Date.now()

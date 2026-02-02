@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'bun:test'
 import * as React from 'react'
-import { createRoot } from 'react-dom/client'
 import { App } from '../src/gui/App'
-import { TauriProvider } from '../src/gui/tauri/TauriProvider'
 import { initGui } from '../src/gui/main'
+import { renderWithTauri } from './helpers/renderWithTauri'
+import type { TauriApi } from '../src/gui/tauri/TauriProvider'
 
 describe('Sidebar account loading', () => {
   it('loads accounts via invoke and renders list', async () => {
@@ -17,27 +17,21 @@ describe('Sidebar account loading', () => {
 
     // mock invoke and listen
     const calls: string[] = []
-    const mockInvoke = async (cmd: string, args?: any) => {
+    const mockInvoke = (async (cmd: string, args?: Record<string, unknown>) => {
       calls.push(cmd)
       if (cmd === 'list_accounts') return [{ id: 'a1', email: 'me@example.com' }]
       if (cmd === 'get_account') return { id: 'a1', email: 'me@example.com', status: 'OK', mounted: true, address: 'dav://127.0.0.1:7777', port: 7777 }
       return true
-    }
+    }) as TauriApi['invoke']
 
     // stub listen so Sidebar can subscribe
-    const mockListen = async (_: string, __: any) => { return async () => {} }
+    const mockListen: TauriApi['listen'] = async (_: string, __: any) => { return async () => {} }
 
     // ensure main.js uses our invoke and stubbed listen
     const gui = (initGui as any)({ invoke: mockInvoke as any, listen: mockListen as any, checkTimeoutMs: 20, statusTimeoutMs: 20 })
 
     const container = document.getElementById('root')!
-    createRoot(container).render(
-      React.createElement(
-        TauriProvider,
-        { invoke: mockInvoke, listen: mockListen },
-        React.createElement(App, null)
-      )
-    )
+    renderWithTauri(container, React.createElement(App, null), { invoke: mockInvoke, listen: mockListen })
 
 
     // wait for async activity and rendered list and details
