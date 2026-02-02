@@ -59,4 +59,73 @@ describe('Accounts UI (React)', () => {
     // stop gui interval (if returned)
     try { if (gui && typeof gui.stop === 'function') gui.stop(); } catch (e) {}
   })
+
+  it('shows account when get_status returns logged-in auth data', async () => {
+    // Test scenario: get_status returns proper auth data (simulating sidecar with credentials)
+    document.body.innerHTML = ''
+    const root = document.createElement('div')
+    root.id = 'root'
+    document.body.appendChild(root)
+
+    if (!(navigator as any).clipboard) (navigator as any).clipboard = { writeText: async () => {} }
+
+    const calls: string[] = []
+
+    // This mock simulates what happens when the sidecar has been authenticated
+    const mockInvoke = (async (cmd: string, args?: Record<string, unknown>) => {
+      calls.push(cmd + (args ? ':' + JSON.stringify(args) : ''))
+      if (cmd === 'get_status') {
+        return {
+          server: { running: true, pid: 1234, url: 'http://127.0.0.1:8080' },
+          auth: { loggedIn: true, username: 'user@proton.me' },
+          config: {
+            webdav: { host: '127.0.0.1', port: 8080, https: false, requireAuth: false },
+            remotePath: '/',
+          },
+          logFile: '/tmp/test.log',
+        }
+      }
+      if (cmd === 'list_accounts') return [{ id: 'user@proton.me', email: 'user@proton.me', status: 'active' }]
+      if (cmd === 'get_account') {
+        const id = (args as any)?.id
+        if (id === 'user@proton.me') {
+          return { id: 'user@proton.me', email: 'user@proton.me', status: 'active' }
+        }
+        return null
+      }
+      return true
+    }) as TauriApi['invoke']
+
+    const mockListen: TauriApi['listen'] = async (_: string, __: any) => { return async () => {} }
+
+    const gui = (initGui as any)({ invoke: mockInvoke as any, listen: mockListen as any, checkTimeoutMs: 20, statusTimeoutMs: 20 })
+
+    const container = document.getElementById('root')!
+    renderWithTauri(container, React.createElement(App, null), { invoke: mockInvoke, listen: mockListen })
+
+    // Wait for the account email to appear
+    const start = Date.now()
+    while (Date.now() - start < 2000) {
+      const email = document.getElementById('account-email')
+      if (email && email.textContent && email.textContent !== 'No account selected') {
+        break
+      }
+      await new Promise((r) => setTimeout(r, 20))
+    }
+
+    const emailEl = document.getElementById('account-email') as HTMLElement
+    expect(emailEl).toBeDefined()
+    expect(emailEl.textContent).toBe('user@proton.me')
+
+    const statusEl = document.getElementById('account-status-text') as HTMLElement
+    expect(statusEl).toBeDefined()
+    expect(statusEl.textContent).toBe('active')
+
+    // Verify that list_accounts was called
+    expect(calls.some((c) => c === 'list_accounts')).toBe(true)
+    // Verify that get_account was called with the correct ID
+    expect(calls.some((c) => c.startsWith('get_account:'))).toBe(true)
+
+    try { if (gui && typeof gui.stop === 'function') gui.stop(); } catch (e) {}
+  })
 })

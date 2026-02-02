@@ -56,6 +56,8 @@ export interface Config {
   debug: boolean;
   /** Auto-start on system boot */
   autoStart: boolean;
+  /** Logged-in Proton account username/email (non-sensitive metadata) */
+  username?: string;
 }
 
 // ============================================================================

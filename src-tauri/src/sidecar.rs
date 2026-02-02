@@ -180,6 +180,17 @@ pub struct LogEvent {
     pub message: String,
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountInfo {
+    pub id: String,
+    pub email: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+}
+
 #[tauri::command]
 pub async fn start_sidecar(
     app: AppHandle,
@@ -822,6 +833,50 @@ pub async fn emit_test_log(app: AppHandle, level: Option<String>, message: Optio
         },
     );
     Ok(())
+}
+
+#[tauri::command]
+pub async fn list_accounts(app: AppHandle, state: State<'_, SidecarState>) -> Result<Vec<AccountInfo>, CommandError> {
+    // Get the current auth status via get_status
+    let status = get_status(app, state).await.unwrap_or_else(|_| default_status_response());
+    
+    // For now, we support a single account. Return account if username is available.
+    // We check for username presence rather than logged_in flag since the backend
+    // may provide username even before full auth is complete.
+    if let Some(username) = &status.auth.username {
+        if !username.is_empty() {
+            let account = AccountInfo {
+                id: username.clone(),
+                email: username.clone(),
+                name: None,
+                status: Some("active".to_string()),
+            };
+            return Ok(vec![account]);
+        }
+    }
+    
+    Ok(vec![])
+}
+
+#[tauri::command]
+pub async fn get_account(app: AppHandle, state: State<'_, SidecarState>, id: String) -> Result<Option<AccountInfo>, CommandError> {
+    // Get the current auth status
+    let status = get_status(app, state).await.unwrap_or_else(|_| default_status_response());
+    
+    // For single-account mode, return the account if username matches the requested ID
+    if let Some(username) = &status.auth.username {
+        if !username.is_empty() && (id == *username) {
+            let account = AccountInfo {
+                id: username.clone(),
+                email: username.clone(),
+                name: None,
+                status: Some("active".to_string()),
+            };
+            return Ok(Some(account));
+        }
+    }
+    
+    Ok(None)
 }
 
 // Query GIO to determine whether the DAV location is currently mounted and

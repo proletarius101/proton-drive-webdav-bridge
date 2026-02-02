@@ -9,14 +9,19 @@ export function AccountDetails({ accountId }: { accountId?: string | null }) {
   useEffect(() => {
     let unlisten: any;
     async function load() {
+      console.log('[AccountDetails] accountId changed to:', accountId);
       if (!accountId) {
+        console.log('[AccountDetails] No accountId, clearing account');
         setAccount(null);
         return;
       }
       try {
+        console.log('[AccountDetails] Calling get_account with id:', accountId);
         const acc: any = await invoke('get_account', { id: accountId }).catch(() => null);
+        console.log('[AccountDetails] get_account returned:', acc);
         setAccount(acc);
       } catch (e) {
+        console.error('[AccountDetails] Error getting account:', e);
         setAccount(null);
       }
     }
@@ -30,7 +35,9 @@ export function AccountDetails({ accountId }: { accountId?: string | null }) {
     };
 
     try {
-      listen('account:updated', handler).then((u) => (unlisten = u)).catch(() => {});
+      listen('account:updated', handler)
+        .then((u) => (unlisten = u))
+        .catch(() => {});
     } catch (e) {
       // ignore in test/SSR
     }
@@ -42,8 +49,8 @@ export function AccountDetails({ accountId }: { accountId?: string | null }) {
 
   return (
     <Mie.L.View p="large" gr="medium" f fc>
-      <Mie.Header title="Account" />
-      <div id="account-email" style={{ fontWeight: 'bold' }}>{account ? account.email ?? account.id : 'No account selected'}</div>
+      <Mie.Header title={account ? (account.email ?? account.id) : 'Account'} />
+      <div id="account-status-text">{account ? (account.status ?? 'Live status: N/A') : '—'}</div>
     </Mie.L.View>
   );
 }

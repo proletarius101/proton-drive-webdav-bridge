@@ -21,17 +21,26 @@ export function Sidebar({ onViewChange, onAccountSelect }: SidebarProps) {
     // Fetch initial accounts and listen for updates
     async function loadAccounts() {
       try {
+        console.log('[Sidebar] Calling list_accounts...');
         const list: any = await invokeFn('list_accounts');
+        console.log('[Sidebar] list_accounts returned:', list);
         if (Array.isArray(list)) {
           setAccounts(list);
+          console.log('[Sidebar] Set accounts state:', list);
           // select first account and notify parent so details component can fetch it
           const first = list[0];
           if (first && (first.id || first.email) && onAccountSelect) {
-            onAccountSelect(first.id ?? first.email ?? String(first));
+            const accountId = first.id ?? first.email ?? String(first);
+            console.log('[Sidebar] Calling onAccountSelect with:', accountId);
+            onAccountSelect(accountId);
+          } else {
+            console.log('[Sidebar] No first account to select or no onAccountSelect callback');
           }
+        } else {
+          console.log('[Sidebar] list_accounts did not return an array');
         }
       } catch (e) {
-        // ignore in test/SSR
+        console.error('[Sidebar] Error loading accounts:', e);
       }
     }
 

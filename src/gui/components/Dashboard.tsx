@@ -129,9 +129,6 @@ export function Dashboard() {
 
   return (
     <Mie.L.View f fc p="large" gr="large">
-      {/* Service Status */}
-      <Mie.Message>Active</Mie.Message>
-
       {/* Storage Quota */}
       <Mie.L.View f fc gr="small">
         <Mie.Header title="Storage Quota" />

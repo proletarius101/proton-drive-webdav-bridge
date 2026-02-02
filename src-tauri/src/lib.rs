@@ -8,7 +8,8 @@ pub fn run() {
   use crate::sidecar::{
     SidecarState, start_sidecar, stop_sidecar, get_status, login,
     set_network_port, purge_cache, open_in_files,
-    mount_drive, unmount_drive, check_mount_status, logout, get_autostart, set_autostart
+    mount_drive, unmount_drive, check_mount_status, logout, get_autostart, set_autostart,
+    list_accounts, get_account
   };
 
   let builder = tauri::Builder::default()
@@ -44,6 +45,8 @@ pub fn run() {
       logout,
       get_autostart,
       set_autostart,
+      list_accounts,
+      get_account,
       emit_test_log,
   ]);
 
@@ -62,6 +65,8 @@ pub fn run() {
       logout,
       get_autostart,
       set_autostart,
+      list_accounts,
+      get_account,
   ]);
 
   builder

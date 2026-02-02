@@ -53,23 +53,25 @@ export function registerStatusCommand(program: Command): void {
           status.server.url = `${protocol}://${config.webdav.host}:${config.webdav.port}`;
         }
 
-        // Check auth status (without reading credentials - just check file exists)
-        // This avoids keyring/DBus calls on every status check
+        // Check auth status
+        // Check if credentials exist (keyring has tokens)
+        // Username is stored in config.json (non-sensitive metadata)
         const credsFileExists = existsSync(getCredentialsFilePath());
-        if (credsFileExists) {
-          status.auth.loggedIn = true;
-          // Only read credentials if not running as JSON (for display purposes)
-          if (!options.json) {
-            try {
-              const creds = await getStoredCredentials();
-              status.auth.username = creds?.username || null;
-            } catch (error) {
-              const message = error instanceof Error ? error.message : String(error);
-              logger.warn(`Failed to retrieve stored credentials: ${message}`);
-            }
+        try {
+          const creds = await getStoredCredentials();
+          if (creds) {
+            status.auth.loggedIn = true;
+            // Username is stored in config as non-sensitive metadata
+            status.auth.username = config.username || creds.username || null;
+          }
+        } catch (error) {
+          // Fallback: if keyring fails but file exists, check config for username
+          if (credsFileExists && config.username) {
+            status.auth.loggedIn = true;
+            status.auth.username = config.username;
           } else {
-            // For JSON output, we can skip username if it causes keyring calls
-            status.auth.username = null;
+            const message = error instanceof Error ? error.message : String(error);
+            logger.warn(`Failed to retrieve stored credentials: ${message}`);
           }
         }
 
