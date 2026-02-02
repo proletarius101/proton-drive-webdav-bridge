@@ -7,12 +7,13 @@ import { useTauri } from '../tauri/TauriProvider';
 interface SidebarProps {
   onViewChange?: (view: 'dashboard' | 'login') => void;
   onAccountSelect?: (id: string) => void;
+  opened?: boolean;
+  animateStyle?: 'shift' | 'width' | 'overlap';
 }
 
-export function Sidebar({ onViewChange, onAccountSelect }: SidebarProps) {
+export function Sidebar({ onViewChange: _onViewChange, onAccountSelect, opened = true, animateStyle = 'width' }: SidebarProps) {
   const { invoke: invokeFn, listen: listenFn } = useTauri();
-  const [accounts, setAccounts] = useState<any[]>([]);
-  const [selectedAccount, setSelectedAccount] = useState(-1);
+  const [, setAccounts] = useState<any[]>([]);
   const [autostartEnabled, setAutostartEnabled] = useState(false);
 
   useEffect(() => {
@@ -80,9 +81,6 @@ export function Sidebar({ onViewChange, onAccountSelect }: SidebarProps) {
     };
   }, []);
 
-  const handleAddAccount = () => {
-    if (onViewChange) onViewChange('login');
-  };
 
   const handleAutostartToggle = async (checked: boolean) => {
     try {
@@ -102,44 +100,40 @@ export function Sidebar({ onViewChange, onAccountSelect }: SidebarProps) {
   };
 
   return (
-    <Mie.L.View f fc>
-      <Mie.L.Header p="large">
-        <div>
-          <div>📁</div>
-          <Mie.Header title="Proton Drive" size="tiny" />
-          <p style={{ fontSize: '0.8em', opacity: 0.7, margin: 0 }}>WebDAV Bridge</p>
-        </div>
-      </Mie.L.Header>
+    <Mie.SplitView.Sidebar opened={opened} animateStyle={animateStyle} headerbar={
+      <Mie.HeaderBar
+        header={
+          <Mie.Header
+            title="Proton Drive"
+            subtitle="WebDAV Bridge"
+            size="tiny"
+            center
+          />
+        }
+        transparent
+      />
+    }>
+      <Mie.L.View f fc>
+        <Mie.L.Header p="large">
+          <div>
+            <div>📁</div>
+            <Mie.Header title="Proton Drive" />
+            <p style={{ fontSize: '0.8em', opacity: 0.7, margin: 0 }}>WebDAV Bridge</p>
+          </div>
+        </Mie.L.Header>
 
-      <Mie.L.List id="account-list">
-        {accounts.length === 0 ? (
-          <Mie.L.Item title="No accounts" />
-        ) : (
-          accounts.map((account, idx) => (
-            <Mie.L.Item
-              key={account.id ?? account.email ?? idx}
-              title={account.email ?? account.id ?? String(account)}
-              active={idx === selectedAccount}
-              onClick={() => {
-                setSelectedAccount(idx);
-                if (onAccountSelect) onAccountSelect(account.id ?? account.email ?? String(account));
-              }}
-            />
-          ))
-        )}
-      </Mie.L.List>
-
-      <Mie.L.View p="large" gr="small" f fc>
-        <Mie.Button onClick={handleAddAccount}>Add account</Mie.Button>
-
-        <Mie.Checkbox
-          toggle
-          name="autostart"
-          label="Autostart"
-          checked={autostartEnabled}
-          onChange={(e) => handleAutostartToggle(e.target.checked)}
-        />
+        <Mie.L.View p="large" gr="small" f fc>
+          <Mie.Checkbox
+            toggle
+            name="autostart"
+            label="Autostart"
+            checked={autostartEnabled}
+            onChange={(e) => handleAutostartToggle(e.target.checked)}
+          />
+        </Mie.L.View>
       </Mie.L.View>
-    </Mie.L.View>
+    </Mie.SplitView.Sidebar>
   );
 }
+
+Sidebar.displayName = "Mie.SplitView.Sidebar";

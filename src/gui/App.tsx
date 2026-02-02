@@ -49,9 +49,7 @@ export function App() {
           />
         ),
         sidebar: (
-          <Mie.SplitView.Sidebar opened={sidebarOpen} animateStyle="width">
-            <Sidebar onViewChange={setCurrentView} onAccountSelect={setSelectedAccountId} />
-          </Mie.SplitView.Sidebar>
+          <Sidebar opened={sidebarOpen} animateStyle="width" onViewChange={setCurrentView} onAccountSelect={setSelectedAccountId} />
         ),
       }}
     >
