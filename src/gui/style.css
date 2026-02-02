@@ -36,14 +36,22 @@ body {
 .log-area {
   max-height: 300px;
   overflow: auto;
-  background: var(--mie-surface, #0b1220);
-  color: var(--mie-text, #e6eef8);
-  padding: 12px;
-  border-radius: 6px;
-  font-family: 'Courier New', monospace;
-  font-size: 0.85rem;
-  line-height: 1.5;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  border: none;
+  margin: 0;
+  width: 100%;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.6rem;
+  line-height: 1;
   white-space: pre-wrap;
+}
+
+.log-area * {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.6rem;
+  line-height: 1;
 }
 
 /* Other layout & component-specific styles should rely on Mielo's built-in classes.

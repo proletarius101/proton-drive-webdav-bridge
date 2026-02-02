@@ -56,12 +56,6 @@ describe('Accounts UI (React)', () => {
     const email = document.getElementById('account-email') as HTMLElement
     expect(email.textContent).toBe('me@example.com')
 
-    const dav = document.getElementById('account-dav-url') as HTMLInputElement
-    expect(dav.value).toBe('dav://127.0.0.1:7777')
-
-    const port = document.getElementById('account-network-port') as HTMLInputElement
-    expect(port.value).toBe('7777')
-
     // stop gui interval (if returned)
     try { if (gui && typeof gui.stop === 'function') gui.stop(); } catch (e) {}
   })

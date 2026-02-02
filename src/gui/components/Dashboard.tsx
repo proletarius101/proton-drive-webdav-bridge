@@ -233,16 +233,6 @@ export function Dashboard() {
           <pre
             id="log-area"
             className="log-area"
-            style={{
-              padding: '8px',
-              background: 'var(--mie-background-alt)',
-              borderRadius: '4px',
-              fontFamily: 'monospace',
-              fontSize: '0.85em',
-              maxHeight: '300px',
-              overflow: 'auto',
-              whiteSpace: 'pre-wrap',
-            }}
           >
             {logs || 'No logs yet'}
           </pre>
