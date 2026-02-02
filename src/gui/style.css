@@ -2,8 +2,6 @@
    Proton Drive WebDAV Bridge - Minimal overrides (prefer Mielo built-in styles)
    ============================================================================ */
 
-@import './mielo.css';
-
 /* Desktop-only app - use system fonts */
 body {
   margin: 0;
