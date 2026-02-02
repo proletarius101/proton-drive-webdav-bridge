@@ -1,10 +1,8 @@
 import { describe, it, expect } from 'bun:test'
 import * as React from 'react'
 import { createRoot } from 'react-dom/client'
-import { Sidebar } from '../src/gui/components/Sidebar'
 import { App } from '../src/gui/App'
-import * as core from '@tauri-apps/api/core'
-import * as event from '@tauri-apps/api/event'
+import { TauriProvider } from '../src/gui/tauri/TauriProvider'
 import { initGui } from '../src/gui/main'
 
 describe('Sidebar account loading', () => {
@@ -26,20 +24,21 @@ describe('Sidebar account loading', () => {
       return true
     }
 
-    // stub listen so Sidebar can subscribe (don't mutate module exports)
+    // stub listen so Sidebar can subscribe
     const mockListen = async (_: string, __: any) => { return async () => {} }
-
-    // Provide a test override so Sidebar and details use our mock invoke
-    (globalThis as any).__test_invoke__ = mockInvoke
-    // test hook captures
-    // @ts-ignore
-    global.__test_hook_calls = []
 
     // ensure main.js uses our invoke and stubbed listen
     const gui = (initGui as any)({ invoke: mockInvoke as any, listen: mockListen as any, checkTimeoutMs: 20, statusTimeoutMs: 20 })
 
     const container = document.getElementById('root')!
-    createRoot(container).render(React.createElement(App, null))
+    createRoot(container).render(
+      React.createElement(
+        TauriProvider,
+        { invoke: mockInvoke, listen: mockListen },
+        React.createElement(App, null)
+      )
+    )
+
 
     // wait for async activity and rendered list and details
     const start = Date.now()
@@ -54,10 +53,6 @@ describe('Sidebar account loading', () => {
     expect(accList).toBeDefined()
     expect(accList.children.length).toBeGreaterThan(0)
     expect(calls.includes('list_accounts')).toBe(true)
-
-    // ensure details fetched and rendered (test hook)
-    // @ts-ignore
-    expect(global.__test_hook_calls && global.__test_hook_calls.includes('fetchAccountDetails:a1')).toBe(true)
 
     const email = document.getElementById('account-email') as HTMLElement
     expect(email.textContent).toBe('me@example.com')

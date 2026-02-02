@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import * as Mie from '@mielo-ui/mielo-react';
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
+import { useTauri } from '../tauri/TauriProvider';
 
 export function AccountDetails({ accountId }: { accountId?: string | null }) {
   const [account, setAccount] = useState<any | null>(null);
+  const { invoke, listen } = useTauri();
 
   useEffect(() => {
     let unlisten: any;
@@ -14,10 +14,7 @@ export function AccountDetails({ accountId }: { accountId?: string | null }) {
         return;
       }
       try {
-        const coreInvoke: any = (globalThis as any).__test_invoke__ ?? invoke;
-        // test hook capture
-        try { if ((globalThis as any).__test_hook_calls) (globalThis as any).__test_hook_calls.push(`fetchAccountDetails:${accountId}`); } catch (e) {}
-        const acc: any = await coreInvoke('get_account', { id: accountId }).catch(() => null);
+        const acc: any = await invoke('get_account', { id: accountId }).catch(() => null);
         setAccount(acc);
       } catch (e) {
         setAccount(null);
@@ -32,11 +29,10 @@ export function AccountDetails({ accountId }: { accountId?: string | null }) {
       if (payload && payload.id && payload.id === accountId) setAccount(payload);
     };
 
-    if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
+    try {
       listen('account:updated', handler).then((u) => (unlisten = u)).catch(() => {});
-    } else if ((globalThis as any).__test_listen__) {
-      // test harness may provide a mock listen
-      (globalThis as any).__test_listen__('account:updated', handler).then((u: any) => (unlisten = u)).catch(() => {});
+    } catch (e) {
+      // ignore in test/SSR
     }
 
     return () => {

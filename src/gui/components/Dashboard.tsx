@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import * as Mie from '@mielo-ui/mielo-react';
-import { invoke } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { useTauri } from '../tauri/TauriProvider';
+import type { UnlistenFn } from '@tauri-apps/api/event';
 
 export function Dashboard() {
+  const { invoke, listen: tauriListen } = useTauri();
   const [mounted, setMounted] = useState(false);
   const [port, setPort] = useState('12345');
   const [address, setAddress] = useState('dav://127.0.0.1:12345');
@@ -15,41 +16,27 @@ export function Dashboard() {
     let unlistenLogs: UnlistenFn | undefined;
     let unlistenMountStatus: UnlistenFn | undefined;
 
-    // Choose test or production invoke/listen
-    const coreInvoke: any = (globalThis as any).__test_invoke__ ?? invoke;
-
     // Listen to sidecar logs (guarded)
     try {
-      if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
-        listen<{ level: string; message: string }>('sidecar:log', (event) => {
-          const { level, message } = event.payload;
-          setLogs((prev) => `${prev}[${level}] ${message}\n`);
-        }).then((unlisten) => {
-          unlistenLogs = unlisten;
-        });
+      tauriListen('sidecar:log', (event: any) => {
+        const { level, message } = event.payload ?? event;
+        setLogs((prev) => `${prev}[${level}] ${message}\n`);
+      }).then((unlisten) => {
+        unlistenLogs = unlisten;
+      });
 
-        // Listen to mount status changes
-        listen<string>('mount:status', (event) => {
-          console.log('Mount status:', event.payload);
-        }).then((unlisten) => {
-          unlistenMountStatus = unlisten;
-        });
-      } else if ((globalThis as any).__test_listen__) {
-        (globalThis as any).__test_listen__('sidecar:log', (event: any) => {
-          const { level, message } = event.payload ?? event;
-          setLogs((prev) => `${prev}[${level}] ${message}\n`);
-        }).then((u: any) => (unlistenLogs = u));
-
-        (globalThis as any).__test_listen__('mount:status', (_: any) => {
-          // noop for tests
-        }).then((u: any) => (unlistenMountStatus = u));
-      }
+      // Listen to mount status changes
+      tauriListen('mount:status', (event: any) => {
+        console.log('Mount status:', event.payload ?? event);
+      }).then((unlisten) => {
+        unlistenMountStatus = unlisten;
+      });
     } catch (e) {
-      // ignore
+      // ignore in SSR/tests
     }
 
     // Fetch initial status
-    coreInvoke('get_status')
+    invoke('get_status')
       .then((status: any) => {
         const portVal = status?.config?.webdav?.port || status?.port || 12345;
         const host = status?.config?.webdav?.host || 'localhost';
@@ -66,7 +53,7 @@ export function Dashboard() {
       .catch((err: any) => console.error('Failed to get initial status:', err));
 
     // Check initial mount status
-    coreInvoke('check_mount_status')
+    invoke('check_mount_status')
       .then((mountStatus: any) => {
         setMounted(mountStatus !== null);
       })
@@ -82,7 +69,7 @@ export function Dashboard() {
     try {
       await invoke(checked ? 'mount_drive' : 'unmount_drive');
       // Verify actual mount status after operation
-      const mountStatus = await invoke<string | null>('check_mount_status');
+      const mountStatus: any = await invoke('check_mount_status');
       setMounted(mountStatus !== null);
     } catch (err) {
       console.error('Mount operation failed:', err);
@@ -108,7 +95,7 @@ export function Dashboard() {
     try {
       await invoke('set_network_port', { port: Number(port) });
       // Refresh status to get updated address
-      const status = await invoke<any>('get_status');
+      const status: any = await invoke('get_status');
       const newPort = status?.config?.webdav?.port || port;
       const host = status?.config?.webdav?.host || 'localhost';
       setAddress(`dav://${host}:${newPort}`);

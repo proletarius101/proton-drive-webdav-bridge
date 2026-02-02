@@ -2,8 +2,8 @@ import { describe, it, expect } from 'bun:test'
 import * as React from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from '../src/gui/App'
-import * as event from '@tauri-apps/api/event'
 import { initGui } from '../src/gui/main'
+import { TauriProvider } from '../src/gui/tauri/TauriProvider'
 
 // This test ensures the React-driven account list and details work end-to-end
 // using the test invoke/listen hooks (so we don't rely on Tauri internals).
@@ -20,9 +20,6 @@ describe('Accounts UI (React)', () => {
 
     // Mock invoke to provide accounts and per-account details
     const calls: string[] = []
-    // test hook captures
-    // @ts-ignore
-    global.__test_hook_calls = []
 
     const mockInvoke = async (cmd: string, args?: any) => {
       calls.push(cmd + (args ? ':' + JSON.stringify(args) : ''))
@@ -37,16 +34,18 @@ describe('Accounts UI (React)', () => {
     // stub listen so initGui doesn't rely on Tauri internals
     const mockListen = async (_: string, __: any) => { return async () => {} }
 
-    // Provide test invoke to components and init gui wiring
-    (globalThis as any).__test_invoke__ = mockInvoke
-    // @ts-ignore
-    global.__test_hook_calls = []
-
+    // ensure init wiring uses our invoke and stubbed listen
     const gui = (initGui as any)({ invoke: mockInvoke as any, listen: mockListen as any, checkTimeoutMs: 20, statusTimeoutMs: 20 })
 
-    // render the SPA
+    // render the SPA within a provider so components use our mock API
     const container = document.getElementById('root')!
-    createRoot(container).render(React.createElement(App, null))
+    createRoot(container).render(
+      React.createElement(
+        TauriProvider,
+        { invoke: mockInvoke, listen: mockListen },
+        React.createElement(App, null)
+      )
+    )
 
     // wait for async activity and rendered list and details
     const start = Date.now()
@@ -61,10 +60,6 @@ describe('Accounts UI (React)', () => {
     expect(accList).toBeDefined()
     expect(accList.children.length).toBeGreaterThan(0)
     expect(calls.includes('list_accounts')).toBe(true)
-
-    // ensure details fetched and rendered (test hook)
-    // @ts-ignore
-    expect(global.__test_hook_calls && global.__test_hook_calls.includes('fetchAccountDetails:a1')).toBe(true)
 
     const email = document.getElementById('account-email') as HTMLElement
     expect(email.textContent).toBe('me@example.com')

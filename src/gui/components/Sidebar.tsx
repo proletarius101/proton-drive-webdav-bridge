@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import * as Mie from '@mielo-ui/mielo-react';
-import { invoke } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import type { UnlistenFn } from '@tauri-apps/api/event';
 import { enable as autostartEnable, isEnabled as autostartIsEnabled, disable as autostartDisable } from '@tauri-apps/plugin-autostart';
+import { useTauri } from '../tauri/TauriProvider';
 
 interface SidebarProps {
   onViewChange?: (view: 'dashboard' | 'login') => void;
@@ -10,6 +10,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ onViewChange, onAccountSelect }: SidebarProps) {
+  const { invoke: invokeFn, listen: listenFn } = useTauri();
   const [accounts, setAccounts] = useState<any[]>([]);
   const [selectedAccount, setSelectedAccount] = useState(-1);
   const [autostartEnabled, setAutostartEnabled] = useState(false);
@@ -20,8 +21,7 @@ export function Sidebar({ onViewChange, onAccountSelect }: SidebarProps) {
     // Fetch initial accounts and listen for updates
     async function loadAccounts() {
       try {
-        const coreInvoke: any = (globalThis as any).__test_invoke__ ?? invoke;
-        const list: any = await coreInvoke('list_accounts');
+        const list: any = await invokeFn('list_accounts');
         if (Array.isArray(list)) {
           setAccounts(list);
           // select first account and notify parent so details component can fetch it
@@ -36,7 +36,6 @@ export function Sidebar({ onViewChange, onAccountSelect }: SidebarProps) {
     }
 
     loadAccounts();
-
     // Subscribe to 'accounts:changed' events from backend and notify parent
     const accountsChangedHandler = (event: any) => {
       const payload = event.payload ?? event;
@@ -50,26 +49,20 @@ export function Sidebar({ onViewChange, onAccountSelect }: SidebarProps) {
     };
 
     // Only call Tauri listen when internals are available; otherwise allow tests to inject a __test_listen__.
-    if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
-      try {
-        listen('accounts:changed', accountsChangedHandler).then((u) => (unlisten = u));
-      } catch (e) {
-        // ignore
-      }
-    } else if ((globalThis as any).__test_listen__) {
-      try {
-        (globalThis as any).__test_listen__('accounts:changed', accountsChangedHandler).then((u: any) => (unlisten = u));
-      } catch (e) {
-        // ignore
-      }
+    try {
+      invokeFn('list_accounts').catch(() => {}); // trigger initial refresh in case backend wants to push accounts
+      // subscribe
+      listenFn('accounts:changed', accountsChangedHandler).then((u) => (unlisten = u));
+    } catch (e) {
+      // ignore in tests/SSR
     }
 
     // Autostart probe
     autostartIsEnabled()
       .then((enabled) => setAutostartEnabled(enabled))
       .catch(() => {
-        invoke<boolean>('get_autostart')
-          .then((enabled) => setAutostartEnabled(enabled))
+        invokeFn('get_autostart')
+          .then((enabled: any) => setAutostartEnabled(!!enabled))
           .catch(() => setAutostartEnabled(false));
       });
 
@@ -91,7 +84,7 @@ export function Sidebar({ onViewChange, onAccountSelect }: SidebarProps) {
       }
       
       // Persist preference
-      await invoke('set_autostart', { enabled: checked });
+      await invokeFn('set_autostart', { enabled: checked });
       setAutostartEnabled(checked);
     } catch (err) {
       console.error('Autostart toggle failed:', err);
