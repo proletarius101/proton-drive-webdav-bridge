@@ -51,7 +51,7 @@ export function Sidebar({ onViewChange: _onViewChange, onAccountSelect, opened =
       const payload = event.payload ?? event;
       if (Array.isArray(payload)) {
         setAccounts(payload);
-        // Let parent (App) know the first account so it can drive AccountDetails
+        // Let parent (App) know the first account
         if (payload.length > 0 && onAccountSelect) {
           onAccountSelect(payload[0].id ?? payload[0].email ?? String(payload[0]));
         }
