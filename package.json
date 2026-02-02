@@ -67,6 +67,7 @@
     "openpgp": "^6.2.2",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "usehooks-ts": "^3.1.1",
     "winston": "^3.18.3",
     "winston-daily-rotate-file": "^5.0.0"
   },

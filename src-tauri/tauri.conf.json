@@ -11,7 +11,12 @@
         "height": 700,
         "minWidth": 400,
         "minHeight": 300,
-        "devtools": true
+        "devtools": true,
+        "dragDropEnabled": true,
+        "fullscreen": false,
+        "resizable": true,
+        "decorations": false,
+        "transparent": true
       }
     ]
   },
@@ -20,7 +25,9 @@
     "devUrl": "http://localhost:5173",
     "beforeDevCommand": "bun run build:bin --outfile ./dist/proton-drive-webdav-bridge-${TAURI_ENV_TARGET_TRIPLE} && bun run gui:dev",
     "beforeBuildCommand": "bun run build:bin --outfile ./dist/proton-drive-webdav-bridge-${TAURI_ENV_TARGET_TRIPLE} && bun run gui:build",
-    "additionalWatchFolders": ["../src"]
+    "additionalWatchFolders": [
+      "../src"
+    ]
   },
   "bundle": {
     "active": true,
@@ -32,6 +39,8 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": ["../dist/proton-drive-webdav-bridge"]
+    "externalBin": [
+      "../dist/proton-drive-webdav-bridge"
+    ]
   }
 }
