@@ -149,7 +149,11 @@ export function Dashboard() {
           title="Files"
           description="Open your Proton Drive folder in the system file manager"
           activatable
-          side={<Mie.Button id="open-files" onClick={handleOpenFiles}>Open in File Manager</Mie.Button>}
+          side={
+            <Mie.Button id="open-files" onClick={handleOpenFiles}>
+              Open in File Manager
+            </Mie.Button>
+          }
         />
 
         <Mie.L.Rows.Row
@@ -171,9 +175,11 @@ export function Dashboard() {
           description="Local WebDAV address"
           activatable
           side={
-            <Mie.L.View f gr="small">
-              <Mie.Entry id="dav-url" readOnly value={address} />
-              <Mie.Button id="copy-url" onClick={handleCopyAddress}>Copy</Mie.Button>
+            <Mie.L.View f>
+              <Mie.L.Entry id="dav-url" readOnly value={address} size="small" />
+              <Mie.Button id="copy-url" onClick={handleCopyAddress} size="small">
+                Copy
+              </Mie.Button>
             </Mie.L.View>
           }
           rb
@@ -188,16 +194,20 @@ export function Dashboard() {
             description="Set local WebDAV listening port"
             activatable
             side={
-              <Mie.L.View f gr="small">
-                <Mie.Entry
+              /* compact horizontal layout for port input + apply button */
+              <Mie.L.View r fai="center" gr="small">
+                <Mie.L.Rows.Entry
                   id="network-port"
                   type="number"
                   min="1024"
                   max="65535"
                   value={port}
                   onChange={(e) => setPort(e.currentTarget.value)}
+                  r
                 />
-                <Mie.Button id="apply-port" onClick={handleApplyPort}>Apply</Mie.Button>
+                <Mie.Button id="apply-port" onClick={handleApplyPort} size="small">
+                  Apply
+                </Mie.Button>
               </Mie.L.View>
             }
             rb
@@ -205,7 +215,9 @@ export function Dashboard() {
         </Mie.L.Rows>
 
         <Mie.L.View f gr="small" mt="medium">
-          <Mie.Button id="purge-cache" onClick={handlePurgeCache}>Purge Cache</Mie.Button>
+          <Mie.Button id="purge-cache" onClick={handlePurgeCache}>
+            Purge Cache
+          </Mie.Button>
           <Mie.Button id="logout" onClick={handleLogout} className="destructive">
             Logout / Reset Auth
           </Mie.Button>
