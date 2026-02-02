@@ -176,7 +176,7 @@ export function Dashboard() {
           activatable
           side={
             <Mie.L.View f>
-              <Mie.L.Entry id="dav-url" readOnly value={address} size="small" />
+              <Mie.L.Entry id="dav-url" readOnly value={address} size="small" r />
               <Mie.Button id="copy-url" onClick={handleCopyAddress} size="small">
                 Copy
               </Mie.Button>
