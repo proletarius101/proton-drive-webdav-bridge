@@ -140,49 +140,51 @@ export function Dashboard() {
         </Mie.L.Text>
       </Mie.L.View>
 
-      {/* Settings Rows */}
-      <Mie.L.Rows shadow r>
-        <Mie.L.Rows.Row
-          title="Files"
-          description="Open your Proton Drive folder in the system file manager"
-          activatable
-          side={
-            <Mie.Button id="open-files" onClick={handleOpenFiles}>
-              Open in File Manager
-            </Mie.Button>
-          }
-        />
-
-        <Mie.L.Rows.Row
-          title="Mount"
-          description="Mount the WebDAV share to your file manager"
-          activatable
-          side={
-            <Mie.Checkbox
-              toggle
-              name="mount-toggle"
-              checked={mounted}
-              onChange={(e) => handleMountToggle(e.target.checked)}
-            />
-          }
-        />
-
-        <Mie.L.Rows.Row
-          title="Address"
-          description="Local WebDAV address"
-          activatable
-          side={
-            <Mie.L.View f>
-              <Mie.L.Entry id="dav-url" readOnly value={address} size="small" r />
-              <Mie.Button id="copy-url" onClick={handleCopyAddress} size="small">
-                Copy
+      <Mie.L.View f fc gr="small">
+        <Mie.Header title="Settings" />
+        {/* Settings Rows */}
+        <Mie.L.Rows shadow r>
+          <Mie.L.Rows.Row
+            title="Files"
+            description="Open your Proton Drive folder in the system file manager"
+            activatable
+            side={
+              <Mie.Button id="open-files" onClick={handleOpenFiles}>
+                Open in File Manager
               </Mie.Button>
-            </Mie.L.View>
-          }
-          rb
-        />
-      </Mie.L.Rows>
+            }
+          />
 
+          <Mie.L.Rows.Row
+            title="Mount"
+            description="Mount the WebDAV share to your file manager"
+            activatable
+            side={
+              <Mie.Checkbox
+                toggle
+                name="mount-toggle"
+                checked={mounted}
+                onChange={(e) => handleMountToggle(e.target.checked)}
+              />
+            }
+          />
+
+          <Mie.L.Rows.Row
+            title="Address"
+            description="Local WebDAV address"
+            activatable
+            side={
+              <Mie.L.View f>
+                <Mie.L.Entry id="dav-url" readOnly value={address} size="small" r />
+                <Mie.Button id="copy-url" onClick={handleCopyAddress} size="small">
+                  Copy
+                </Mie.Button>
+              </Mie.L.View>
+            }
+            rb
+          />
+        </Mie.L.Rows>
+      </Mie.L.View>
       {/* Advanced Section */}
       <Mie.Collapsible title="Advanced / Troubleshoot">
         <Mie.L.Rows shadow r mt="medium">
@@ -227,10 +229,7 @@ export function Dashboard() {
           {logsVisible ? 'Hide Logs' : 'Show Logs'}
         </Mie.Button>
         {logsVisible && (
-          <pre
-            id="log-area"
-            className="log-area"
-          >
+          <pre id="log-area" className="log-area">
             {logs || 'No logs yet'}
           </pre>
         )}
