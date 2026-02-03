@@ -30,7 +30,9 @@ export function registerStartCommand(program: Command): void {
         // Allow starting without stored credentials when --no-auth is provided.
         if (options.auth !== false) {
           if (!(await hasStoredCredentials())) {
-            console.error('✗ Not logged in. Run "proton-drive-webdav-bridge auth login" first or start with --no-auth.');
+            console.error(
+              '✗ Not logged in. Run "proton-drive-webdav-bridge auth login" first or start with --no-auth.'
+            );
             process.exit(1);
           }
         }

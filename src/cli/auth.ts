@@ -155,10 +155,10 @@ export function registerAuthCommand(program: Command): void {
         }
 
         await deleteStoredCredentials();
-        
+
         // Clear username from config
         updateConfig({ username: undefined });
-        
+
         console.log('✓ Logged out successfully. Credentials removed.');
         logger.info('User logged out');
       } catch (error) {

@@ -28,7 +28,9 @@ const ensureDir = (dirPath?: string): string => {
   } catch (err) {
     // As a last resort, ensure we have a sane fallback in /tmp
     const fallback = join(tmpdir(), APP_NAME);
-    try { mkdirSync(fallback, { recursive: true }); } catch (e) {}
+    try {
+      mkdirSync(fallback, { recursive: true });
+    } catch (e) {}
     return fallback;
   }
 };

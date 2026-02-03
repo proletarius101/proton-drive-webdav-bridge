@@ -383,7 +383,9 @@ export async function flushPendingWrites(): Promise<void> {
  */
 export async function getStoredCredentials(): Promise<StoredCredentials | null> {
   _getCallCount++;
-  logger.debug(`[keychain] getStoredCredentials called (calls=${_getCallCount}) caller=${callerStack()}`);
+  logger.debug(
+    `[keychain] getStoredCredentials called (calls=${_getCallCount}) caller=${callerStack()}`
+  );
 
   const now = Date.now();
   if (_cachedCreds && now < _cacheExpiresAt) {

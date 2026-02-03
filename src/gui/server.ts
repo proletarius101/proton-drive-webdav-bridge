@@ -2,7 +2,7 @@ import { join } from 'path';
 import { file, spawn } from 'bun';
 
 const port = parseInt(
-  process.argv.find((arg) => arg.startsWith('--port='))?.split('=')[1] || '5173',
+  process.argv.find((arg) => arg.startsWith('--port='))?.split('=')[1] || '5173'
 );
 
 // Start Bun bundler in watch mode
