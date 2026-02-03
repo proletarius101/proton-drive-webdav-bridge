@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test';
 
 import { WebDAVServer } from '../src/webdav/server.ts';
 import { driveClient } from '../src/drive.ts';
+import { createFileDownloader } from './utils/seekableMock.ts';
 
 // Mock env-paths to avoid auth attempts
 const pathsBase = mkdtempSync(join(tmpdir(), 'pdb-webdav-e2e-'));
@@ -199,23 +200,7 @@ describe('webdav e2e', () => {
     driveClient.getFileDownloader = async (uid: string) => {
       const node = nodes.get(uid);
       const data = node?.data || new Uint8Array();
-      return {
-        getSeekableStream: () =>
-          new ReadableStream({
-            start(controller) {
-              controller.enqueue(data);
-              controller.close();
-            },
-          }),
-        downloadToStream: (stream: WritableStream) => {
-          const writer = stream.getWriter();
-          const writePromise = writer.write(data).then(() => writer.close());
-          return {
-            abort: () => {},
-            completion: () => writePromise,
-          };
-        },
-      };
+      return createFileDownloader(data);
     };
     driveClient.renameNode = async (uid: string, newName: string) => {
       const node = nodes.get(uid);
