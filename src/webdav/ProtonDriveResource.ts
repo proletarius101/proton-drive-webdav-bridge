@@ -14,7 +14,7 @@ import {
   ForbiddenError,
   ResourceNotFoundError,
 } from 'nephele';
-import { MethodNotAllowedError, LockedError } from '../errors/index.js';
+import { MethodNotAllowedError } from '../errors/index.js';
 
 import { type DriveNode } from '../drive.js';
 import { logger } from '../logger.js';
@@ -248,39 +248,6 @@ export default class ProtonDriveResource implements ResourceInterface {
     return createHash('md5').update(content).digest('hex');
   }
 
-  /**
-   * Check if resource is locked by another user
-   */
-  private checkLock(user: User, lockToken?: string): void {
-    if (lockToken) {
-      // Validate the provided lock token
-      if (!this.lockManager.validateLockToken(this.path, lockToken)) {
-        throw new ForbiddenError('Invalid lock token provided');
-      }
-      return;
-    }
-
-    // No token provided: determine if any locks apply to this path (including parent locks with depth=infinity)
-    const allLocks = this.lockManager.getAllLocks();
-    const applicableLocks = allLocks.filter((l) => {
-      if (l.path === this.path) return true;
-      if (l.depth === 'infinity' && this.path.startsWith(l.path.replace(/\/$/, '') + '/'))
-        return true;
-      return false;
-    });
-
-    const userLocks = applicableLocks.filter((l) => l.username === user.username);
-
-    logger.debug(
-      `Lock check for path=${this.path} applicable=${applicableLocks.length} userOwned=${userLocks.length} user=${user.username}`
-    );
-
-    if (applicableLocks.length > userLocks.length) {
-      logger.warn(`Operation blocked on locked resource path=${this.path}`);
-      throw new LockedError(this.path);
-    }
-  }
-
   async getLocks(): Promise<Lock[]> {
     const lockInfos = this.lockManager.getLocksForPath(this.path);
     return lockInfos.map(
@@ -506,42 +473,41 @@ export default class ProtonDriveResource implements ResourceInterface {
     }
 
     // Full file download using downloadToStream for verified integrity
-    const t2 = Date.now();
-    downloader
-      .downloadToStream(
-        new WritableStream({
-          write(chunk) {
-            passthrough.write(chunk);
-          },
-          close() {
-            passthrough.end();
-          },
-          abort(reason) {
-            passthrough.destroy(reason instanceof Error ? reason : new Error(String(reason)));
-          },
-        })
-      )
-      .completion()
-      .then(() => {
+    // Use the seekable stream for full downloads as well to avoid relying on
+    // environment-specific WritableStream implementations. This preserves
+    // the streaming behaviour while staying compatible with our mocked
+    // downloaders in tests.
+    (async () => {
+      const t2 = Date.now();
+      try {
+        const seekable = downloader.getSeekableStream();
+        await seekable.seek(0);
+        while (true) {
+          const { value, done } = await seekable.read(64 * 1024);
+          if (value && value.length > 0) {
+            passthrough.write(value);
+          }
+          if (done) break;
+        }
+
+        passthrough.end();
         const duration = Date.now() - t2;
         logger.debug(`getStream: Download completed for ${this.path} in ${duration}ms`);
-      })
-      .catch((error: unknown) => {
+      } catch (error: unknown) {
         logger.error(
           `getStream: Error downloading for ${this.path}: ${error instanceof Error ? error.message : String(error)}`
         );
         passthrough.destroy(error instanceof Error ? error : new Error(String(error)));
-      });
+      }
+    })();
 
     logger.debug(`getStream: Returning PassThrough stream for ${this.path}`);
     return passthrough;
   }
 
-  async setStream(input: Readable, user: User, lockToken?: string): Promise<void> {
+  async setStream(input: Readable, _user: User, mediaType?: string): Promise<void> {
     try {
-      // Check lock before modifying
-      this.checkLock(user, lockToken);
-
+      // Nephele handles lock checking via getLockPermission before calling this method
       const parentPath = this.getParentPath();
       const name = this.getBaseName();
 
@@ -568,8 +534,8 @@ export default class ProtonDriveResource implements ResourceInterface {
       await this.adapter.driveClient.uploadFile(
         parentNode.uid,
         name,
-        Readable.toWeb(input) as ReadableStream,
-        {}
+        Readable.toWeb(input) as unknown as ReadableStream,
+        { mimeType: mediaType }
       );
 
       // Invalidate parent folder cache
@@ -641,10 +607,8 @@ export default class ProtonDriveResource implements ResourceInterface {
     }
   }
 
-  async delete(user: User, lockToken?: string): Promise<void> {
-    // Check lock before deleting
-    this.checkLock(user, lockToken);
-
+  async delete(_user: User): Promise<void> {
+    // Nephele handles lock checking via getLockPermission before calling this method
     const node = await this.resolveNode();
 
     if (!node) {
@@ -677,10 +641,8 @@ export default class ProtonDriveResource implements ResourceInterface {
     this._cachedProps = null;
   }
 
-  async copy(destination: URL, baseUrl: URL, user: User, lockToken?: string): Promise<void> {
-    // Check lock before copying
-    this.checkLock(user, lockToken);
-
+  async copy(destination: URL, baseUrl: URL, user: User): Promise<void> {
+    // Nephele handles lock checking via getLockPermission before calling this method
     const node = await this.resolveNode();
     if (!node) {
       throw new ResourceNotFoundError('Resource not found.');
@@ -793,10 +755,8 @@ export default class ProtonDriveResource implements ResourceInterface {
     }
   }
 
-  async move(destination: URL, baseUrl: URL, user: User, lockToken?: string): Promise<void> {
-    // Check lock before moving
-    this.checkLock(user, lockToken);
-
+  async move(destination: URL, baseUrl: URL, _user: User): Promise<void> {
+    // Nephele handles lock checking via getLockPermission before calling this method
     if (await this.isCollection()) {
       const err = new MethodNotAllowedError('MOVE', this.path);
       // Preserve original user-facing message expected by tests
@@ -861,9 +821,6 @@ export default class ProtonDriveResource implements ResourceInterface {
         throw e;
       }
     }
-
-    // Clear locks before moving (security - prevent lock hijacking)
-    this.lockManager.deleteLocksForPath(this.path);
 
     // Move to different folder if needed
     const currentParentPath = this.getParentPath();

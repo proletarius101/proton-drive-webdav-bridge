@@ -1,0 +1,58 @@
+/* ============================================================================
+   Proton Drive WebDAV Bridge - Minimal overrides (prefer Mielo built-in styles)
+   ============================================================================ */
+
+/* Desktop-only app - use system fonts */
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+#root {
+  min-height: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Keep a minimal set of utilities used by tests and legacy code */
+.hidden {
+  display: none !important;
+}
+
+.muted {
+  opacity: 0.6;
+}
+
+.error-message {
+  color: var(--mie-destructive, #e74c3c);
+  font-size: 0.9rem;
+}
+
+/* Log area styling (used by Dashboard log view and by main.ts tests)
+   Use Mielo tokens where possible */
+.log-area {
+  max-height: 300px;
+  overflow: auto;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  border: none;
+  margin: 0;
+  width: 100%;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.6rem;
+  line-height: 1;
+  white-space: pre-wrap;
+}
+
+.log-area * {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+/* Other layout & component-specific styles should rely on Mielo's built-in classes.
+   Removed many handcrafted rules to keep the app theme consistent and maintainable. */
