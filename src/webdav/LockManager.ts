@@ -50,8 +50,13 @@ export class LockManager {
   private static instance: LockManager | null = null;
 
   private constructor() {
-    const dbPath = join(getDataDir(), 'locks.db');
+    // Allow overriding the locks DB path via environment variable so tests
+    // (or CI) can isolate the DB per-run. If not provided, fall back to the
+    // platform-specific data directory.
+    const envPath = process.env.LOCKS_DB_PATH;
+    const dbPath = envPath ? envPath : join(getDataDir(), 'locks.db');
     this.db = new Database(dbPath);
+
     this.initializeDatabase();
     this.cleanupExpiredLocks();
     logger.info(`Lock database initialized at ${dbPath}`);
