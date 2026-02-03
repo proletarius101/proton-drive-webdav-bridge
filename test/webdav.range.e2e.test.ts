@@ -383,6 +383,8 @@ describe('webdav range requests', () => {
 
       const partialContent = await rangeResponse.text();
       expect(partialContent).toBe('ABCDEFGHIJ');
+    } catch (err) {
+      throw err;
     } finally {
       await server.stop();
     }
