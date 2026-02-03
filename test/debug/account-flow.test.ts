@@ -72,17 +72,18 @@ describe('Debug: Account Selection Flow', () => {
     log('Rendered App component');
 
     // Wait and check periodically
-    let lastEmailText = '';
+    let lastTitleText = '';
     for (let i = 0; i < 40; i++) {
       await new Promise((r) => setTimeout(r, 50));
-      const email = document.getElementById('account-email');
-      const currentText = email?.textContent || '';
-      if (currentText !== lastEmailText) {
-        log(`account-email changed: "${lastEmailText}" -> "${currentText}"`);
-        lastEmailText = currentText;
+      const header = document.querySelector('#app-header');
+      const title = header?.querySelector('.title');
+      const currentText = title?.textContent || '';
+      if (currentText !== lastTitleText) {
+        log(`account-title changed: "${lastTitleText}" -> "${currentText}"`);
+        lastTitleText = currentText;
       }
       if (currentText && currentText !== 'No account selected') {
-        log(`SUCCESS: Found account email: "${currentText}"`);
+        log(`SUCCESS: Found account title: "${currentText}"`);
         break;
       }
     }
@@ -90,12 +91,13 @@ describe('Debug: Account Selection Flow', () => {
     log('\n=== Final State ===');
     log(`All logs:\n${logs.join('\n')}`);
     
-    const emailEl = document.getElementById('account-email');
-    const statusEl = document.getElementById('account-status-text');
-    log(`account-email: "${emailEl?.textContent}"`);
-    log(`account-status: "${statusEl?.textContent}"`);
+    const header = document.querySelector('#app-header');
+    const titleEl = header?.querySelector('.title');
+    const subtitleEl = header?.querySelector('.subtitle');
+    log(`account-title: "${titleEl?.textContent}"`);
+    log(`account-status: "${subtitleEl?.textContent}"`);
 
-    expect(emailEl?.textContent).toBe('user@proton.me');
-    expect(statusEl?.textContent).toBe('active');
+    expect(titleEl?.textContent).toBe('user@proton.me');
+    expect(subtitleEl?.textContent).toBe('active');
   });
 });
