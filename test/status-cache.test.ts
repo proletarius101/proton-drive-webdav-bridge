@@ -5,15 +5,16 @@ import { afterEach, beforeEach, describe, test, expect, mock } from 'bun:test';
 
 // Mock env-paths to keep data dir in temp
 let pathsBase = join(tmpdir(), 'pdb-status-default');
+let mockPaths = {
+  config: join(pathsBase, 'config'),
+  data: join(pathsBase, 'data'),
+  log: join(pathsBase, 'log'),
+  temp: join(pathsBase, 'temp'),
+  cache: join(pathsBase, 'cache'),
+};
 
 mock.module('env-paths', () => ({
-  default: () => ({
-    config: mkdtempSync(join(pathsBase, 'config')),
-    data: mkdtempSync(join(pathsBase, 'data')),
-    log: mkdtempSync(join(pathsBase, 'log')),
-    temp: mkdtempSync(join(pathsBase, 'temp')),
-    cache: mkdtempSync(join(pathsBase, 'cache')),
-  }),
+  default: () => mockPaths,
 }));
 
 // Use real modules
@@ -40,6 +41,13 @@ describe('CLI - status command', () => {
   beforeEach(() => {
     baseDir = mkdtempSync(join(tmpdir(), 'pdb-status-'));
     pathsBase = baseDir;
+    mockPaths = {
+      config: mkdtempSync(join(pathsBase, 'config')),
+      data: mkdtempSync(join(pathsBase, 'data')),
+      log: mkdtempSync(join(pathsBase, 'log')),
+      temp: mkdtempSync(join(pathsBase, 'temp')),
+      cache: mkdtempSync(join(pathsBase, 'cache')),
+    };
   });
 
   afterEach(async () => {
