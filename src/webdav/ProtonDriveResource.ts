@@ -505,7 +505,7 @@ export default class ProtonDriveResource implements ResourceInterface {
     return passthrough;
   }
 
-  async setStream(input: Readable, _user: User, _mediaType?: string): Promise<void> {
+  async setStream(input: Readable, _user: User, mediaType?: string): Promise<void> {
     try {
       // Nephele handles lock checking via getLockPermission before calling this method
       const parentPath = this.getParentPath();
@@ -535,7 +535,7 @@ export default class ProtonDriveResource implements ResourceInterface {
         parentNode.uid,
         name,
         Readable.toWeb(input) as ReadableStream,
-        {}
+        { mimeType: mediaType }
       );
 
       // Invalidate parent folder cache
