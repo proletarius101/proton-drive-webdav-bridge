@@ -435,13 +435,24 @@ export async function deleteStoredCredentials(): Promise<void> {
   _cachedCreds = null;
   _cacheExpiresAt = 0;
 
-  // Try to delete from keyring (best-effort) and file
-  try {
-    deleteCredentialsFromKeyring();
-  } catch (error) {
-    logger.debug(`Failed to delete credentials from keyring: ${error}`);
+  // Delete from appropriate storage (or both for migration safety)
+  if (shouldUseFileStorage()) {
+    // File-based mode: delete file, and keyring as best-effort for migration
+    deleteCredentialsFile();
+    try {
+      deleteCredentialsFromKeyring();
+    } catch (error) {
+      logger.debug(`Failed to delete credentials from keyring during migration cleanup: ${error}`);
+    }
+  } else {
+    // Native keyring mode: delete keyring, and file as best-effort for migration
+    try {
+      deleteCredentialsFromKeyring();
+    } catch (error) {
+      logger.debug(`Failed to delete credentials from keyring: ${error}`);
+    }
+    deleteCredentialsFile();
   }
-  deleteCredentialsFile();
 }
 
 /**
