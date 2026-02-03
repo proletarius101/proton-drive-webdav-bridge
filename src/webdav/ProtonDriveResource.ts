@@ -534,7 +534,7 @@ export default class ProtonDriveResource implements ResourceInterface {
       await this.adapter.driveClient.uploadFile(
         parentNode.uid,
         name,
-        Readable.toWeb(input) as ReadableStream,
+        Readable.toWeb(input) as unknown as ReadableStream,
         { mimeType: mediaType }
       );
 
