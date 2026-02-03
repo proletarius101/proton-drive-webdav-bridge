@@ -37,6 +37,10 @@ beforeEach(() => {
   mockDirs = null;
 
   baseDir = mkdtempSync(join(tmpdir(), 'pdb-webdav-lock-'));
+  
+  // Force file-based encrypted storage for keyring (not testing keyring itself)
+  process.env.KEYRING_PASSWORD = 'test-keyring-password';
+  
   // Ensure DB file exists for LockManager
   const dataDir = getDataDir();
   // Create data dir if missing and touch DB file to ensure sqlite can open it
@@ -85,6 +89,9 @@ afterEach(async () => {
     });
     mockDirs = null;
   }
+
+  // Clean up keyring environment
+  delete process.env.KEYRING_PASSWORD;
 });
 
 // Note: These E2E tests should be run separately from other tests to avoid

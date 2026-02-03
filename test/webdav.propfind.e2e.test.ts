@@ -9,7 +9,8 @@ import { driveClient } from '../src/drive.ts';
 // Note: These E2E tests should be run separately from other tests to avoid
 // singleton/resource conflicts. Run with: bun test test/webdav.propfind.e2e.test.ts
 // Mock env-paths to avoid using real data dirs
-const pathsBase = mkdtempSync(join(tmpdir(), 'pdb-webdav-propfind-'));
+const DEFAULT_PATHS_BASE = mkdtempSync(join(tmpdir(), 'pdb-webdav-propfind-default-'));
+let pathsBase = DEFAULT_PATHS_BASE;
 mock.module('env-paths', () => ({
   default: () => ({
     config: join(pathsBase, 'config'),
@@ -77,7 +78,17 @@ describe('WebDAV PROPFIND recursion and filtering', () => {
     return res;
   };
 
+  // Create isolated temporary directories for this test suite
+  let baseDir: string;
+
   beforeAll(() => {
+    // Set up isolated temp directory for this entire test suite
+    baseDir = mkdtempSync(join(tmpdir(), 'pdb-webdav-propfind-'));
+    pathsBase = baseDir;
+
+    // Force file-based encrypted storage for keyring (not testing keyring itself)
+    process.env.KEYRING_PASSWORD = 'test-keyring-password';
+
     const root: Node = {
       uid: 'root',
       name: '',
@@ -185,7 +196,9 @@ describe('WebDAV PROPFIND recursion and filtering', () => {
   });
 
   afterAll(() => {
-    rmSync(pathsBase, { recursive: true, force: true });
+    rmSync(baseDir, { recursive: true, force: true });
+    pathsBase = DEFAULT_PATHS_BASE;
+    delete process.env.KEYRING_PASSWORD;
   });
 
   it('PROPFIND depth=infinity returns all members', async () => {

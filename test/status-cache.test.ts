@@ -48,6 +48,8 @@ describe('CLI - status command', () => {
       temp: mkdtempSync(join(pathsBase, 'temp')),
       cache: mkdtempSync(join(pathsBase, 'cache')),
     };
+    // Force file-based encrypted storage for keyring (not testing keyring itself)
+    process.env.KEYRING_PASSWORD = 'test-keyring-password';
   });
 
   afterEach(async () => {
@@ -55,6 +57,7 @@ describe('CLI - status command', () => {
       await deleteStoredCredentials();
     } catch {}
     rmSync(baseDir, { recursive: true, force: true });
+    delete process.env.KEYRING_PASSWORD;
   });
 
   test('status --json shows logged-in user with username from config', async () => {

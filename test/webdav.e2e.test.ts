@@ -9,7 +9,10 @@ import { driveClient } from '../src/drive.ts';
 import { createFileDownloader } from './utils/seekableMock.ts';
 
 // Mock env-paths to avoid auth attempts
-const pathsBase = mkdtempSync(join(tmpdir(), 'pdb-webdav-e2e-'));
+// Note: E2E tests should be run separately to avoid singleton/resource conflicts.
+// Run with: bun test test/webdav.e2e.test.ts
+const DEFAULT_PATHS_BASE = mkdtempSync(join(tmpdir(), 'pdb-webdav-e2e-default-'));
+let pathsBase = DEFAULT_PATHS_BASE;
 mock.module('env-paths', () => ({
   default: () => ({
     config: join(pathsBase, 'config'),
@@ -116,7 +119,17 @@ describe('webdav e2e', () => {
     return result;
   };
 
+  // Create isolated temporary directories for this test suite
+  let baseDir: string;
+
   beforeAll(() => {
+    // Set up isolated temp directory for this entire test suite
+    baseDir = mkdtempSync(join(tmpdir(), 'pdb-webdav-e2e-'));
+    pathsBase = baseDir;
+
+    // Force file-based encrypted storage for keyring (not testing keyring itself)
+    process.env.KEYRING_PASSWORD = 'test-keyring-password';
+
     const rootNode: InMemoryNode = {
       uid: 'root',
       name: '',
@@ -232,7 +245,9 @@ describe('webdav e2e', () => {
     driveClient.getFileDownloader = originalMethods.getFileDownloader;
     driveClient.renameNode = originalMethods.renameNode;
     driveClient.moveNode = originalMethods.moveNode;
-    rmSync(pathsBase, { recursive: true, force: true });
+    rmSync(baseDir, { recursive: true, force: true });
+    pathsBase = DEFAULT_PATHS_BASE;
+    delete process.env.KEYRING_PASSWORD;
   });
 
   it('supports PUT/GET/DELETE', async () => {

@@ -35,6 +35,9 @@ beforeEach(() => {
   mockDirs = null;
   baseDir = mkdtempSync(join(tmpdir(), 'pdb-webdav-lockconf-'));
 
+  // Force file-based encrypted storage for keyring (not testing keyring itself)
+  process.env.KEYRING_PASSWORD = 'test-keyring-password';
+
   // Ensure DB file exists (create data dir and touch locks DB)
   const dataDir = getDataDir();
   mkdirSync(dataDir, { recursive: true });
@@ -75,6 +78,9 @@ afterEach(async () => {
     });
     mockDirs = null;
   }
+
+  // Clean up keyring environment
+  delete process.env.KEYRING_PASSWORD;
 });
 
 // These tests assert behavior when a depth:infinity lock is applied to a collection
