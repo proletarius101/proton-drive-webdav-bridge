@@ -119,6 +119,10 @@ async function spawnDaemon(options: Record<string, unknown>): Promise<void> {
   const scriptPath = process.argv[1];
   const runtime = process.argv[0]; // bun or node
 
+  if (!scriptPath || !runtime) {
+    throw new Error('Unable to determine runtime or script path for daemon spawn');
+  }
+
   const child = Bun.spawn([runtime, scriptPath, ...args], {
     detached: true,
     stdio: ['ignore', 'ignore', 'inherit'],

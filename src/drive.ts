@@ -294,10 +294,12 @@ function createProtonHttpClient(
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
       try {
+        let bodyToSend: any = undefined;
+        if (json) bodyToSend = JSON.stringify(json);
         let response = await fetch(fullUrl, {
           method,
           headers,
-          body: json ? JSON.stringify(json) : undefined,
+          body: bodyToSend,
           signal: signal || controller.signal,
         });
 
@@ -332,10 +334,19 @@ function createProtonHttpClient(
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
       try {
+        // Ensure Uint8Array bodies are passed as ArrayBuffer to satisfy
+        // DOM fetch BodyInit type in TypeScript
+        let bodyToSend: BodyInit | undefined = undefined;
+        if (body instanceof Uint8Array) {
+          bodyToSend = body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength);
+        } else {
+          bodyToSend = body as any;
+        }
+
         let response = await fetch(fullUrl, {
           method,
           headers,
-          body,
+          body: bodyToSend,
           signal: signal || controller.signal,
         });
 
@@ -763,8 +774,13 @@ function createOpenPGPCrypto(): OpenPGPCrypto {
 
       let verified = 0;
       if (result.signatures?.length > 0) {
-        const sigVerified = await result.signatures[0].verified.catch(() => false);
-        verified = sigVerified ? 1 : 0;
+        const sig = result.signatures[0];
+        if (sig && sig.verified) {
+          const sigVerified = await sig.verified.catch(() => false);
+          verified = sigVerified ? 1 : 0;
+        } else {
+          verified = 0;
+        }
       }
 
       return {
@@ -835,8 +851,13 @@ function createOpenPGPCrypto(): OpenPGPCrypto {
 
       let verified = 0;
       if (result.signatures?.length > 0) {
-        const sigVerified = await result.signatures[0].verified.catch(() => false);
-        verified = sigVerified ? 1 : 0;
+        const sig = result.signatures[0];
+        if (sig && sig.verified) {
+          const sigVerified = await sig.verified.catch(() => false);
+          verified = sigVerified ? 1 : 0;
+        } else {
+          verified = 0;
+        }
       }
 
       return {
@@ -1119,7 +1140,7 @@ export class DriveClientManager {
 
     // Create the SDK client
     const client = new sdk.ProtonDriveClient({
-      httpClient,
+      httpClient: httpClient as unknown as any,
       entitiesCache: new sdk.MemoryCache(),
       cryptoCache: new sdk.MemoryCache(),
       account,
@@ -1427,11 +1448,12 @@ export class DriveClientManager {
     }
 
     // Get the final node type
+    const lastPart = parts[parts.length - 1]!;
     const finalNode = await this.findNodeByName(
       currentUid === this.getRootFolderUid()
         ? this.getRootFolderUid()
         : (await this.getParentUid(currentUid)) || this.getRootFolderUid(),
-      parts[parts.length - 1]
+      lastPart
     );
 
     if (parts.length > 0) {
@@ -1441,7 +1463,7 @@ export class DriveClientManager {
           : { uid: this.getRootFolderUid(), type: 'folder' };
 
       if (parentUid) {
-        const node = await this.findNodeByName(parentUid.uid, parts[parts.length - 1]);
+        const node = await this.findNodeByName(parentUid.uid, lastPart);
         return node;
       }
     }
