@@ -18,7 +18,7 @@ import { afterEach, beforeEach, beforeAll, describe, expect, mock, test } from '
 import { mkdirSync, mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { keyringStore } from './setup.js';
+import { keyringStore, setPathsBase } from './setup.js';
 import type {
   ApiError,
   Session,
@@ -70,7 +70,6 @@ describe('ProtonAuth - Initialization', () => {
   });
 
   afterEach(() => {
-    mock.restore();
     mock.clearAllMocks();
   });
 
@@ -288,15 +287,17 @@ describe('ProtonAuth - Session State Management', () => {
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'pdb-auth-state-'));
-    pathsBase = tempDir;
+    setPathsBase(tempDir);
     process.env.KEYRING_PASSWORD = 'test-password';
     originalFetch = global.fetch;
   });
 
   afterEach(() => {
+    mock.restore();
+    mock.clearAllMocks();
     rmSync(tempDir, { recursive: true, force: true });
     delete process.env.KEYRING_PASSWORD;
-    pathsBase = join(tmpdir(), 'pdb-auth-default');
+    setPathsBase(join(tmpdir(), 'pdb-auth-default'));
     global.fetch = originalFetch;
   });
 
@@ -322,14 +323,16 @@ describe('ProtonAuth - Credential Storage Integration', () => {
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'pdb-auth-storage-'));
-    pathsBase = tempDir;
+    setPathsBase(tempDir);
     process.env.KEYRING_PASSWORD = 'test-password';
   });
 
   afterEach(() => {
+    mock.restore();
+    mock.clearAllMocks();
     rmSync(tempDir, { recursive: true, force: true });
     delete process.env.KEYRING_PASSWORD;
-    pathsBase = join(tmpdir(), 'pdb-auth-default');
+    setPathsBase(join(tmpdir(), 'pdb-auth-default'));
   });
 
   test('should store and retrieve reusable credentials structure', async () => {
@@ -565,14 +568,16 @@ describe('ProtonAuth - Helper Functions Integration', () => {
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'pdb-auth-helpers-'));
-    pathsBase = tempDir;
+    setPathsBase(tempDir);
     process.env.KEYRING_PASSWORD = 'test-password';
   });
 
   afterEach(() => {
+    mock.restore();
+    mock.clearAllMocks();
     rmSync(tempDir, { recursive: true, force: true });
     delete process.env.KEYRING_PASSWORD;
-    pathsBase = join(tmpdir(), 'pdb-auth-default');
+    setPathsBase(join(tmpdir(), 'pdb-auth-default'));
   });
 
   test('authenticateAndStore should be a function', () => {

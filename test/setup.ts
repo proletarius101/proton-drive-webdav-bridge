@@ -12,6 +12,10 @@ import { tmpdir } from 'os';
 // Global base path for test directories
 export let pathsBase = join(tmpdir(), 'pdb-test-default');
 
+export function setPathsBase(newBase: string) {
+  pathsBase = newBase;
+}
+
 /**
  * Mock env-paths to use temporary directories for all tests
  * This prevents tests from touching real user directories
