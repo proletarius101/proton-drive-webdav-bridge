@@ -231,9 +231,12 @@ WO4BAMcm1u02t4VKw++ttECPt+HUgPUq5pqQWe5Q2cW4TMsE
 function uint8ArrayToBigIntLE(arr: Uint8Array): bigint {
   let result = 0n;
   for (let i = arr.length - 1; i >= 0; i--) {
-    // Indexing a typed array always yields a number, but narrow with a
-    // non-null assertion to satisfy strict TS checks in some compiler configs.
-    result = (result << 8n) | BigInt(arr[arr.length - 1 - i]!);
+    // Compute the index and guard against unexpected undefined values to
+    // satisfy strict TS checks without using a non-null assertion.
+    const idx = arr.length - 1 - i;
+    const byte = arr[idx];
+    if (byte === undefined) continue;
+    result = (result << 8n) | BigInt(byte);
   }
   return result;
 }

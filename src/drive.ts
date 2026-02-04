@@ -294,7 +294,7 @@ function createProtonHttpClient(
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
       try {
-        let bodyToSend: any = undefined;
+        let bodyToSend: string | undefined = undefined;
         if (json) bodyToSend = JSON.stringify(json);
         let response = await fetch(fullUrl, {
           method,
@@ -310,7 +310,7 @@ function createProtonHttpClient(
             response = await fetch(fullUrl, {
               method,
               headers,
-              body: json ? JSON.stringify(json) : undefined,
+              body: bodyToSend,
               signal: signal || controller.signal,
             });
           } catch (error) {
@@ -334,13 +334,17 @@ function createProtonHttpClient(
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
       try {
-        // Ensure Uint8Array bodies are passed as ArrayBuffer to satisfy
-        // DOM fetch BodyInit type in TypeScript
+        // Normalize binary bodies to a Blob so TypeScript accepts BodyInit
         let bodyToSend: BodyInit | undefined = undefined;
-        if (body instanceof Uint8Array) {
-          bodyToSend = body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength);
+        if (body instanceof Uint8Array || ArrayBuffer.isView(body)) {
+          const view = body instanceof Uint8Array ? body : new Uint8Array(body as ArrayBuffer);
+          // Make an explicit copy into a plain ArrayBuffer-backed Uint8Array to
+          // avoid passing SharedArrayBuffer-backed views into Blob (TS DOM types)
+          bodyToSend = new Blob([new Uint8Array(view)]);
+        } else if (body instanceof ArrayBuffer) {
+          bodyToSend = new Blob([new Uint8Array(body)]);
         } else {
-          bodyToSend = body as any;
+          bodyToSend = body as BodyInit;
         }
 
         let response = await fetch(fullUrl, {
@@ -357,7 +361,7 @@ function createProtonHttpClient(
             response = await fetch(fullUrl, {
               method,
               headers,
-              body,
+              body: bodyToSend,
               signal: signal || controller.signal,
             });
           } catch (error) {
@@ -1140,6 +1144,10 @@ export class DriveClientManager {
 
     // Create the SDK client
     const client = new sdk.ProtonDriveClient({
+      // The SDK expects its internal HTTP client shape. Our ProtonHttpClient is
+      // compatible at runtime but the SDK's types differ; cast to `any` here
+      // to avoid complex type shims. ESLint rule suppressed for this line.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       httpClient: httpClient as unknown as any,
       entitiesCache: new sdk.MemoryCache(),
       cryptoCache: new sdk.MemoryCache(),
@@ -1406,8 +1414,9 @@ export class DriveClientManager {
    */
   async findNodeByName(
     folderUid: string,
-    name: string
+    name?: string
   ): Promise<{ uid: string; type: string } | null> {
+    if (!name) return null;
     const client = this.getClient();
     let found: { uid: string; type: string } | null = null;
 
@@ -1448,7 +1457,10 @@ export class DriveClientManager {
     }
 
     // Get the final node type
-    const lastPart = parts[parts.length - 1]!;
+    const lastPart = parts[parts.length - 1];
+    if (!lastPart) {
+      return null;
+    }
     const finalNode = await this.findNodeByName(
       currentUid === this.getRootFolderUid()
         ? this.getRootFolderUid()
