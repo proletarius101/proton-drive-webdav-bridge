@@ -1,26 +1,26 @@
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { afterEach, beforeEach, describe, test, expect, mock } from 'bun:test';
+import { afterEach, beforeEach, beforeAll, describe, test, expect, mock } from 'bun:test';
 
-// Mock env-paths to keep data dir in temp
-let pathsBase = join(tmpdir(), 'pdb-status-default');
-let mockPaths = {
-  config: join(pathsBase, 'config'),
-  data: join(pathsBase, 'data'),
-  log: join(pathsBase, 'log'),
-  temp: join(pathsBase, 'temp'),
-  cache: join(pathsBase, 'cache'),
-};
+// Shared mock factories for isolated state
+import {
+  createMockState,
+  createKeychainMocks,
+  createConfigMocks,
+  resetTestHelpers,
+  captureConsoleAsync,
+} from './helpers/mocks.js';
 
-mock.module('env-paths', () => ({
-  default: () => mockPaths,
-}));
+const mockState = createMockState();
+const keychainMocks = createKeychainMocks(mockState);
+const configMocks = createConfigMocks(mockState);
+
+mock.module('../src/keychain.js', () => keychainMocks);
+mock.module('../src/config.js', () => configMocks);
 
 // Use real modules
 import { buildProgram } from '../src/index.js';
-import { storeCredentials, flushPendingWrites, deleteStoredCredentials } from '../src/keychain.js';
-import { updateConfig, getConfig } from '../src/config.js';
 
 const sample = {
   parentUID: 'p',
@@ -37,50 +37,44 @@ const sample = {
 
 describe('CLI - status command', () => {
   let baseDir: string;
+  let program: any;
+
+  beforeAll(() => {
+    // Build the CLI program once to avoid duplicate commander option registration
+    program = buildProgram();
+  });
 
   beforeEach(() => {
+    // Reset mock state for isolation
+    resetTestHelpers(mockState);
+    keychainMocks.storeCredentials.mockClear();
+    keychainMocks.getStoredCredentials.mockClear();
+    configMocks.getConfig.mockClear();
+    configMocks.updateConfig.mockClear();
+
     baseDir = mkdtempSync(join(tmpdir(), 'pdb-status-'));
-    pathsBase = baseDir;
-    mockPaths = {
-      config: mkdtempSync(join(pathsBase, 'config')),
-      data: mkdtempSync(join(pathsBase, 'data')),
-      log: mkdtempSync(join(pathsBase, 'log')),
-      temp: mkdtempSync(join(pathsBase, 'temp')),
-      cache: mkdtempSync(join(pathsBase, 'cache')),
-    };
     // Force file-based encrypted storage for keyring (not testing keyring itself)
     process.env.KEYRING_PASSWORD = 'test-keyring-password';
   });
 
   afterEach(async () => {
-    try {
-      await deleteStoredCredentials();
-    } catch {}
+    mock.restore();
+    mock.clearAllMocks();
     rmSync(baseDir, { recursive: true, force: true });
     delete process.env.KEYRING_PASSWORD;
   });
 
   test('status --json shows logged-in user with username from config', async () => {
     // Store credentials and username in config (mimics login flow)
-    await storeCredentials(sample);
-    updateConfig({ username: sample.username });
-    await flushPendingWrites();
+    mockState.credentials = sample;
+    mockState.config.username = sample.username;
 
-    // Run the status command
-    const program = buildProgram();
-    const capture: string[] = [];
-    const originalLog = console.log;
-    console.log = (msg?: unknown) => {
-      capture.push(String(msg ?? ''));
-    };
-
-    try {
+    // Run the status command with captured console output
+    const { logs } = await captureConsoleAsync(async () => {
       await program.parseAsync(['status', '--json'], { from: 'user' });
-    } finally {
-      console.log = originalLog;
-    }
+    });
 
-    const out = capture.join('\n');
+    const out = logs.join('\n');
     const parsed = JSON.parse(out) as { auth: { loggedIn: boolean; username?: string } };
 
     expect(parsed.auth.loggedIn).toBe(true);
@@ -89,25 +83,15 @@ describe('CLI - status command', () => {
 
   test('status --json shows not logged in when no credentials exist', async () => {
     // Ensure clean slate (no credentials)
-    try {
-      await deleteStoredCredentials();
-    } catch {}
+    mockState.credentials = null;
+    mockState.config.username = undefined;
 
-    // Run the status command
-    const program = buildProgram();
-    const capture: string[] = [];
-    const originalLog = console.log;
-    console.log = (msg?: unknown) => {
-      capture.push(String(msg ?? ''));
-    };
-
-    try {
+    // Run the status command with captured console output
+    const { logs } = await captureConsoleAsync(async () => {
       await program.parseAsync(['status', '--json'], { from: 'user' });
-    } finally {
-      console.log = originalLog;
-    }
+    });
 
-    const out = capture.join('\n');
+    const out = logs.join('\n');
     const parsed = JSON.parse(out) as { auth: { loggedIn: boolean; username?: string | null } };
 
     expect(parsed.auth.loggedIn).toBe(false);

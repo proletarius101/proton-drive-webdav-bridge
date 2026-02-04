@@ -205,12 +205,12 @@ describe('CLI - Auth Commands', () => {
     // Force file-based encrypted storage for keyring (not testing keyring itself)
     process.env.KEYRING_PASSWORD = 'test-keyring-password';
 
-    mockHasStoredCredentials.mockReset();
-    mockStoreCredentials.mockReset();
-    mockDeleteStoredCredentials.mockReset();
-    mockInput.mockReset();
-    mockPassword.mockReset();
-    mockConfirm.mockReset();
+    mockHasStoredCredentials.mockClear();
+    mockStoreCredentials.mockClear();
+    mockDeleteStoredCredentials.mockClear();
+    mockInput.mockClear();
+    mockPassword.mockClear();
+    mockConfirm.mockClear();
 
     mockHasStoredCredentials.mockReturnValue(Promise.resolve(false));
     mockInput.mockReturnValue(Promise.resolve('testuser'));
@@ -219,6 +219,8 @@ describe('CLI - Auth Commands', () => {
   });
 
   afterEach(() => {
+    mock.restore();
+    mock.clearAllMocks();
     delete process.env.KEYRING_PASSWORD;
   });
 
@@ -275,7 +277,7 @@ describe('CLI - Auth Commands', () => {
 
 describe('CLI - Start Command', () => {
   beforeEach(() => {
-    mockStart.mockReset();
+    mockStart.mockClear();
     mockHasStoredCredentials.mockReturnValue(Promise.resolve(true));
     // Force file-based encrypted storage for keyring (not testing keyring itself)
     process.env.KEYRING_PASSWORD = 'test-keyring-password';
@@ -285,6 +287,8 @@ describe('CLI - Start Command', () => {
   });
 
   afterEach(() => {
+    mock.restore();
+    mock.clearAllMocks();
     if (existsSync(pidFilePath)) {
       unlinkSync(pidFilePath);
     }
@@ -332,6 +336,8 @@ describe('CLI - Stop Command', () => {
   });
 
   afterEach(() => {
+    mock.restore();
+    mock.clearAllMocks();
     if (existsSync(pidFilePath)) {
       unlinkSync(pidFilePath);
     }
@@ -394,6 +400,8 @@ describe('CLI - Status Command', () => {
   });
 
   afterEach(() => {
+    mock.restore();
+    mock.clearAllMocks();
     if (existsSync(pidFilePath)) {
       unlinkSync(pidFilePath);
     }

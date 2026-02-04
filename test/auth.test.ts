@@ -18,6 +18,7 @@ import { afterEach, beforeEach, beforeAll, describe, expect, mock, test } from '
 import { mkdirSync, mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { keyringStore } from './setup.js';
 import type {
   ApiError,
   Session,
@@ -58,60 +59,21 @@ beforeAll(async () => {
   restoreSessionFromStorage = mod.restoreSessionFromStorage;
 });
 
-let pathsBase: string = join(tmpdir(), 'pdb-auth-default');
-
-mock.module('env-paths', () => ({
-  default: () => {
-    const config = join(pathsBase, 'config', 'proton-drive-webdav-bridge');
-    const data = join(pathsBase, 'data', 'proton-drive-webdav-bridge');
-    const log = join(pathsBase, 'log', 'proton-drive-webdav-bridge');
-    const temp = join(pathsBase, 'temp', 'proton-drive-webdav-bridge');
-    const cache = join(pathsBase, 'cache', 'proton-drive-webdav-bridge');
-    mkdirSync(config, { recursive: true });
-    mkdirSync(data, { recursive: true });
-    mkdirSync(log, { recursive: true });
-    mkdirSync(temp, { recursive: true });
-    mkdirSync(cache, { recursive: true });
-    return { config, data, log, temp, cache };
-  },
-}));
-
-const keyringStore = new Map<string, string>();
-
-mock.module('@napi-rs/keyring', () => {
-  class Entry {
-    private key: string;
-    constructor(
-      private readonly service: string,
-      private readonly username: string
-    ) {
-      this.key = `${service}:${username}`;
-    }
-
-    setPassword(password: string) {
-      keyringStore.set(this.key, password);
-    }
-
-    getPassword() {
-      return keyringStore.get(this.key) ?? null;
-    }
-
-    deletePassword() {
-      keyringStore.delete(this.key);
-    }
-  }
-
-  class AsyncEntry extends Entry {}
-
-  return { Entry, AsyncEntry };
-});
-
 // Rejects immediately so tests never hit the real Proton API.
 const rejectedApiRequester = mock(async () => {
   throw new Error('Mocked network call');
 }) as unknown as ApiRequester;
 
 describe('ProtonAuth - Initialization', () => {
+  beforeEach(() => {
+    keyringStore.clear();
+  });
+
+  afterEach(() => {
+    mock.restore();
+    mock.clearAllMocks();
+  });
+
   test('should instantiate ProtonAuth with all required methods', () => {
     const auth = new ProtonAuth();
     expect(auth).toBeDefined();
