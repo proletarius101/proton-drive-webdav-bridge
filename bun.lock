@@ -11,7 +11,7 @@
         "@mielo-ui/mielo-react": "^1.0.8",
         "@mielo-ui/mielo-react-slider": "^1.0.5",
         "@napi-rs/keyring": "^1.1.6",
-        "@protontech/drive-sdk": "^0.9.3",
+        "@protontech/drive-sdk": "^0.9.6",
         "@tauri-apps/api": "^2.9.1",
         "@tauri-apps/plugin-autostart": "~2",
         "bcryptjs": "^3.0.3",
@@ -167,7 +167,7 @@
 
     "@pkgr/core": ["@pkgr/core@0.2.9", "", {}, "sha512-QNqXyfVS2wm9hweSYD2O7F0G06uurj9kZ96TRQE5Y9hU7+tgdZwIkbAKc5Ocy1HxEY2kuDQa6cQ1WRs/O5LFKA=="],
 
-    "@protontech/drive-sdk": ["@protontech/drive-sdk@0.9.3", "", { "dependencies": { "@noble/hashes": "^1.8.0", "bcryptjs": "^2.4.3", "ttag": "^1.8.7" } }, "sha512-tP8gSG3iYEio7PUZTPPvGgrs1EDc6tWsXuF811xlwae1Abx+Bh7tWVXOhvtfSeX49U+wX5M8LUw8Dl3ojDWiMw=="],
+    "@protontech/drive-sdk": ["@protontech/drive-sdk@0.9.6", "", { "dependencies": { "@noble/hashes": "^1.8.0", "bcryptjs": "^2.4.3", "ttag": "^1.8.7" } }, "sha512-k4PlkPvclCEG9c488blxD7kL9juQQcdzNu6gcPv+6ID9lstmjB1F5YaGr+HKMbKlUovnYvlY9AD9zB6ycGMgxA=="],
 
     "@sciactive/splitn": ["@sciactive/splitn@3.1.0", "", {}, "sha512-Ajx+CEk55Yhum42I69KLWaIMiSANLSyVcHzZv6T+nA6SwT+z4dZsfBDdX7vMPBHItEmSuXJtd7YYY8OBCxrG4w=="],
 
