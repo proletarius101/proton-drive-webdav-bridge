@@ -1,304 +1,76 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
-import { initGui } from '../src/gui/main.ts'
+import { describe, it, expect } from 'bun:test';
+import * as React from 'react';
+import { render, fireEvent, waitFor } from '@testing-library/react';
+import { TauriProvider, type TauriApi } from '../src/gui/tauri/TauriProvider';
+import { useMountStatus } from '../src/gui/hooks/useMountStatus';
 
-// Minimal fake element used in tests
-function makeEl() {
-  return {
-    textContent: '',
-    className: '',
-    value: '',
-    checked: false,
-    addEventListener: (_: string, __: Function) => {},
-    classList: { toggle: (_: string) => {} },
-    scrollTop: 0,
-    scrollHeight: 0,
-  }
+function TestMount({ options }: { options?: { mountRetryDelayMs?: number; mountMaxRetries?: number } }) {
+  const { isMounted, isToggling, toggleMount } = useMountStatus(options);
+  return React.createElement(
+    'div',
+    null,
+    React.createElement('span', { 'data-testid': 'mounted' }, isMounted ? 'yes' : 'no'),
+    React.createElement('span', { 'data-testid': 'toggling' }, isToggling ? 'yes' : 'no'),
+    React.createElement('button', { onClick: () => toggleMount(true) }, 'Mount'),
+    React.createElement('button', { onClick: () => toggleMount(false) }, 'Unmount')
+  );
 }
 
-describe('GUI Mount Toggle', () => {
-  let elements: Map<string, any>
-  let invokeCalls: Array<{ cmd: string; time: number }>
-
-  beforeEach(() => {
-    // Create real DOM elements
-    const ids = ['service-badge', 'live-status', 'quota-bar', 'quota-text', 'dav-url', 'mount-toggle',
-      'open-files', 'copy-url', 'toggle-log', 'log-area', 'purge-cache', 'logout', 'apply-port', 'network-port']
-    document.body.innerHTML = ''
-    ids.forEach((id) => {
-      let el: HTMLElement
-      if (id === 'quota-bar') el = document.createElement('progress')
-      else if (id === 'dav-url' || id === 'network-port') el = document.createElement('input')
-      else if (id === 'log-area') el = document.createElement('pre')
-      else el = document.createElement('div')
-      el.id = id
-      document.body.appendChild(el)
-    })
-
-    const portEl = document.getElementById('network-port') as HTMLInputElement
-    portEl.value = '7777'
-
-    if (!(navigator as any).clipboard) (navigator as any).clipboard = { writeText: async () => {} }
-
-    invokeCalls = []
-  })
-
-  afterEach(() => {
-    document.body.innerHTML = ''
-  })
-
-  it('handles mount_drive error gracefully and still verifies actual mount status', async () => {
-    let isMounted = false
-    const mockInvoke = async (cmd: string) => {
-      invokeCalls.push({ cmd, time: Date.now() })
-
-      if (cmd === 'get_status') {
-        return {
-          server: { running: true, pid: 123, url: 'http://localhost:7777' },
-          config: { webdav: { host: 'localhost', port: 7777, https: false, requireAuth: false } },
-          connecting: false,
-          storage: { used: 1024, total: 4096 },
-          liveStatusString: 'OK',
-        }
-      }
+describe('GUI Mount Logic (useMountStatus)', () => {
+  it('verifies actual mount state after mount_drive error', async () => {
+    let checkCount = 0;
+    const invoke: TauriApi['invoke'] = async (cmd) => {
       if (cmd === 'mount_drive') {
-        throw new Error('GIO error: Mount not found')
+        throw new Error('GIO error: Mount not found');
       }
       if (cmd === 'check_mount_status') {
-        isMounted = true
-        return 'dav://localhost:7777'
+        checkCount += 1;
+        return checkCount >= 2 ? 'dav://localhost:7777' : null;
       }
-      return true
-    }
+      return true as any;
+    };
 
-    const mockListen = (_: string, __: any) => ({})
-    const { stop } = initGui({ invoke: mockInvoke as any, listen: mockListen as any })
+    const listen: TauriApi['listen'] = async () => async () => {};
 
-    await new Promise((r) => setTimeout(r, 50))
+    const { getByText, getByTestId } = render(
+      React.createElement(TauriProvider, { invoke, listen }, React.createElement(TestMount, {
+        options: { mountRetryDelayMs: 10, mountMaxRetries: 3 },
+      }))
+    );
 
-    const mountCalls = invokeCalls.filter((c) => c.cmd === 'mount_drive')
-    const checkCalls = invokeCalls.filter((c) => c.cmd === 'check_mount_status')
+    await waitFor(() => expect(getByTestId('mounted').textContent).toBe('no'));
 
-    expect(mountCalls.length).toBeGreaterThanOrEqual(0)
-    expect(checkCalls.length).toBeGreaterThanOrEqual(0)
+    fireEvent.click(getByText('Mount'));
 
-    stop()
-  })
+    await waitFor(() => expect(getByTestId('mounted').textContent).toBe('yes'));
+    expect(checkCount).toBeGreaterThanOrEqual(2);
+  });
 
-  it('handles mount failure when server is not running', async () => {
-    const mockInvoke = async (cmd: string) => {
-      invokeCalls.push({ cmd, time: Date.now() })
-
-      if (cmd === 'get_status') {
-        return {
-          server: { running: false, pid: null, url: null },
-          config: { webdav: { host: 'localhost', port: 7777, https: false, requireAuth: false } },
-          connecting: false,
-          storage: { used: 0, total: 4096 },
-          liveStatusString: 'Server not running',
-        }
-      }
-      if (cmd === 'mount_drive') {
-        throw new Error('WebDAV server is not running. Start the server first.')
-      }
-      if (cmd === 'check_mount_status') {
-        return null
-      }
-      return true
-    }
-
-    const mockListen = (_: string, __: any) => ({})
-    const { stop } = initGui({ invoke: mockInvoke as any, listen: mockListen as any })
-
-    await new Promise((r) => setTimeout(r, 50))
-
-    const mountAttempts = invokeCalls.filter((c) => c.cmd === 'mount_drive')
-    expect(mountAttempts.length).toBeGreaterThanOrEqual(0)
-
-    stop()
-  })
-
-  it('successfully unmounts when unmount_drive succeeds', async () => {
-    let isMounted = true
-    const mockInvoke = async (cmd: string) => {
-      invokeCalls.push({ cmd, time: Date.now() })
-
-      if (cmd === 'get_status') {
-        return {
-          server: { running: true, pid: 123, url: 'http://localhost:7777' },
-          config: { webdav: { host: 'localhost', port: 7777, https: false, requireAuth: false } },
-          connecting: false,
-          storage: { used: 1024, total: 4096 },
-          liveStatusString: 'OK',
-        }
-      }
+  it('unmounts after successful unmount_drive', async () => {
+    let mounted = true;
+    const invoke: TauriApi['invoke'] = async (cmd) => {
       if (cmd === 'unmount_drive') {
-        isMounted = false
-        return undefined
+        mounted = false;
+        return undefined as any;
       }
       if (cmd === 'check_mount_status') {
-        return isMounted ? 'dav://localhost:7777' : null
+        return mounted ? 'dav://localhost:7777' : null;
       }
-      return true
-    }
+      return true as any;
+    };
 
-    const mockListen = (_: string, __: any) => ({})
-    const { stop } = initGui({ invoke: mockInvoke as any, listen: mockListen as any })
+    const listen: TauriApi['listen'] = async () => async () => {};
 
-    await new Promise((r) => setTimeout(r, 50))
+    const { getByText, getByTestId } = render(
+      React.createElement(TauriProvider, { invoke, listen }, React.createElement(TestMount, {
+        options: { mountRetryDelayMs: 10, mountMaxRetries: 2 },
+      }))
+    );
 
-    const unmountCalls = invokeCalls.filter((c) => c.cmd === 'unmount_drive')
-    const checkCalls = invokeCalls.filter((c) => c.cmd === 'check_mount_status')
+    await waitFor(() => expect(getByTestId('mounted').textContent).toBe('yes'));
 
-    expect(unmountCalls.length).toBeGreaterThanOrEqual(0)
-    expect(checkCalls.length).toBeGreaterThanOrEqual(0)
+    fireEvent.click(getByText('Unmount'));
 
-    stop()
-  })
-
-  it('handles unmount failure with backend still unmounting gracefully', async () => {
-    let unmountInProgress = true
-    let isMounted = true
-    const mockInvoke = async (cmd: string) => {
-      invokeCalls.push({ cmd, time: Date.now() })
-
-      if (cmd === 'get_status') {
-        return {
-          server: { running: true, pid: 123, url: 'http://localhost:7777' },
-          config: { webdav: { host: 'localhost', port: 7777, https: false, requireAuth: false } },
-          connecting: false,
-          storage: { used: 1024, total: 4096 },
-          liveStatusString: 'OK',
-        }
-      }
-      if (cmd === 'unmount_drive') {
-        if (unmountInProgress) {
-          throw new Error('GIO error: Backend currently unmounting')
-        }
-        isMounted = false
-        return undefined
-      }
-      if (cmd === 'check_mount_status') {
-        unmountInProgress = false
-        return isMounted ? 'dav://localhost:7777' : null
-      }
-      return true
-    }
-
-    const mockListen = (_: string, __: any) => ({})
-    const { stop } = initGui({ invoke: mockInvoke as any, listen: mockListen as any })
-
-    await new Promise((r) => setTimeout(r, 50))
-
-    const unmountCalls = invokeCalls.filter((c) => c.cmd === 'unmount_drive')
-    expect(unmountCalls.length).toBeGreaterThanOrEqual(0)
-
-    stop()
-  })
-
-  it('verifies mount status multiple times to ensure consistency', async () => {
-    let checkCount = 0
-    const mockInvoke = async (cmd: string) => {
-      invokeCalls.push({ cmd, time: Date.now() })
-
-      if (cmd === 'get_status') {
-        return {
-          server: { running: true, pid: 123, url: 'http://localhost:7777' },
-          config: { webdav: { host: 'localhost', port: 7777, https: false, requireAuth: false } },
-          connecting: false,
-          storage: { used: 1024, total: 4096 },
-          liveStatusString: 'OK',
-        }
-      }
-      if (cmd === 'mount_drive') {
-        return undefined
-      }
-      if (cmd === 'check_mount_status') {
-        checkCount++
-        return checkCount >= 2 ? 'dav://localhost:7777' : null
-      }
-      return true
-    }
-
-    const mockListen = (_: string, __: any) => ({})
-    const { stop } = initGui({ invoke: mockInvoke as any, listen: mockListen as any })
-
-    await new Promise((r) => setTimeout(r, 50))
-
-    const checkCalls = invokeCalls.filter((c) => c.cmd === 'check_mount_status')
-    expect(checkCalls.length).toBeGreaterThanOrEqual(1)
-
-    stop()
-  })
-
-  it('does not revert switch if actual mount state can be determined despite error', async () => {
-    let isMounted = true
-    const mockInvoke = async (cmd: string) => {
-      invokeCalls.push({ cmd, time: Date.now() })
-
-      if (cmd === 'get_status') {
-        return {
-          server: { running: true, pid: 123, url: 'http://localhost:7777' },
-          config: { webdav: { host: 'localhost', port: 7777, https: false, requireAuth: false } },
-          connecting: false,
-          storage: { used: 1024, total: 4096 },
-          liveStatusString: 'OK',
-        }
-      }
-      if (cmd === 'mount_drive') {
-        throw new Error('Transient error')
-      }
-      if (cmd === 'check_mount_status') {
-        return isMounted ? 'dav://localhost:7777' : null
-      }
-      return true
-    }
-
-    const mockListen = (_: string, __: any) => ({})
-    const { stop } = initGui({ invoke: mockInvoke as any, listen: mockListen as any })
-
-    await new Promise((r) => setTimeout(r, 50))
-
-    const checkCalls = invokeCalls.filter((c) => c.cmd === 'check_mount_status')
-    expect(checkCalls.length).toBeGreaterThanOrEqual(1)
-
-    stop()
-  })
-
-  it('logs warnings when mount status checks fail but continues retrying', async () => {
-    let failCount = 0
-    const mockInvoke = async (cmd: string) => {
-      invokeCalls.push({ cmd, time: Date.now() })
-
-      if (cmd === 'get_status') {
-        return {
-          server: { running: true, pid: 123, url: 'http://localhost:7777' },
-          config: { webdav: { host: 'localhost', port: 7777, https: false, requireAuth: false } },
-          connecting: false,
-          storage: { used: 1024, total: 4096 },
-          liveStatusString: 'OK',
-        }
-      }
-      if (cmd === 'mount_drive') {
-        return undefined
-      }
-      if (cmd === 'check_mount_status') {
-        failCount++
-        if (failCount <= 2) {
-          throw new Error('Temporary check failure')
-        }
-        return 'dav://localhost:7777'
-      }
-      return true
-    }
-
-    const mockListen = (_: string, __: any) => ({})
-    const { stop } = initGui({ invoke: mockInvoke as any, listen: mockListen as any, mountRetryDelayMs: 10, mountMaxRetries: 5 })
-
-    await new Promise((r) => setTimeout(r, 100))
-
-    const checkCalls = invokeCalls.filter((c) => c.cmd === 'check_mount_status')
-    expect(checkCalls.length).toBeGreaterThanOrEqual(1)
-
-    stop()
-  })
-})
+    await waitFor(() => expect(getByTestId('mounted').textContent).toBe('no'));
+  });
+});

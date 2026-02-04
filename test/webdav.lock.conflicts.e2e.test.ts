@@ -1,8 +1,17 @@
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'fs';
-import { getDataDir } from '../src/paths.js';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { describe, it, beforeEach, afterEach, expect, mock } from 'bun:test';
+import { getDataDir } from '../src/paths.js';
+import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
+
+let __perTestEnv: PerTestEnv;
+beforeEach(async () => {
+  __perTestEnv = await setupPerTestEnv();
+});
+afterEach(async () => {
+  await __perTestEnv.cleanup();
+});
 
 // Note: These E2E tests should be run separately from other tests to avoid
 // singleton/resource conflicts. Run with: bun test test/webdav.lock.conflicts.e2e.test.ts
@@ -24,9 +33,9 @@ mock.module('env-paths', () => ({
   },
 }));
 
-import { WebDAVServer } from '../src/webdav/server.js';
-import { LockManager } from '../src/webdav/LockManager.js';
 import { driveClient } from '../src/drive.js';
+import { LockManager } from '../src/webdav/LockManager.js';
+import { WebDAVServer } from '../src/webdav/server.js';
 
 let server: InstanceType<typeof WebDAVServer> | null = null;
 let baseDir: string | null = null;

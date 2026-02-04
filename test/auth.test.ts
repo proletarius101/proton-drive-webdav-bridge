@@ -16,9 +16,10 @@
 
 import { afterEach, beforeEach, beforeAll, describe, expect, mock, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync } from 'fs';
+import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { keyringStore, setPathsBase } from './setup.js';
+import { keyringStore } from './setup.js';
 import type {
   ApiError,
   Session,
@@ -52,11 +53,32 @@ let restoreSessionFromStorage: () => Promise<{
   username: string;
 }>;
 
-beforeAll(async () => {
-  const mod = await import(`../src/auth.js?cache=${Date.now()}`);
+// Per-test setup: create isolated temp dir and load module after mocking env-paths
+let testTempDir: string;
+beforeEach(async () => {
+  testTempDir = await mkdtemp(join(tmpdir(), 'pdb-test-'));
+
+  mock.module('env-paths', () => ({
+    default: () => ({
+      config: join(testTempDir, 'config'),
+      data: join(testTempDir, 'data'),
+      log: join(testTempDir, 'log'),
+      temp: join(testTempDir, 'temp'),
+      cache: join(testTempDir, 'cache'),
+    }),
+  }));
+
+  const cacheBuster = `${Date.now()}-${Math.random()}`;
+  const mod = await import(`../src/auth.js?cache=${cacheBuster}`);
   ProtonAuth = mod.ProtonAuth;
   authenticateAndStore = mod.authenticateAndStore;
   restoreSessionFromStorage = mod.restoreSessionFromStorage;
+});
+
+afterEach(async () => {
+  // remove test dir and restore mocks
+  await rm(testTempDir, { recursive: true, force: true });
+  mock.restore();
 });
 
 // Rejects immediately so tests never hit the real Proton API.
@@ -287,7 +309,7 @@ describe('ProtonAuth - Session State Management', () => {
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'pdb-auth-state-'));
-    setPathsBase(tempDir);
+    // pathsBase set via per-test env-paths mock in top-level beforeEach
     process.env.KEYRING_PASSWORD = 'test-password';
     originalFetch = global.fetch;
   });
@@ -297,7 +319,7 @@ describe('ProtonAuth - Session State Management', () => {
     mock.clearAllMocks();
     rmSync(tempDir, { recursive: true, force: true });
     delete process.env.KEYRING_PASSWORD;
-    setPathsBase(join(tmpdir(), 'pdb-auth-default'));
+    // restore default handled by top-level afterEach
     global.fetch = originalFetch;
   });
 
@@ -323,7 +345,7 @@ describe('ProtonAuth - Credential Storage Integration', () => {
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'pdb-auth-storage-'));
-    setPathsBase(tempDir);
+    // pathsBase set via per-test env-paths mock in top-level beforeEach
     process.env.KEYRING_PASSWORD = 'test-password';
   });
 
@@ -332,7 +354,7 @@ describe('ProtonAuth - Credential Storage Integration', () => {
     mock.clearAllMocks();
     rmSync(tempDir, { recursive: true, force: true });
     delete process.env.KEYRING_PASSWORD;
-    setPathsBase(join(tmpdir(), 'pdb-auth-default'));
+    // restore default handled by top-level afterEach
   });
 
   test('should store and retrieve reusable credentials structure', async () => {
@@ -568,7 +590,7 @@ describe('ProtonAuth - Helper Functions Integration', () => {
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'pdb-auth-helpers-'));
-    setPathsBase(tempDir);
+    // pathsBase set via per-test env-paths mock in top-level beforeEach
     process.env.KEYRING_PASSWORD = 'test-password';
   });
 
@@ -577,7 +599,7 @@ describe('ProtonAuth - Helper Functions Integration', () => {
     mock.clearAllMocks();
     rmSync(tempDir, { recursive: true, force: true });
     delete process.env.KEYRING_PASSWORD;
-    setPathsBase(join(tmpdir(), 'pdb-auth-default'));
+    // restore default handled by top-level afterEach
   });
 
   test('authenticateAndStore should be a function', () => {

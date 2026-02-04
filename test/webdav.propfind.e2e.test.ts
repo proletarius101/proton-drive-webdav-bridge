@@ -1,10 +1,20 @@
+import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { beforeAll, afterAll, describe, it, expect, mock } from 'bun:test';
 
-import { WebDAVServer } from '../src/webdav/server.ts';
+import { afterEach, beforeEach } from 'bun:test';
 import { driveClient } from '../src/drive.ts';
+import { WebDAVServer } from '../src/webdav/server.ts';
+import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
+
+let __perTestEnv: PerTestEnv;
+beforeEach(async () => {
+  __perTestEnv = await setupPerTestEnv();
+});
+afterEach(async () => {
+  await __perTestEnv.cleanup();
+});
 
 // Note: These E2E tests should be run separately from other tests to avoid
 // singleton/resource conflicts. Run with: bun test test/webdav.propfind.e2e.test.ts

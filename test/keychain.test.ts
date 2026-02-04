@@ -10,10 +10,36 @@
  */
 
 import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync } from 'fs';
+import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, beforeEach, afterAll, describe, expect, test, mock } from 'bun:test';
 import { keyringStore } from './setup.js';
+
+// Per-test env-paths mock: ensure each test uses an isolated temp dir
+let __testTempBase: string;
+beforeEach(async () => {
+  __testTempBase = await mkdtemp(join(tmpdir(), 'pdb-keychain-global-'));
+  mock.module('env-paths', () => ({
+    default: () => ({
+      config: join(__testTempBase, 'config'),
+      data: join(__testTempBase, 'data'),
+      log: join(__testTempBase, 'log'),
+      temp: join(__testTempBase, 'temp'),
+      cache: join(__testTempBase, 'cache'),
+    }),
+  }));
+});
+
+afterEach(async () => {
+  try {
+    await rm(__testTempBase, { recursive: true, force: true });
+  } catch {
+    /* ignore cleanup errors */
+  }
+  mock.restore();
+  mock.clearAllMocks();
+});
 
 const DEFAULT_PATHS_BASE = join(tmpdir(), 'pdb-keychain-default');
 

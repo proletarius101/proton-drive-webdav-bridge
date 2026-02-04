@@ -1,6 +1,15 @@
-import { describe, it, expect } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import ProtonDriveResource from '../src/webdav/ProtonDriveResource.js';
+import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
 import { createFileDownloader } from './utils/seekableMock';
+
+let __perTestEnv: PerTestEnv;
+beforeEach(async () => {
+  __perTestEnv = await setupPerTestEnv();
+});
+afterEach(async () => {
+  await __perTestEnv.cleanup();
+});
 
 const gatherStreamData = async (stream: NodeJS.ReadableStream | any) => {
   const chunks: Uint8Array[] = [];
@@ -45,7 +54,12 @@ describe('ProtonDriveResource.getStream', () => {
       parentUid: 'root',
     } as const;
 
-    const res = new ProtonDriveResource({ adapter, baseUrl: new URL('http://127.0.0.1'), path: '/file.txt', node });
+    const res = new ProtonDriveResource({
+      adapter,
+      baseUrl: new URL('http://127.0.0.1'),
+      path: '/file.txt',
+      node,
+    });
 
     const stream = await res.getStream({ start: 5, end: 9 });
     const result = await gatherStreamData(stream);
@@ -78,7 +92,12 @@ describe('ProtonDriveResource.getStream', () => {
       parentUid: 'root',
     } as const;
 
-    const res = new ProtonDriveResource({ adapter, baseUrl: new URL('http://127.0.0.1'), path: '/big.txt', node });
+    const res = new ProtonDriveResource({
+      adapter,
+      baseUrl: new URL('http://127.0.0.1'),
+      path: '/big.txt',
+      node,
+    });
 
     const stream = await res.getStream();
     const result = await gatherStreamData(stream);

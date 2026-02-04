@@ -1,12 +1,22 @@
+import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test';
 import { createHash } from 'crypto';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test';
 
-import { WebDAVServer } from '../src/webdav/server.ts';
+import { afterEach, beforeEach } from 'bun:test';
 import { driveClient } from '../src/drive.ts';
+import { WebDAVServer } from '../src/webdav/server.ts';
+import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
 import { createFileDownloader } from './utils/seekableMock.ts';
+
+let __perTestEnv: PerTestEnv;
+beforeEach(async () => {
+  __perTestEnv = await setupPerTestEnv();
+});
+afterEach(async () => {
+  await __perTestEnv.cleanup();
+});
 
 // Mock env-paths to avoid auth attempts
 // Note: E2E tests should be run separately to avoid singleton/resource conflicts.

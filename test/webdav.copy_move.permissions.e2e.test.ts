@@ -1,10 +1,20 @@
+import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { beforeAll, afterAll, describe, it, expect, mock } from 'bun:test';
 
-import { WebDAVServer } from '../src/webdav/server.ts';
+import { afterEach, beforeEach } from 'bun:test';
 import { driveClient } from '../src/drive.ts';
+import { WebDAVServer } from '../src/webdav/server.ts';
+import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
+
+let __perTestEnv: PerTestEnv;
+beforeEach(async () => {
+  __perTestEnv = await setupPerTestEnv();
+});
+afterEach(async () => {
+  await __perTestEnv.cleanup();
+});
 
 const DEFAULT_PATHS_BASE = mkdtempSync(join(tmpdir(), 'pdb-webdav-copymove-default-'));
 let pathsBase = DEFAULT_PATHS_BASE;
