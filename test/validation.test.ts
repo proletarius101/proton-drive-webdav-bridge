@@ -1,19 +1,28 @@
 /**
  * Tests for validation utilities
  */
-import { describe, test, expect } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
-  normalizePath,
-  validatePathSafety,
-  validateFilename,
   combinePaths,
-  getParentPath,
   getFilename,
+  getParentPath,
+  normalizePath,
   parseBasicAuth,
   validateEmail,
-  validatePort,
+  validateFilename,
   validateHost,
+  validatePathSafety,
+  validatePort,
 } from '../src/validation/index.js';
+import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
+
+let __perTestEnv: PerTestEnv;
+beforeEach(async () => {
+  __perTestEnv = await setupPerTestEnv();
+});
+afterEach(async () => {
+  await __perTestEnv.cleanup();
+});
 
 describe('Path validation - Normalization', () => {
   test('normalizePath ensures leading slash', () => {

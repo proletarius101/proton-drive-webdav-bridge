@@ -11,7 +11,16 @@
  * User Stories: GH-008, GH-009, GH-010, GH-031
  */
 
-import { describe, test, expect, beforeEach } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
+
+let __perTestEnv: PerTestEnv;
+beforeEach(async () => {
+  __perTestEnv = await setupPerTestEnv();
+});
+afterEach(async () => {
+  await __perTestEnv.cleanup();
+});
 
 // ============================================================================
 // Mock GIO Environment

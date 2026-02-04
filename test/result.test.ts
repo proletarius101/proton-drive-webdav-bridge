@@ -1,22 +1,31 @@
 /**
  * Tests for Result type and utilities
  */
-import { describe, test, expect } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
-  ok,
-  err,
-  isOk,
-  isErr,
-  mapOk,
-  mapErr,
   andThen,
+  collectResults,
+  err,
+  fromPromise,
+  isErr,
+  isOk,
+  mapErr,
+  mapOk,
+  ok,
   tap,
   tapErr,
   unwrap,
   unwrapOr,
-  fromPromise,
-  collectResults,
 } from '../src/utils/result.js';
+import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
+
+let __perTestEnv: PerTestEnv;
+beforeEach(async () => {
+  __perTestEnv = await setupPerTestEnv();
+});
+afterEach(async () => {
+  await __perTestEnv.cleanup();
+});
 
 describe('Result type - Creation', () => {
   test('ok creates a success result', () => {

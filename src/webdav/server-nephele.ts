@@ -48,7 +48,9 @@ function createAuthMiddleware(username: string, passwordHash: string) {
 
     const base64Credentials = authHeader.slice(6);
     const credentials = Buffer.from(base64Credentials, 'base64').toString('utf8');
-    const [providedUsername, password] = credentials.split(':');
+    const parts = credentials.split(':');
+    const providedUsername = parts[0] ?? '';
+    const password = parts.slice(1).join(':') ?? '';
 
     if (providedUsername !== username) {
       res.setHeader('WWW-Authenticate', 'Basic realm="Proton Drive WebDAV"');

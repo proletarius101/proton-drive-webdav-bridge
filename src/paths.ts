@@ -8,6 +8,7 @@ import envPaths from 'env-paths';
 import { join } from 'path';
 import { mkdirSync } from 'fs';
 import { tmpdir } from 'os';
+import logger from './logger';
 
 // ============================================================================
 // Path Constants
@@ -26,11 +27,18 @@ const ensureDir = (dirPath?: string): string => {
     mkdirSync(dirPath, { recursive: true });
     return dirPath;
   } catch (err) {
+    logger.warn(
+      `Failed to ensure directory exists at path "${dirPath}": ${(err as Error).message}`
+    );
     // As a last resort, ensure we have a sane fallback in /tmp
     const fallback = join(tmpdir(), APP_NAME);
     try {
       mkdirSync(fallback, { recursive: true });
-    } catch (e) {}
+    } catch (err) {
+      logger.error(
+        `Failed to create fallback temp directory at path "${fallback}": ${(err as Error).message}`
+      );
+    }
     return fallback;
   }
 };

@@ -1,49 +1,47 @@
 import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
-import { mkdtempSync, rmSync, mkdirSync } from 'fs';
+import { mkdirSync, writeFileSync } from 'fs';
+import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-mock.module('env-paths', () => ({
-  default: () => ({
-    config: mkdtempSync(join(tmpdir(), 'pdb-lock-default-config-')),
-    data: mkdtempSync(join(tmpdir(), 'pdb-lock-default-data-')),
-    log: mkdtempSync(join(tmpdir(), 'pdb-lock-default-log-')),
-    temp: mkdtempSync(join(tmpdir(), 'pdb-lock-default-temp-')),
-    cache: mkdtempSync(join(tmpdir(), 'pdb-lock-default-cache-')),
-  }),
-}));
-
-import { LockManager } from '../src/webdav/LockManager.js';
-import type { User } from 'nephele';
-
+// Per-test dynamic setup: create unique temp dirs and register env-paths mock
 let baseDirs: string[] = [];
+let LockManager: any;
 
-import { getDataDir } from '../src/paths.js';
-import { writeFileSync } from 'fs';
+beforeEach(async () => {
+  // Create per-test temp dirs
+  const config = await mkdtemp(join(tmpdir(), 'pdb-lock-config-'));
+  const data = await mkdtemp(join(tmpdir(), 'pdb-lock-data-'));
+  const log = await mkdtemp(join(tmpdir(), 'pdb-lock-log-'));
+  const temp = await mkdtemp(join(tmpdir(), 'pdb-lock-temp-'));
+  const cache = await mkdtemp(join(tmpdir(), 'pdb-lock-cache-'));
+  baseDirs.push(config, data, log, temp, cache);
 
-beforeEach(() => {
+  // Register per-test env-paths mock
+  mock.module('env-paths', () => ({
+    default: () => ({ config, data, log, temp, cache }),
+  }));
+
+  // Import paths and lock manager after mock is registered
+  const cacheBuster = `${Date.now()}-${Math.random()}`;
+  const pathsMod = await import(`../src/paths.js?cache=${cacheBuster}`);
+  const getDataDir = pathsMod.getDataDir;
+
   // Ensure data dir exists for SQLite and pre-create database file
   const dataDir = getDataDir();
-  // Create data dir if missing (some test environments may not have it)
   mkdirSync(dataDir, { recursive: true });
   const dbPath = join(dataDir, 'locks.db');
-  // Touch the db file so bun:sqlite can open it reliably in tests
   writeFileSync(dbPath, '', { flag: 'a' });
 
-  // Force env-paths to return new temporary directories per test run
-  const config = mkdtempSync(join(tmpdir(), 'pdb-lock-config-'));
-  const data = mkdtempSync(join(tmpdir(), 'pdb-lock-data-'));
-  const log = mkdtempSync(join(tmpdir(), 'pdb-lock-log-'));
-  const temp = mkdtempSync(join(tmpdir(), 'pdb-lock-temp-'));
-  const cache = mkdtempSync(join(tmpdir(), 'pdb-lock-cache-'));
-  baseDirs.push(config, data, log, temp, cache);
+  const lmMod = await import(`../src/webdav/LockManager.js?cache=${cacheBuster}`);
+  LockManager = lmMod.LockManager;
 });
 
-afterEach(() => {
+afterEach(async () => {
   // Remove temporary directories
   for (const d of baseDirs) {
     try {
-      rmSync(d, { recursive: true, force: true });
+      await rm(d, { recursive: true, force: true });
     } catch {
       /* ignore errors during cleanup */
     }
@@ -56,6 +54,9 @@ afterEach(() => {
   } catch {
     /* ignore close errors */
   }
+  // Restore mocks
+  mock.restore();
+  mock.clearAllMocks();
 });
 
 describe('LockManager - basic operations', () => {

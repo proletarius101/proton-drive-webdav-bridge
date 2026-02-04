@@ -1,7 +1,16 @@
-import { mkdtempSync, rmSync, mkdirSync } from 'fs';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
+
+let __perTestEnv: PerTestEnv;
+beforeEach(async () => {
+  __perTestEnv = await setupPerTestEnv();
+});
+afterEach(async () => {
+  await __perTestEnv.cleanup();
+});
 
 // Mock env-paths to return fresh temp directories for each test
 // This prevents singleton conflicts when tests run in parallel
@@ -23,11 +32,11 @@ mock.module('env-paths', () => ({
   },
 }));
 
-import { WebDAVServer } from '../src/webdav/server.js';
-import { LockManager } from '../src/webdav/LockManager.js';
+import { writeFileSync } from 'fs';
 import { driveClient } from '../src/drive.js';
 import { getDataDir } from '../src/paths.js';
-import { writeFileSync } from 'fs';
+import { LockManager } from '../src/webdav/LockManager.js';
+import { WebDAVServer } from '../src/webdav/server.js';
 
 let server: InstanceType<typeof WebDAVServer> | null = null;
 let baseDir: string | null = null;
@@ -37,6 +46,10 @@ beforeEach(() => {
   mockDirs = null;
 
   baseDir = mkdtempSync(join(tmpdir(), 'pdb-webdav-lock-'));
+
+  // Force file-based encrypted storage for keyring (not testing keyring itself)
+  process.env.KEYRING_PASSWORD = 'test-keyring-password';
+
   // Ensure DB file exists for LockManager
   const dataDir = getDataDir();
   // Create data dir if missing and touch DB file to ensure sqlite can open it
@@ -85,6 +98,9 @@ afterEach(async () => {
     });
     mockDirs = null;
   }
+
+  // Clean up keyring environment
+  delete process.env.KEYRING_PASSWORD;
 });
 
 // Note: These E2E tests should be run separately from other tests to avoid

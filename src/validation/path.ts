@@ -19,7 +19,8 @@
  * @see combinePaths for safely combining paths
  */
 import { InvalidPathError } from '../errors/index.js';
-import { Result, err, ok } from '../utils/result.js';
+import type { Result } from '../utils/result.js';
+import { err, ok } from '../utils/result.js';
 
 /**
  * Normalize a WebDAV path to canonical form.

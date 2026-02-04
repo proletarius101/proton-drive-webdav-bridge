@@ -18,7 +18,8 @@
  * @see validateRequired for required field checking
  */
 import { InvalidConfigError } from '../errors/index.js';
-import { Result, err, ok } from '../utils/result.js';
+import type { Result } from '../utils/result.js';
+import { err, ok } from '../utils/result.js';
 
 /**
  * Validate port number.
