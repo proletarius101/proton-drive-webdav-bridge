@@ -12,7 +12,16 @@
  * User Stories: GH-006, GH-007, GH-008, GH-009, GH-010, GH-013, GH-031
  */
 
-import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
+
+let __perTestEnv: PerTestEnv;
+beforeEach(async () => {
+  __perTestEnv = await setupPerTestEnv();
+});
+afterEach(async () => {
+  await __perTestEnv.cleanup();
+});
 
 // ============================================================================
 // Test Fixtures and Mocks
@@ -31,7 +40,12 @@ interface TauriInvokeOptions {
  */
 class MockTauriInvoke {
   private commands: Map<string, (args: TauriCommandArgs) => Promise<any>>;
-  private callHistory: Array<{ command: string; args: TauriCommandArgs; result: any; error?: Error }>;
+  private callHistory: Array<{
+    command: string;
+    args: TauriCommandArgs;
+    result: any;
+    error?: Error;
+  }>;
 
   constructor() {
     this.commands = new Map();
@@ -225,10 +239,12 @@ describe('Tauri Commands - Server Lifecycle', () => {
 
   test('start_sidecar_should_reject_when_already_running', async () => {
     tauriInvoke.registerCommand('start_sidecar', async (args) => {
-      throw new Error(JSON.stringify({
-        code: 'SIDECAR_ALREADY_RUNNING',
-        message: 'Sidecar already running',
-      }));
+      throw new Error(
+        JSON.stringify({
+          code: 'SIDECAR_ALREADY_RUNNING',
+          message: 'Sidecar already running',
+        })
+      );
     });
 
     let error: Error | null = null;
@@ -253,10 +269,12 @@ describe('Tauri Commands - Server Lifecycle', () => {
 
   test('stop_sidecar_should_reject_when_not_running', async () => {
     tauriInvoke.registerCommand('stop_sidecar', async (args) => {
-      throw new Error(JSON.stringify({
-        code: 'SIDECAR_NOT_RUNNING',
-        message: 'Sidecar not running',
-      }));
+      throw new Error(
+        JSON.stringify({
+          code: 'SIDECAR_NOT_RUNNING',
+          message: 'Sidecar not running',
+        })
+      );
     });
 
     let error: Error | null = null;
@@ -329,10 +347,12 @@ describe('Tauri Commands - Mount Operations', () => {
 
   test('mount_drive_should_reject_when_server_not_running', async () => {
     tauriInvoke.registerCommand('mount_drive', async (args) => {
-      throw new Error(JSON.stringify({
-        code: 'SERVER_NOT_RUNNING',
-        message: 'Server not running',
-      }));
+      throw new Error(
+        JSON.stringify({
+          code: 'SERVER_NOT_RUNNING',
+          message: 'Server not running',
+        })
+      );
     });
 
     let error: Error | null = null;
@@ -359,10 +379,12 @@ describe('Tauri Commands - Mount Operations', () => {
 
   test('unmount_drive_should_reject_when_not_mounted', async () => {
     tauriInvoke.registerCommand('unmount_drive', async (args) => {
-      throw new Error(JSON.stringify({
-        code: 'MOUNT_NOT_FOUND',
-        message: 'Mount not found',
-      }));
+      throw new Error(
+        JSON.stringify({
+          code: 'MOUNT_NOT_FOUND',
+          message: 'Mount not found',
+        })
+      );
     });
 
     let error: Error | null = null;
@@ -421,10 +443,12 @@ describe('Tauri Commands - Configuration', () => {
   test('set_network_port_should_reject_invalid_port', async () => {
     tauriInvoke.registerCommand('set_network_port', async (args) => {
       if (args.port < 1024 || args.port > 65535) {
-        throw new Error(JSON.stringify({
-          code: 'INVALID_PORT',
-          message: `Invalid port number: ${args.port}`,
-        }));
+        throw new Error(
+          JSON.stringify({
+            code: 'INVALID_PORT',
+            message: `Invalid port number: ${args.port}`,
+          })
+        );
       }
       return undefined;
     });
@@ -443,10 +467,12 @@ describe('Tauri Commands - Configuration', () => {
   test('set_network_port_should_reject_port_in_use', async () => {
     tauriInvoke.registerCommand('set_network_port', async (args) => {
       if (args.port === 8080) {
-        throw new Error(JSON.stringify({
-          code: 'PORT_IN_USE',
-          message: `Port already in use: ${args.port}`,
-        }));
+        throw new Error(
+          JSON.stringify({
+            code: 'PORT_IN_USE',
+            message: `Port already in use: ${args.port}`,
+          })
+        );
       }
       return undefined;
     });
@@ -576,10 +602,12 @@ describe('Tauri Commands - Error Handling', () => {
 
   test('should_handle_spawn_failures_gracefully', async () => {
     tauriInvoke.registerCommand('start_sidecar', async (args) => {
-      throw new Error(JSON.stringify({
-        code: 'SIDECAR_SPAWN_FAILED',
-        message: 'Failed to spawn sidecar: Permission denied',
-      }));
+      throw new Error(
+        JSON.stringify({
+          code: 'SIDECAR_SPAWN_FAILED',
+          message: 'Failed to spawn sidecar: Permission denied',
+        })
+      );
     });
 
     let error: Error | null = null;
@@ -595,10 +623,12 @@ describe('Tauri Commands - Error Handling', () => {
 
   test('should_handle_gio_mount_failures', async () => {
     tauriInvoke.registerCommand('mount_drive', async (args) => {
-      throw new Error(JSON.stringify({
-        code: 'GIO_ERROR',
-        message: 'GIO error: Failed to mount location',
-      }));
+      throw new Error(
+        JSON.stringify({
+          code: 'GIO_ERROR',
+          message: 'GIO error: Failed to mount location',
+        })
+      );
     });
 
     let error: Error | null = null;
@@ -614,10 +644,12 @@ describe('Tauri Commands - Error Handling', () => {
 
   test('should_handle_timeout_errors', async () => {
     tauriInvoke.registerCommand('mount_drive', async (args) => {
-      throw new Error(JSON.stringify({
-        code: 'MOUNT_TIMEOUT',
-        message: 'Mount operation timeout after 30 seconds',
-      }));
+      throw new Error(
+        JSON.stringify({
+          code: 'MOUNT_TIMEOUT',
+          message: 'Mount operation timeout after 30 seconds',
+        })
+      );
     });
 
     let error: Error | null = null;
@@ -633,10 +665,12 @@ describe('Tauri Commands - Error Handling', () => {
 
   test('should_provide_structured_error_responses', async () => {
     tauriInvoke.registerCommand('set_network_port', async (args) => {
-      throw new Error(JSON.stringify({
-        code: 'PORT_IN_USE',
-        message: 'Port already in use: 8080',
-      }));
+      throw new Error(
+        JSON.stringify({
+          code: 'PORT_IN_USE',
+          message: 'Port already in use: 8080',
+        })
+      );
     });
 
     let errorJson: any = null;

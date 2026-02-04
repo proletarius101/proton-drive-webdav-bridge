@@ -43,7 +43,7 @@ export class ValidationError extends AppError {
    * Serialize error to JSON, including validation details.
    * Useful for sending detailed error responses to clients.
    */
-  toJSON() {
+  override toJSON() {
     return {
       ...super.toJSON(),
       details: this.details,
@@ -64,7 +64,7 @@ export class ValidationError extends AppError {
  * throw new InvalidPathError('file\0name.txt', 'Contains null bytes');
  */
 export class InvalidPathError extends ValidationError {
-  readonly code = 'INVALID_PATH' as const;
+  override readonly code = 'INVALID_PATH' as const;
 
   /**
    * Creates a new InvalidPathError.
@@ -91,7 +91,7 @@ export class InvalidPathError extends ValidationError {
  * throw new InvalidConfigError('host', 'Invalid IP address format');
  */
 export class InvalidConfigError extends ValidationError {
-  readonly code = 'INVALID_CONFIG' as const;
+  override readonly code = 'INVALID_CONFIG' as const;
 
   /**
    * Creates a new InvalidConfigError.
@@ -123,7 +123,7 @@ export class InvalidConfigError extends ValidationError {
  * });
  */
 export class InvalidRequestError extends ValidationError {
-  readonly code = 'INVALID_REQUEST' as const;
+  override readonly code = 'INVALID_REQUEST' as const;
 
   /**
    * Creates a new InvalidRequestError.

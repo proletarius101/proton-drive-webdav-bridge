@@ -44,7 +44,7 @@ export class AuthenticationError extends AppError {
  * }
  */
 export class NotAuthenticatedError extends AuthenticationError {
-  readonly code = 'NOT_AUTHENTICATED' as const;
+  override readonly code = 'NOT_AUTHENTICATED' as const;
 
   /**
    * Creates a new NotAuthenticatedError with standard message.
@@ -67,7 +67,7 @@ export class NotAuthenticatedError extends AuthenticationError {
  * }
  */
 export class InvalidCredentialsError extends AuthenticationError {
-  readonly code = 'INVALID_CREDENTIALS' as const;
+  override readonly code = 'INVALID_CREDENTIALS' as const;
 
   /**
    * Creates a new InvalidCredentialsError.
@@ -91,7 +91,7 @@ export class InvalidCredentialsError extends AuthenticationError {
  * }
  */
 export class TokenExpiredError extends AuthenticationError {
-  readonly code = 'TOKEN_EXPIRED' as const;
+  override readonly code = 'TOKEN_EXPIRED' as const;
 
   /**
    * Creates a new TokenExpiredError with standard message.
@@ -113,7 +113,7 @@ export class TokenExpiredError extends AuthenticationError {
  * }
  */
 export class TwoFactorRequiredError extends AuthenticationError {
-  readonly code = 'TWO_FACTOR_REQUIRED' as const;
+  override readonly code = 'TWO_FACTOR_REQUIRED' as const;
 
   /**
    * Creates a new TwoFactorRequiredError.
@@ -141,7 +141,7 @@ export class TwoFactorRequiredError extends AuthenticationError {
  * }
  */
 export class MailboxPasswordRequiredError extends AuthenticationError {
-  readonly code = 'MAILBOX_PASSWORD_REQUIRED' as const;
+  override readonly code = 'MAILBOX_PASSWORD_REQUIRED' as const;
 
   /**
    * Creates a new MailboxPasswordRequiredError with standard message.

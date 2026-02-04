@@ -231,7 +231,12 @@ WO4BAMcm1u02t4VKw++ttECPt+HUgPUq5pqQWe5Q2cW4TMsE
 function uint8ArrayToBigIntLE(arr: Uint8Array): bigint {
   let result = 0n;
   for (let i = arr.length - 1; i >= 0; i--) {
-    result = (result << 8n) | BigInt(arr[arr.length - 1 - i]);
+    // Compute the index and guard against unexpected undefined values to
+    // satisfy strict TS checks without using a non-null assertion.
+    const idx = arr.length - 1 - i;
+    const byte = arr[idx];
+    if (byte === undefined) continue;
+    result = (result << 8n) | BigInt(byte);
   }
   return result;
 }
@@ -434,14 +439,18 @@ function bcryptEncodeBase64(data: Uint8Array, length: number): string {
   let c1: number, c2: number;
 
   while (off < length) {
-    c1 = data[off++] & 0xff;
+    const v1 = data[off++];
+    if (v1 === undefined) break;
+    c1 = v1 & 0xff;
     result += BCRYPT_CHARS[(c1 >> 2) & 0x3f];
     c1 = (c1 & 0x03) << 4;
     if (off >= length) {
       result += BCRYPT_CHARS[c1 & 0x3f];
       break;
     }
-    c2 = data[off++] & 0xff;
+    const v2 = data[off++];
+    if (v2 === undefined) break;
+    c2 = v2 & 0xff;
     c1 |= (c2 >> 4) & 0x0f;
     result += BCRYPT_CHARS[c1 & 0x3f];
     c1 = (c2 & 0x0f) << 2;
@@ -449,7 +458,9 @@ function bcryptEncodeBase64(data: Uint8Array, length: number): string {
       result += BCRYPT_CHARS[c1 & 0x3f];
       break;
     }
-    c2 = data[off++] & 0xff;
+    const v3 = data[off++];
+    if (v3 === undefined) break;
+    c2 = v3 & 0xff;
     c1 |= (c2 >> 6) & 0x03;
     result += BCRYPT_CHARS[c1 & 0x3f];
     result += BCRYPT_CHARS[c2 & 0x3f];
@@ -529,10 +540,14 @@ async function verifyAndGetModulus(signedModulus: string): Promise<Uint8Array> {
     message,
     verificationKeys: publicKey,
   });
+  const sig = verificationResult.signatures?.[0];
+  if (!sig || !sig.verified) {
+    logger.warn('Server identity verification failed: missing signature');
+    throw new Error('Unable to verify server identity');
+  }
 
-  const { verified } = verificationResult.signatures[0];
   try {
-    await verified;
+    await sig.verified;
   } catch (error) {
     logger.warn(`Server identity verification failed: ${error}`);
     throw new Error('Unable to verify server identity');

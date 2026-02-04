@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import * as React from 'react';
+import { act } from 'react';
 import { App } from '../../src/gui/App';
 import { renderWithTauri } from '../helpers/renderWithTauri';
 import type { TauriApi } from '../../src/gui/tauri/TauriProvider';
@@ -71,22 +72,35 @@ describe('Debug: Account Selection Flow', () => {
 
     log('Rendered App component');
 
-    // Wait and check periodically
-    let lastTitleText = '';
-    for (let i = 0; i < 40; i++) {
-      await new Promise((r) => setTimeout(r, 50));
-      const header = document.querySelector('#app-header');
-      const title = header?.querySelector('.title');
-      const currentText = title?.textContent || '';
-      if (currentText !== lastTitleText) {
-        log(`account-title changed: "${lastTitleText}" -> "${currentText}"`);
-        lastTitleText = currentText;
+    // Helper to wait for condition with timeout
+    const waitFor = async (
+      condition: () => boolean,
+      options: { timeout?: number; interval?: number } = {}
+    ): Promise<void> => {
+      const { timeout = 2000, interval = 50 } = options;
+      const startTime = Date.now();
+      
+      while (!condition()) {
+        if (Date.now() - startTime > timeout) {
+          throw new Error('Timeout waiting for condition');
+        }
+        await act(async () => {
+          await new Promise((r) => setTimeout(r, interval));
+        });
       }
-      if (currentText && currentText !== 'No account selected') {
-        log(`SUCCESS: Found account title: "${currentText}"`);
-        break;
-      }
-    }
+    };
+
+    // Wait for account title to be populated (not fallback values)
+    await waitFor(
+      () => {
+        const header = document.querySelector('#app-header');
+        const title = header?.querySelector('.title');
+        const text = title?.textContent || '';
+        log(`Checking title: "${text}"`);
+        return text === 'user@proton.me';
+      },
+      { timeout: 3000 }
+    );
 
     log('\n=== Final State ===');
     log(`All logs:\n${logs.join('\n')}`);

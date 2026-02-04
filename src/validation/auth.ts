@@ -20,7 +20,8 @@
  * @see validateTotpCode for TOTP code validation
  */
 import { InvalidRequestError } from '../errors/index.js';
-import { Result, err, ok } from '../utils/result.js';
+import type { Result } from '../utils/result.js';
+import { err, ok } from '../utils/result.js';
 
 /**
  * Parse and validate HTTP Basic authentication header.

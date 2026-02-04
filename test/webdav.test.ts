@@ -11,9 +11,17 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { describe, test, expect, beforeEach } from 'bun:test';
-import ProtonDriveResource from '../src/webdav/ProtonDriveResource.js';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import ProtonDriveAdapter from '../src/webdav/ProtonDriveAdapter.js';
+import ProtonDriveResource from '../src/webdav/ProtonDriveResource.js';
+import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
+let __perTestEnv: PerTestEnv;
+beforeEach(async () => {
+  __perTestEnv = await setupPerTestEnv();
+});
+afterEach(async () => {
+  await __perTestEnv.cleanup();
+});
 
 // Mock interfaces
 interface MockNode {

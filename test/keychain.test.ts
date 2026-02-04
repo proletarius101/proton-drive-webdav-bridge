@@ -10,47 +10,38 @@
  */
 
 import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync } from 'fs';
+import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, beforeEach, afterAll, describe, expect, test, mock } from 'bun:test';
+import { keyringStore } from './setup.js';
+
+// Per-test env-paths mock: ensure each test uses an isolated temp dir
+let __testTempBase: string;
+beforeEach(async () => {
+  __testTempBase = await mkdtemp(join(tmpdir(), 'pdb-keychain-global-'));
+  mock.module('env-paths', () => ({
+    default: () => ({
+      config: join(__testTempBase, 'config'),
+      data: join(__testTempBase, 'data'),
+      log: join(__testTempBase, 'log'),
+      temp: join(__testTempBase, 'temp'),
+      cache: join(__testTempBase, 'cache'),
+    }),
+  }));
+});
+
+afterEach(async () => {
+  try {
+    await rm(__testTempBase, { recursive: true, force: true });
+  } catch {
+    /* ignore cleanup errors */
+  }
+  mock.restore();
+  mock.clearAllMocks();
+});
 
 const DEFAULT_PATHS_BASE = join(tmpdir(), 'pdb-keychain-default');
-let pathsBase = DEFAULT_PATHS_BASE;
-
-mock.module('env-paths', () => ({
-  default: () => ({
-    config: mkdirSync(join(pathsBase, 'config', 'proton-drive-webdav-bridge'), { recursive: true }),
-    data: mkdirSync(join(pathsBase, 'data', 'proton-drive-webdav-bridge'), { recursive: true }),
-    log: mkdirSync(join(pathsBase, 'log', 'proton-drive-webdav-bridge'), { recursive: true }),
-    temp: mkdirSync(join(pathsBase, 'temp', 'proton-drive-webdav-bridge'), { recursive: true }),
-    cache: mkdirSync(join(pathsBase, 'cache', 'proton-drive-webdav-bridge'), { recursive: true }),
-  }),
-}));
-
-const keyringStore = new Map<string, string>();
-
-mock.module('@napi-rs/keyring', () => {
-  class Entry {
-    private key: string;
-    constructor(
-      private readonly service: string,
-      private readonly username: string
-    ) {
-      this.key = `${service}:${username}`;
-    }
-    setPassword(password: string) {
-      keyringStore.set(this.key, password);
-    }
-    getPassword() {
-      return keyringStore.get(this.key) ?? null;
-    }
-    deletePassword() {
-      keyringStore.delete(this.key);
-    }
-  }
-  class AsyncEntry extends Entry {}
-  return { Entry, AsyncEntry };
-});
 
 const sampleCredentials = {
   parentUID: 'parent-uid-123',
@@ -70,14 +61,14 @@ describe('Keychain - File-Based Storage', () => {
 
   beforeEach(() => {
     baseDir = mkdtempSync(join(tmpdir(), 'pdb-keychain-'));
-    pathsBase = baseDir;
     process.env.KEYRING_PASSWORD = 'secure-test-password-123';
   });
 
   afterEach(() => {
+    mock.restore();
+    mock.clearAllMocks();
     rmSync(baseDir, { recursive: true, force: true });
     delete process.env.KEYRING_PASSWORD;
-    pathsBase = DEFAULT_PATHS_BASE;
   });
 
   test('stores and retrieves credentials with encryption', async () => {
@@ -172,14 +163,14 @@ describe('Keychain - Encryption and Security', () => {
 
   beforeEach(() => {
     baseDir = mkdtempSync(join(tmpdir(), 'pdb-keychain-'));
-    pathsBase = baseDir;
     keyringStore.clear();
   });
 
   afterEach(() => {
+    mock.restore();
+    mock.clearAllMocks();
     rmSync(baseDir, { recursive: true, force: true });
     delete process.env.KEYRING_PASSWORD;
-    pathsBase = DEFAULT_PATHS_BASE;
   });
 
   test('uses different encryption key with different passwords', async () => {
@@ -244,6 +235,8 @@ describe('Keychain - Platform Detection', () => {
   // Ensure any stored credentials are removed between tests to avoid cross-test
   // contamination that may cause network calls in other modules.
   afterEach(async () => {
+    mock.restore();
+    mock.clearAllMocks();
     try {
       const { deleteStoredCredentials } = await import(`../src/keychain.ts?cache=${Date.now()}`);
       await deleteStoredCredentials();
@@ -264,16 +257,16 @@ describe('Keychain - Platform Detection', () => {
 
   beforeEach(() => {
     baseDir = mkdtempSync(join(tmpdir(), 'pdb-keychain-'));
-    pathsBase = baseDir;
     keyringStore.clear();
   });
 
   afterEach(() => {
+    mock.restore();
+    mock.clearAllMocks();
     rmSync(baseDir, { recursive: true, force: true });
     delete process.env.KEYRING_PASSWORD;
     delete process.env.DISPLAY;
     delete process.env.WAYLAND_DISPLAY;
-    pathsBase = DEFAULT_PATHS_BASE;
   });
 
   test('uses file storage when KEYRING_PASSWORD is set', async () => {
@@ -296,15 +289,15 @@ describe('Keychain - Error Handling', () => {
 
   beforeEach(() => {
     baseDir = mkdtempSync(join(tmpdir(), 'pdb-keychain-'));
-    pathsBase = baseDir;
     keyringStore.clear();
     process.env.KEYRING_PASSWORD = 'test-password';
   });
 
   afterEach(() => {
+    mock.restore();
+    mock.clearAllMocks();
     rmSync(baseDir, { recursive: true, force: true });
     delete process.env.KEYRING_PASSWORD;
-    pathsBase = DEFAULT_PATHS_BASE;
   });
 
   test('deleteStoredCredentials does not throw when no credentials exist', async () => {
@@ -336,15 +329,15 @@ describe('Keychain - Credential Structure', () => {
 
   beforeEach(() => {
     baseDir = mkdtempSync(join(tmpdir(), 'pdb-keychain-'));
-    pathsBase = baseDir;
     keyringStore.clear();
     process.env.KEYRING_PASSWORD = 'test-password';
   });
 
   afterEach(() => {
+    mock.restore();
+    mock.clearAllMocks();
     rmSync(baseDir, { recursive: true, force: true });
     delete process.env.KEYRING_PASSWORD;
-    pathsBase = DEFAULT_PATHS_BASE;
   });
 
   test('preserves all credential fields', async () => {

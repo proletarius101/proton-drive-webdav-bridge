@@ -1,12 +1,23 @@
+import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { beforeAll, afterAll, describe, it, expect, mock } from 'bun:test';
 
-import { WebDAVServer } from '../src/webdav/server.ts';
+import { afterEach, beforeEach } from 'bun:test';
 import { driveClient } from '../src/drive.ts';
+import { WebDAVServer } from '../src/webdav/server.ts';
+import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
 
-const pathsBase = mkdtempSync(join(tmpdir(), 'pdb-webdav-copymove-'));
+let __perTestEnv: PerTestEnv;
+beforeEach(async () => {
+  __perTestEnv = await setupPerTestEnv();
+});
+afterEach(async () => {
+  await __perTestEnv.cleanup();
+});
+
+const DEFAULT_PATHS_BASE = mkdtempSync(join(tmpdir(), 'pdb-webdav-copymove-default-'));
+let pathsBase = DEFAULT_PATHS_BASE;
 mock.module('env-paths', () => ({
   default: () => ({
     config: join(pathsBase, 'config'),
@@ -29,6 +40,8 @@ describe('WebDAV COPY/MOVE permission semantics', () => {
   const nodes = new Map<string, Node>();
   const children = new Map<string, Set<string>>();
   let uidCounter = 0;
+  let baseDir: string;
+
   const createUid = () => `n-${uidCounter++}`;
   const ensure = (p: string) => {
     if (!children.has(p)) children.set(p, new Set());
@@ -40,6 +53,13 @@ describe('WebDAV COPY/MOVE permission semantics', () => {
   };
 
   beforeAll(() => {
+    // Set up isolated temp directory for this entire test suite
+    baseDir = mkdtempSync(join(tmpdir(), 'pdb-webdav-copymove-'));
+    pathsBase = baseDir;
+
+    // Force file-based encrypted storage for keyring (not testing keyring itself)
+    process.env.KEYRING_PASSWORD = 'test-keyring-password';
+
     const root = { uid: 'root', name: '', type: 'folder', parentUid: null };
     add(root as Node);
 
@@ -87,7 +107,11 @@ describe('WebDAV COPY/MOVE permission semantics', () => {
     };
   });
 
-  afterAll(() => rmSync(pathsBase, { recursive: true, force: true }));
+  afterAll(() => {
+    rmSync(baseDir, { recursive: true, force: true });
+    pathsBase = DEFAULT_PATHS_BASE;
+    delete process.env.KEYRING_PASSWORD;
+  });
 
   it('COPY to existing destination with Overwrite:F returns 412', async () => {
     // Create destination first
