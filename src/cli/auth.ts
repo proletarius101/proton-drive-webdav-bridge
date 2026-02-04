@@ -12,7 +12,7 @@ import { logger } from '../logger.js';
 import { toAppError } from '../utils/error.js';
 import { validateEmail, validatePasswordStrength } from '../validation/auth.js';
 import { InvalidCredentialsError } from '../errors/index.js';
-import { getConfig, updateConfig } from '../config.js';
+import { updateConfig } from '../config.js';
 
 export function registerAuthCommand(program: Command): void {
   const authCmd = program.command('auth').description('Manage Proton account authentication');

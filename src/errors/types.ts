@@ -73,8 +73,8 @@ export function isCommandError(error: unknown): error is CommandError {
     error !== null &&
     'code' in error &&
     'message' in error &&
-    typeof (error as any).code === 'string' &&
-    typeof (error as any).message === 'string'
+    typeof (error as Record<string, unknown>).code === 'string' &&
+    typeof (error as Record<string, unknown>).message === 'string'
   );
 }
 
