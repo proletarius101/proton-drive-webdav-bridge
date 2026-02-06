@@ -144,7 +144,7 @@ generate-sbom:
     UPLOAD: "false"
     ENRICH: "true"
   script:
-    - /sbomify.sh
+    - /opt/venv/bin/sbomify-action
   artifacts:
     paths:
       - gl-sbom-report.cdx.json
