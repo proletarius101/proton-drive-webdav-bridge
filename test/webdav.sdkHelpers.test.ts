@@ -1,7 +1,17 @@
-import { describe, test, expect } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { getClaimedAdditionalMetadata } from '../src/webdav/sdkHelpers.js';
 
 import type { Result, Revision } from '@protontech/drive-sdk';
+import { afterEach, beforeEach } from 'bun:test';
+import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
+
+let __perTestEnv: PerTestEnv;
+beforeEach(async () => {
+  __perTestEnv = await setupPerTestEnv();
+});
+afterEach(async () => {
+  await __perTestEnv.cleanup();
+});
 
 describe('getClaimedAdditionalMetadata helper', () => {
   test('returns claimedAdditionalMetadata from a Revision-shaped activeRevision', () => {

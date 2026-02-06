@@ -12,6 +12,7 @@ import { logger } from '../logger.js';
 import { toAppError } from '../utils/error.js';
 import { validateEmail, validatePasswordStrength } from '../validation/auth.js';
 import { InvalidCredentialsError } from '../errors/index.js';
+import { updateConfig } from '../config.js';
 
 export function registerAuthCommand(program: Command): void {
   const authCmd = program.command('auth').description('Manage Proton account authentication');
@@ -117,6 +118,10 @@ export function registerAuthCommand(program: Command): void {
           username,
         });
 
+        // Store username in config (non-sensitive metadata)
+        // This allows status commands to show username without accessing keyring
+        updateConfig({ username });
+
         console.log(`\n✓ Successfully logged in as ${username}`);
         console.log('Credentials stored securely.');
         logger.info(`User ${username} authenticated successfully`);
@@ -150,6 +155,10 @@ export function registerAuthCommand(program: Command): void {
         }
 
         await deleteStoredCredentials();
+
+        // Clear username from config
+        updateConfig({ username: undefined });
+
         console.log('✓ Logged out successfully. Credentials removed.');
         logger.info('User logged out');
       } catch (error) {

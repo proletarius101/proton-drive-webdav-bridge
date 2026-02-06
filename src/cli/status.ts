@@ -5,11 +5,12 @@
  */
 
 import { Command } from 'commander';
-import { hasStoredCredentials, getStoredCredentials } from '../keychain.js';
-import { getLogFilePath } from '../paths.js';
+import { getStoredCredentials } from '../keychain.js';
+import { getLogFilePath, getCredentialsFilePath } from '../paths.js';
 import { getConfig } from '../config.js';
 import { logger } from '../logger.js';
 import { readPidFile, isProcessRunning } from './daemon-utils.js';
+import { existsSync } from 'fs';
 
 export function registerStatusCommand(program: Command): void {
   program
@@ -18,6 +19,7 @@ export function registerStatusCommand(program: Command): void {
     .option('-j, --json', 'Output status as JSON')
     .action(async (options) => {
       try {
+        const config = getConfig();
         const status = {
           server: {
             running: false,
@@ -28,7 +30,15 @@ export function registerStatusCommand(program: Command): void {
             loggedIn: false,
             username: null as string | null,
           },
-          config: getConfig(),
+          config: {
+            webdav: {
+              host: config.webdav.host,
+              port: config.webdav.port,
+              https: config.webdav.https,
+              requireAuth: config.webdav.requireAuth,
+            },
+            remotePath: config.remotePath,
+          },
           logFile: getLogFilePath(),
         };
 
@@ -44,12 +54,22 @@ export function registerStatusCommand(program: Command): void {
         }
 
         // Check auth status
-        if (await hasStoredCredentials()) {
-          status.auth.loggedIn = true;
-          try {
-            const creds = await getStoredCredentials();
-            status.auth.username = creds?.username || null;
-          } catch (error) {
+        // Check if credentials exist (keyring has tokens)
+        // Username is stored in config.json (non-sensitive metadata)
+        const credsFileExists = existsSync(getCredentialsFilePath());
+        try {
+          const creds = await getStoredCredentials();
+          if (creds) {
+            status.auth.loggedIn = true;
+            // Username is stored in config as non-sensitive metadata
+            status.auth.username = config.username || creds.username || null;
+          }
+        } catch (error) {
+          // Fallback: if keyring fails but file exists, check config for username
+          if (credsFileExists && config.username) {
+            status.auth.loggedIn = true;
+            status.auth.username = config.username;
+          } else {
             const message = error instanceof Error ? error.message : String(error);
             logger.warn(`Failed to retrieve stored credentials: ${message}`);
           }

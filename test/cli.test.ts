@@ -202,17 +202,26 @@ const captureConsole = () => {
 
 describe('CLI - Auth Commands', () => {
   beforeEach(() => {
-    mockHasStoredCredentials.mockReset();
-    mockStoreCredentials.mockReset();
-    mockDeleteStoredCredentials.mockReset();
-    mockInput.mockReset();
-    mockPassword.mockReset();
-    mockConfirm.mockReset();
+    // Force file-based encrypted storage for keyring (not testing keyring itself)
+    process.env.KEYRING_PASSWORD = 'test-keyring-password';
+
+    mockHasStoredCredentials.mockClear();
+    mockStoreCredentials.mockClear();
+    mockDeleteStoredCredentials.mockClear();
+    mockInput.mockClear();
+    mockPassword.mockClear();
+    mockConfirm.mockClear();
 
     mockHasStoredCredentials.mockReturnValue(Promise.resolve(false));
     mockInput.mockReturnValue(Promise.resolve('testuser'));
     mockPassword.mockReturnValue(Promise.resolve('password123'));
     mockConfirm.mockReturnValue(Promise.resolve(true));
+  });
+
+  afterEach(() => {
+    mock.restore();
+    mock.clearAllMocks();
+    delete process.env.KEYRING_PASSWORD;
   });
 
   test('auth login should store credentials', async () => {
@@ -268,17 +277,22 @@ describe('CLI - Auth Commands', () => {
 
 describe('CLI - Start Command', () => {
   beforeEach(() => {
-    mockStart.mockReset();
+    mockStart.mockClear();
     mockHasStoredCredentials.mockReturnValue(Promise.resolve(true));
+    // Force file-based encrypted storage for keyring (not testing keyring itself)
+    process.env.KEYRING_PASSWORD = 'test-keyring-password';
     if (existsSync(pidFilePath)) {
       unlinkSync(pidFilePath);
     }
   });
 
   afterEach(() => {
+    mock.restore();
+    mock.clearAllMocks();
     if (existsSync(pidFilePath)) {
       unlinkSync(pidFilePath);
     }
+    delete process.env.KEYRING_PASSWORD;
   });
 
   test('start should invoke WebDAV server', async () => {
@@ -314,15 +328,20 @@ describe('CLI - Start Command', () => {
 
 describe('CLI - Stop Command', () => {
   beforeEach(() => {
+    // Force file-based encrypted storage for keyring (not testing keyring itself)
+    process.env.KEYRING_PASSWORD = 'test-keyring-password';
     if (existsSync(pidFilePath)) {
       unlinkSync(pidFilePath);
     }
   });
 
   afterEach(() => {
+    mock.restore();
+    mock.clearAllMocks();
     if (existsSync(pidFilePath)) {
       unlinkSync(pidFilePath);
     }
+    delete process.env.KEYRING_PASSWORD;
   });
 
   test('stop should report when no PID file exists', async () => {
@@ -372,6 +391,8 @@ describe('CLI - Stop Command', () => {
 
 describe('CLI - Status Command', () => {
   beforeEach(() => {
+    // Force file-based encrypted storage for keyring (not testing keyring itself)
+    process.env.KEYRING_PASSWORD = 'test-keyring-password';
     mockHasStoredCredentials.mockReturnValue(Promise.resolve(true));
     if (existsSync(pidFilePath)) {
       unlinkSync(pidFilePath);
@@ -379,9 +400,12 @@ describe('CLI - Status Command', () => {
   });
 
   afterEach(() => {
+    mock.restore();
+    mock.clearAllMocks();
     if (existsSync(pidFilePath)) {
       unlinkSync(pidFilePath);
     }
+    delete process.env.KEYRING_PASSWORD;
   });
 
   test('status --json should output JSON with server and auth info', async () => {

@@ -33,9 +33,9 @@ export class ApiError extends AppError {
    */
   constructor(
     message: string,
-    readonly statusCode: number = 500,
+    override readonly statusCode: number = 500,
     readonly originalStatus?: number,
-    readonly originalError?: unknown
+    override readonly originalError?: unknown
   ) {
     super(message, 'API_ERROR', statusCode, false, originalError);
     Object.setPrototypeOf(this, ApiError.prototype);
@@ -56,7 +56,7 @@ export class ApiError extends AppError {
  * }
  */
 export class NetworkError extends ApiError {
-  readonly code = 'NETWORK_ERROR';
+  override readonly code = 'NETWORK_ERROR';
 
   /**
    * Creates a new NetworkError.
@@ -88,7 +88,7 @@ export class NetworkError extends ApiError {
  * }
  */
 export class TimeoutError extends ApiError {
-  readonly code = 'TIMEOUT';
+  override readonly code = 'TIMEOUT';
 
   /**
    * Creates a new TimeoutError.
@@ -117,7 +117,7 @@ export class TimeoutError extends ApiError {
  * }
  */
 export class ProtonApiError extends ApiError {
-  readonly code = 'PROTON_API_ERROR';
+  override readonly code = 'PROTON_API_ERROR';
 
   /**
    * Creates a new ProtonApiError.
@@ -139,7 +139,7 @@ export class ProtonApiError extends ApiError {
    * Serialize error to JSON, including API-specific details.
    * Useful for logging and debugging.
    */
-  toJSON() {
+  override toJSON() {
     return {
       ...super.toJSON(),
       apiCode: this.apiCode,

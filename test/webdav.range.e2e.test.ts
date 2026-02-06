@@ -5,17 +5,30 @@
  * Validates that video scrubbing and large file partial reads work correctly.
  */
 
+import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test';
 
-import { WebDAVServer } from '../src/webdav/server.ts';
+import { afterEach, beforeEach } from 'bun:test';
 import { driveClient } from '../src/drive.ts';
-import type { SeekableReadableStream } from '../src/drive.ts';
+import { WebDAVServer } from '../src/webdav/server.ts';
+import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
+import { createFileDownloader } from './utils/seekableMock.ts';
+
+let __perTestEnv: PerTestEnv;
+beforeEach(async () => {
+  __perTestEnv = await setupPerTestEnv();
+});
+afterEach(async () => {
+  await __perTestEnv.cleanup();
+});
 
 // Mock env-paths to avoid auth attempts
-const pathsBase = mkdtempSync(join(tmpdir(), 'pdb-range-e2e-'));
+// Note: These E2E tests should be run separately to avoid singleton/resource conflicts.
+// Run with: bun test test/webdav.range.e2e.test.ts
+const DEFAULT_PATHS_BASE = mkdtempSync(join(tmpdir(), 'pdb-range-e2e-default-'));
+let pathsBase = DEFAULT_PATHS_BASE;
 mock.module('env-paths', () => ({
   default: () => ({
     config: join(pathsBase, 'config'),
@@ -133,40 +146,17 @@ describe('webdav range requests', () => {
     return result;
   };
 
-  // Create a mock SeekableReadableStream for testing range requests
-  const createMockSeekableStream = (data: Uint8Array): SeekableReadableStream => {
-    // Use a separate position tracker for seek/read that doesn't conflict with ReadableStream
-    let seekPosition = 0;
-
-    // Create a minimal ReadableStream (won't actually be used for ranged reads)
-    const stream = new ReadableStream<Uint8Array>({
-      start() {
-        // Don't do anything on start
-      },
-      pull(controller) {
-        // This shouldn't be called for ranged reads which use seek/read
-        controller.close();
-      },
-    }) as SeekableReadableStream;
-
-    stream.seek = async (pos: number) => {
-      seekPosition = pos;
-    };
-
-    stream.read = async (numBytes: number) => {
-      if (seekPosition >= data.length) {
-        return { value: new Uint8Array(0), done: true };
-      }
-      const end = Math.min(seekPosition + numBytes, data.length);
-      const value = data.slice(seekPosition, end);
-      seekPosition = end;
-      return { value, done: seekPosition >= data.length };
-    };
-
-    return stream;
-  };
+  // Create isolated temporary directories for this test suite
+  let baseDir: string;
 
   beforeAll(() => {
+    // Set up isolated temp directory for this entire test suite
+    baseDir = mkdtempSync(join(tmpdir(), 'pdb-range-e2e-'));
+    pathsBase = baseDir;
+
+    // Force file-based encrypted storage for keyring (not testing keyring itself)
+    process.env.KEYRING_PASSWORD = 'test-keyring-password';
+
     const rootNode: InMemoryNode = {
       uid: 'root',
       name: '',
@@ -251,19 +241,7 @@ describe('webdav range requests', () => {
     driveClient.getFileDownloader = async (uid: string) => {
       const node = nodes.get(uid);
       const data = node?.data || new Uint8Array();
-      return {
-        getSeekableStream: () => createMockSeekableStream(data),
-        downloadToStream: (writable: WritableStream) => {
-          const writer = writable.getWriter();
-          writer.write(data).then(() => writer.close());
-          return {
-            pause: () => {},
-            resume: () => {},
-            completion: () => Promise.resolve(),
-            isDownloadCompleteWithSignatureIssues: () => false,
-          };
-        },
-      };
+      return createFileDownloader(data);
     };
     driveClient.renameNode = async (uid: string, newName: string) => {
       const node = nodes.get(uid);
@@ -351,7 +329,9 @@ describe('webdav range requests', () => {
     driveClient.resolvePath = originalMethods.resolvePath;
     driveClient.findNodeByName = originalMethods.findNodeByName;
     driveClient.getNode = originalMethods.getNode;
-    rmSync(pathsBase, { recursive: true, force: true });
+    rmSync(baseDir, { recursive: true, force: true });
+    pathsBase = DEFAULT_PATHS_BASE;
+    delete process.env.KEYRING_PASSWORD;
   });
 
   it('returns 206 Partial Content for Range requests', async () => {
@@ -383,6 +363,8 @@ describe('webdav range requests', () => {
 
       const partialContent = await rangeResponse.text();
       expect(partialContent).toBe('ABCDEFGHIJ');
+    } catch (err) {
+      throw err;
     } finally {
       await server.stop();
     }
