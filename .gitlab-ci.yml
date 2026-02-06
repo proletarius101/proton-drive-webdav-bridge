@@ -128,8 +128,25 @@ release:
       links:
       - name: proton-drive-webdav-bridge-${CI_COMMIT_TAG}.tar.gz
         url: "$CI_PROJECT_URL/-/jobs/$CI_JOB_ID/artifacts/raw/proton-drive-webdav-bridge-${CI_COMMIT_TAG}.tar.gz"
+
 secret_detection:
   stage: secret-detection
 
 sast:
   stage: test
+
+generate-sbom:
+  stage: test
+  image: sbomifyhub/sbomify-action
+  variables:
+    LOCK_FILE: bun.lock
+    OUTPUT_FILE: gl-sbom-report.cdx.json
+    UPLOAD: "false"
+    ENRICH: "true"
+  script:
+    - /sbomify.sh
+  artifacts:
+    paths:
+      - gl-sbom-report.cdx.json
+    reports:
+      cyclonedx: gl-sbom-report.cdx.json
