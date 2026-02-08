@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import ProtonDriveResource from '../src/webdav/ProtonDriveResource.js';
 import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
 import { createFileDownloader } from './utils/seekableMock';

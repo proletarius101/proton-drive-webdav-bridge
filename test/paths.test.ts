@@ -4,25 +4,28 @@
  * Tests path resolution and directory creation using env-paths.
  */
 
-import { afterEach, beforeEach, describe, expect, test, mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { existsSync, mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
 let tempBase: string;
 
-const loadPaths = async () =>
-  import(`../src/paths.js?cache=${Date.now()}-${Math.random().toString(36).slice(2)}`);
+// Set up the mock BEFORE any imports that might use env-paths
+vi.mock('env-paths', async () => {
+  // Get tempBase from module scope when this factory runs
+  return {
+    default: () => ({
+      config: join(tempBase, 'config', 'proton-drive-webdav-bridge'),
+      data: join(tempBase, 'data', 'proton-drive-webdav-bridge'),
+      log: join(tempBase, 'log', 'proton-drive-webdav-bridge'),
+      temp: join(tempBase, 'temp', 'proton-drive-webdav-bridge'),
+      cache: join(tempBase, 'cache', 'proton-drive-webdav-bridge'),
+    }),
+  };
+});
 
-mock.module('env-paths', () => ({
-  default: () => ({
-    config: join(tempBase, 'config', 'proton-drive-webdav-bridge'),
-    data: join(tempBase, 'data', 'proton-drive-webdav-bridge'),
-    log: join(tempBase, 'log', 'proton-drive-webdav-bridge'),
-    temp: join(tempBase, 'temp', 'proton-drive-webdav-bridge'),
-    cache: join(tempBase, 'cache', 'proton-drive-webdav-bridge'),
-  }),
-}));
+const loadPaths = async () => import('../src/paths.js');
 
 describe('Paths - Directory Functions Availability', () => {
   beforeEach(() => {

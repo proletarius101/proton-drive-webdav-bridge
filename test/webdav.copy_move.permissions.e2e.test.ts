@@ -1,32 +1,35 @@
-import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-import { afterEach, beforeEach } from 'bun:test';
+import { afterEach, beforeEach } from 'vitest';
 import { driveClient } from '../src/drive.ts';
 import { WebDAVServer } from '../src/webdav/server.ts';
 import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
 
 let __perTestEnv: PerTestEnv;
+let pathsBase = mkdtempSync(join(tmpdir(), 'pdb-webdav-copymove-'));
+
 beforeEach(async () => {
   __perTestEnv = await setupPerTestEnv();
-});
-afterEach(async () => {
-  await __perTestEnv.cleanup();
+  // Setup env-paths mock for this test
+  vi.doMock('env-paths', () => ({
+    default: () => ({
+      config: join(__perTestEnv.baseDir, 'config'),
+      data: join(__perTestEnv.baseDir, 'data'),
+      log: join(__perTestEnv.baseDir, 'log'),
+      temp: join(__perTestEnv.baseDir, 'temp'),
+      cache: join(__perTestEnv.baseDir, 'cache'),
+    }),
+  }));
 });
 
-const DEFAULT_PATHS_BASE = mkdtempSync(join(tmpdir(), 'pdb-webdav-copymove-default-'));
-let pathsBase = DEFAULT_PATHS_BASE;
-mock.module('env-paths', () => ({
-  default: () => ({
-    config: join(pathsBase, 'config'),
-    data: join(pathsBase, 'data'),
-    log: join(pathsBase, 'log'),
-    temp: join(pathsBase, 'temp'),
-    cache: join(pathsBase, 'cache'),
-  }),
-}));
+afterEach(async () => {
+  await __perTestEnv.cleanup();
+  vi.resetModules();
+  if (pathsBase) rmSync(pathsBase, { recursive: true, force: true });
+});
 
 interface Node {
   uid: string;
@@ -109,7 +112,6 @@ describe('WebDAV COPY/MOVE permission semantics', () => {
 
   afterAll(() => {
     rmSync(baseDir, { recursive: true, force: true });
-    pathsBase = DEFAULT_PATHS_BASE;
     delete process.env.KEYRING_PASSWORD;
   });
 

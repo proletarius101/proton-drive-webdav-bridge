@@ -1,23 +1,54 @@
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { afterEach, beforeEach, beforeAll, describe, test, expect, mock } from 'bun:test';
+import { afterEach, beforeEach, beforeAll, describe, test, expect, vi } from 'vitest';
 
-// Shared mock factories for isolated state
-import {
-  createMockState,
-  createKeychainMocks,
-  createConfigMocks,
-  resetTestHelpers,
-  captureConsoleAsync,
-} from './helpers/mocks.js';
+// Create module-level mockState object
+const mockState = {
+  credentials: null as any,
+  config: {
+    webdav: { host: '127.0.0.1', port: 8080, https: false, requireAuth: true },
+    remotePath: '/',
+    cache: { enabled: true, ttlSeconds: 60, maxSizeMB: 100 },
+    debug: false,
+    autoStart: false,
+    username: undefined as string | undefined,
+  },
+};
 
-const mockState = createMockState();
-const keychainMocks = createKeychainMocks(mockState);
-const configMocks = createConfigMocks(mockState);
+// Create mocks directly in vi.hoisted to avoid import ordering issues
+const { keychainMocks, configMocks } = vi.hoisted(() => ({
+  keychainMocks: {
+    hasStoredCredentials: vi.fn(async () => {
+      return mockState.credentials !== null;
+    }),
+    storeCredentials: vi.fn(async (creds: any) => {
+      mockState.credentials = creds;
+    }),
+    deleteStoredCredentials: vi.fn(async () => {
+      mockState.credentials = null;
+    }),
+    getStoredCredentials: vi.fn(async () => mockState.credentials),
+  },
+  configMocks: {
+    getConfig: vi.fn(async () => mockState.config),
+    updateConfig: vi.fn(async (updates: any) => {
+      mockState.config = { ...mockState.config, ...updates };
+    }),
+  },
+}));
 
-mock.module('../src/keychain.js', () => keychainMocks);
-mock.module('../src/config.js', () => configMocks);
+vi.mock('../src/keychain.js', () => keychainMocks);
+vi.mock('../src/config.js', () => ({
+  ...configMocks,
+  loadConfig: vi.fn(() => {}),
+}));
+
+vi.mock('@inquirer/prompts', () => ({
+  input: vi.fn(() => Promise.resolve('testuser')),
+  password: vi.fn(() => Promise.resolve('password123')),
+  confirm: vi.fn(() => Promise.resolve(true)),
+}));
 
 // Use real modules
 import { buildProgram } from '../src/index.js';
@@ -35,6 +66,28 @@ const sample = {
   passwordMode: 1 as const,
 };
 
+// Helper to capture console output during async execution
+async function captureConsoleAsync(fn: () => Promise<void>) {
+  const logs: string[] = [];
+  const originalLog = console.log;
+  const originalError = console.error;
+  const originalWarn = console.warn;
+  
+  console.log = (...args: any[]) => logs.push(args.map(String).join(' '));
+  console.error = (...args: any[]) => logs.push(args.map(String).join(' '));
+  console.warn = (...args: any[]) => logs.push(args.map(String).join(' '));
+  
+  try {
+    await fn();
+  } finally {
+    console.log = originalLog;
+    console.error = originalError;
+    console.warn = originalWarn;
+  }
+  
+  return { logs };
+}
+
 describe('CLI - status command', () => {
   let baseDir: string;
   let program: any;
@@ -45,12 +98,13 @@ describe('CLI - status command', () => {
   });
 
   beforeEach(() => {
-    // Reset mock state for isolation
-    resetTestHelpers(mockState);
+    // Reset mocks for isolation
     keychainMocks.storeCredentials.mockClear();
     keychainMocks.getStoredCredentials.mockClear();
     configMocks.getConfig.mockClear();
     configMocks.updateConfig.mockClear();
+    keychainMocks.hasStoredCredentials.mockClear();
+    keychainMocks.deleteStoredCredentials.mockClear();
 
     baseDir = mkdtempSync(join(tmpdir(), 'pdb-status-'));
     // Force file-based encrypted storage for keyring (not testing keyring itself)
@@ -58,8 +112,8 @@ describe('CLI - status command', () => {
   });
 
   afterEach(async () => {
-    mock.restore();
-    mock.clearAllMocks();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
     rmSync(baseDir, { recursive: true, force: true });
     delete process.env.KEYRING_PASSWORD;
   });

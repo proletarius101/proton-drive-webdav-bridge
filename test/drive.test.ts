@@ -4,7 +4,7 @@
  * Tests DriveClientManager interface, error handling, and initialization.
  */
 
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect } from 'vitest';
 import { DriveClientManager } from '../src/drive.js';
 import type { ProtonDriveClient } from '../src/drive.js';
 

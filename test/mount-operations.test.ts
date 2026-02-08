@@ -11,7 +11,7 @@
  * User Stories: GH-008, GH-009, GH-010, GH-031
  */
 
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
 
 let __perTestEnv: PerTestEnv;

@@ -5,7 +5,7 @@
  * Provides common mocks that all tests need (env-paths, etc.)
  */
 
-import { mock } from 'bun:test';
+import { vi } from 'vitest';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
@@ -20,7 +20,7 @@ export function setPathsBase(newBase: string) {
  * Mock env-paths to use temporary directories for all tests
  * This prevents tests from touching real user directories
  */
-mock.module('env-paths', () => ({
+vi.mock('env-paths', () => ({
   default: () => ({
     config: join(pathsBase, 'config'),
     data: join(pathsBase, 'data'),
@@ -36,7 +36,7 @@ mock.module('env-paths', () => ({
  */
 export const keyringStore = new Map<string, string>();
 
-mock.module('@napi-rs/keyring', () => {
+vi.mock('@napi-rs/keyring', () => {
   class Entry {
     private key: string;
     constructor(

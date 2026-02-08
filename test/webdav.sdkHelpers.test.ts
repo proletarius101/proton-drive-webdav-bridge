@@ -1,8 +1,8 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { getClaimedAdditionalMetadata } from '../src/webdav/sdkHelpers.js';
 
 import type { Result, Revision } from '@protontech/drive-sdk';
-import { afterEach, beforeEach } from 'bun:test';
+import { afterEach, beforeEach } from 'vitest';
 import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
 
 let __perTestEnv: PerTestEnv;

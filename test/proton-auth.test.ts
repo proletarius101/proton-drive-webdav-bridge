@@ -4,7 +4,7 @@
  * Tests the barrel export file that re-exports auth functionality.
  */
 
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect } from 'vitest';
 
 describe('Proton Auth Module - Exports', () => {
   test('should export ProtonAuth class', async () => {

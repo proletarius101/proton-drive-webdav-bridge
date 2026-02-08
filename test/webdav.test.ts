@@ -11,7 +11,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import ProtonDriveAdapter from '../src/webdav/ProtonDriveAdapter.js';
 import ProtonDriveResource from '../src/webdav/ProtonDriveResource.js';
 import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';

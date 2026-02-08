@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -15,22 +15,30 @@ afterEach(async () => {
 
 // Note: These E2E tests should be run separately from other tests to avoid
 // singleton/resource conflicts. Run with: bun test test/webdav.lock.conflicts.e2e.test.ts
+
 // Mock env-paths to return fresh temp directories for each test
-let mockDirs: { config: string; data: string; log: string; temp: string; cache: string } | null =
-  null;
-mock.module('env-paths', () => ({
-  default: () => {
-    if (!mockDirs) {
-      mockDirs = {
-        config: mkdtempSync(join(tmpdir(), 'pdb-webdav-lockconf-config-')),
-        data: mkdtempSync(join(tmpdir(), 'pdb-webdav-lockconf-data-')),
-        log: mkdtempSync(join(tmpdir(), 'pdb-webdav-lockconf-log-')),
-        temp: mkdtempSync(join(tmpdir(), 'pdb-webdav-lockconf-temp-')),
-        cache: mkdtempSync(join(tmpdir(), 'pdb-webdav-lockconf-cache-')),
-      };
-    }
-    return mockDirs;
-  },
+const { mockEnvPaths, getMockDirs } = vi.hoisted(() => {
+  let cache: { config: string; data: string; log: string; temp: string; cache: string } | null = null;
+  
+  return {
+    mockEnvPaths: () => {
+      if (!cache) {
+        cache = {
+          config: mkdtempSync(join(tmpdir(), 'pdb-webdav-lockconf-config-')),
+          data: mkdtempSync(join(tmpdir(), 'pdb-webdav-lockconf-data-')),
+          log: mkdtempSync(join(tmpdir(), 'pdb-webdav-lockconf-log-')),
+          temp: mkdtempSync(join(tmpdir(), 'pdb-webdav-lockconf-temp-')),
+          cache: mkdtempSync(join(tmpdir(), 'pdb-webdav-lockconf-cache-')),
+        };
+      }
+      return cache;
+    },
+    getMockDirs: () => cache,
+  };
+});
+
+vi.mock('env-paths', () => ({
+  default: mockEnvPaths,
 }));
 
 import { driveClient } from '../src/drive.js';
@@ -41,7 +49,6 @@ let server: InstanceType<typeof WebDAVServer> | null = null;
 let baseDir: string | null = null;
 
 beforeEach(() => {
-  mockDirs = null;
   baseDir = mkdtempSync(join(tmpdir(), 'pdb-webdav-lockconf-'));
 
   // Force file-based encrypted storage for keyring (not testing keyring itself)
@@ -79,13 +86,13 @@ afterEach(async () => {
   if (baseDir) rmSync(baseDir, { recursive: true, force: true });
   baseDir = null;
 
+  const mockDirs = getMockDirs();
   if (mockDirs) {
     Object.values(mockDirs).forEach((dir) => {
       try {
         rmSync(dir, { recursive: true, force: true });
       } catch {}
     });
-    mockDirs = null;
   }
 
   // Clean up keyring environment
@@ -97,6 +104,7 @@ afterEach(async () => {
 describe('WebDAV LOCK depth/infinity conflicts', () => {
   it(
     'LOCK on collection (depth: infinity) prevents PUT to child resource',
+    { timeout: 10000 },
     async () => {
       server = new WebDAVServer({ host: '127.0.0.1', port: 0, requireAuth: false });
       await server.start();
@@ -131,12 +139,12 @@ describe('WebDAV LOCK depth/infinity conflicts', () => {
 
       // Expect Locked (423) per RFC 4918
       expect(putResp.status).toBe(423);
-    },
-    { timeout: 10000 }
+    }
   );
 
   it(
     'UNLOCKing collection allows PUT to child resource',
+    { timeout: 10000 },
     async () => {
       server = new WebDAVServer({ host: '127.0.0.1', port: 0, requireAuth: false });
       await server.start();
@@ -174,7 +182,6 @@ describe('WebDAV LOCK depth/infinity conflicts', () => {
       // Now PUT child
       const putResp = await fetch(`${baseUrl}/parent/child.txt`, { method: 'PUT', body: 'data' });
       expect(putResp.status).toBeGreaterThanOrEqual(200);
-    },
-    { timeout: 10000 }
+    }
   );
 });

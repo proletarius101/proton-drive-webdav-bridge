@@ -5,39 +5,41 @@
  * Validates that video scrubbing and large file partial reads work correctly.
  */
 
-import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test';
+import { afterAll, beforeAll, beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-import { afterEach, beforeEach } from 'bun:test';
 import { driveClient } from '../src/drive.ts';
 import { WebDAVServer } from '../src/webdav/server.ts';
 import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
 import { createFileDownloader } from './utils/seekableMock.ts';
 
 let __perTestEnv: PerTestEnv;
-beforeEach(async () => {
-  __perTestEnv = await setupPerTestEnv();
-});
-afterEach(async () => {
-  await __perTestEnv.cleanup();
-});
 
 // Mock env-paths to avoid auth attempts
 // Note: These E2E tests should be run separately to avoid singleton/resource conflicts.
 // Run with: bun test test/webdav.range.e2e.test.ts
 const DEFAULT_PATHS_BASE = mkdtempSync(join(tmpdir(), 'pdb-range-e2e-default-'));
 let pathsBase = DEFAULT_PATHS_BASE;
-mock.module('env-paths', () => ({
-  default: () => ({
-    config: join(pathsBase, 'config'),
-    data: join(pathsBase, 'data'),
-    log: join(pathsBase, 'log'),
-    temp: join(pathsBase, 'temp'),
-    cache: join(pathsBase, 'cache'),
-  }),
-}));
+
+beforeEach(async () => {
+  __perTestEnv = await setupPerTestEnv();
+  vi.doMock('env-paths', () => ({
+    default: () => ({
+      config: join(__perTestEnv.baseDir, 'config'),
+      data: join(pathsBase, 'data'),
+      log: join(pathsBase, 'log'),
+      temp: join(pathsBase, 'temp'),
+      cache: join(pathsBase, 'cache'),
+    }),
+  }));
+});
+
+afterEach(async () => {
+  await __perTestEnv.cleanup();
+  vi.doUnmock('env-paths');
+});
 
 interface InMemoryNode {
   uid: string;

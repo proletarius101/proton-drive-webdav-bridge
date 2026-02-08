@@ -13,14 +13,14 @@ import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync } from 'fs';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { afterEach, beforeEach, afterAll, describe, expect, test, mock } from 'bun:test';
+import { afterEach, beforeEach, afterAll, describe, expect, test, vi } from 'vitest';
 import { keyringStore } from './setup.js';
 
 // Per-test env-paths mock: ensure each test uses an isolated temp dir
 let __testTempBase: string;
 beforeEach(async () => {
   __testTempBase = await mkdtemp(join(tmpdir(), 'pdb-keychain-global-'));
-  mock.module('env-paths', () => ({
+  vi.mock('env-paths', () => ({
     default: () => ({
       config: join(__testTempBase, 'config'),
       data: join(__testTempBase, 'data'),
@@ -37,8 +37,8 @@ afterEach(async () => {
   } catch {
     /* ignore cleanup errors */
   }
-  mock.restore();
-  mock.clearAllMocks();
+  vi.restoreAllMocks();
+  vi.clearAllMocks();
 });
 
 const DEFAULT_PATHS_BASE = join(tmpdir(), 'pdb-keychain-default');
@@ -65,15 +65,15 @@ describe('Keychain - File-Based Storage', () => {
   });
 
   afterEach(() => {
-    mock.restore();
-    mock.clearAllMocks();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
     rmSync(baseDir, { recursive: true, force: true });
     delete process.env.KEYRING_PASSWORD;
   });
 
   test('stores and retrieves credentials with encryption', async () => {
     const { storeCredentials, getStoredCredentials, hasStoredCredentials } = await import(
-      `../src/keychain.ts?cache=${Date.now()}`
+      '../src/keychain.ts'
     );
 
     await storeCredentials(sampleCredentials);
@@ -88,7 +88,7 @@ describe('Keychain - File-Based Storage', () => {
 
   test('returns null when no credentials stored', async () => {
     const { getStoredCredentials, hasStoredCredentials, deleteStoredCredentials } = await import(
-      `../src/keychain.ts?cache=${Date.now()}`
+      '../src/keychain.ts'
     );
 
     // Ensure clean state
@@ -101,7 +101,7 @@ describe('Keychain - File-Based Storage', () => {
 
   test('deletes stored credentials', async () => {
     const { storeCredentials, getStoredCredentials, deleteStoredCredentials } = await import(
-      `../src/keychain.ts?cache=${Date.now()}`
+      '../src/keychain.ts'
     );
 
     await storeCredentials(sampleCredentials);
@@ -115,7 +115,7 @@ describe('Keychain - File-Based Storage', () => {
 
   test('creates encrypted file with secure permissions', async () => {
     const { storeCredentials, getCredentialsFilePath, flushPendingWrites } = await import(
-      `../src/keychain.ts?cache=${Date.now()}`
+      '../src/keychain.ts'
     );
 
     await storeCredentials(sampleCredentials);
@@ -133,7 +133,7 @@ describe('Keychain - File-Based Storage', () => {
 
   test('overwrites existing credentials', async () => {
     const { storeCredentials, getStoredCredentials } = await import(
-      `../src/keychain.ts?cache=${Date.now()}`
+      `../src/keychain.ts`
     );
 
     await storeCredentials(sampleCredentials);
@@ -147,7 +147,7 @@ describe('Keychain - File-Based Storage', () => {
 
   test('handles different password modes', async () => {
     const { storeCredentials, getStoredCredentials } = await import(
-      `../src/keychain.ts?cache=${Date.now()}`
+      `../src/keychain.ts`
     );
 
     const twoPasswordCreds = { ...sampleCredentials, passwordMode: 2 as const };
@@ -167,8 +167,8 @@ describe('Keychain - Encryption and Security', () => {
   });
 
   afterEach(() => {
-    mock.restore();
-    mock.clearAllMocks();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
     rmSync(baseDir, { recursive: true, force: true });
     delete process.env.KEYRING_PASSWORD;
   });
@@ -176,7 +176,7 @@ describe('Keychain - Encryption and Security', () => {
   test('uses different encryption key with different passwords', async () => {
     process.env.KEYRING_PASSWORD = 'password1';
     const { storeCredentials, getCredentialsFilePath, flushPendingWrites } = await import(
-      `../src/keychain.ts?cache=${Date.now()}`
+      `../src/keychain.ts`
     );
 
     await storeCredentials(sampleCredentials);
@@ -188,7 +188,7 @@ describe('Keychain - Encryption and Security', () => {
     delete process.env.KEYRING_PASSWORD;
     process.env.KEYRING_PASSWORD = 'password2';
     const { storeCredentials: storeCredentials2, flushPendingWrites: flush2 } = await import(
-      `../src/keychain.ts?cache=${Date.now() + 1}`
+      '../src/keychain.ts'
     );
 
     await storeCredentials2(sampleCredentials);
@@ -201,14 +201,14 @@ describe('Keychain - Encryption and Security', () => {
 
   test('fails to decrypt with wrong password', async () => {
     process.env.KEYRING_PASSWORD = 'correct-password';
-    const { storeCredentials } = await import(`../src/keychain.ts?cache=${Date.now()}`);
+    const { storeCredentials } = await import('../src/keychain.ts');
 
     await storeCredentials(sampleCredentials);
 
     // Try to read with wrong password
     delete process.env.KEYRING_PASSWORD;
     process.env.KEYRING_PASSWORD = 'wrong-password';
-    const { getStoredCredentials } = await import(`../src/keychain.ts?cache=${Date.now() + 1}`);
+    const { getStoredCredentials } = await import('../src/keychain.ts');
 
     const stored = await getStoredCredentials();
     expect(stored).toBeNull(); // Should return null on decryption failure
@@ -217,7 +217,7 @@ describe('Keychain - Encryption and Security', () => {
   test('uses default password when KEYRING_PASSWORD not set', async () => {
     delete process.env.KEYRING_PASSWORD;
     const { storeCredentials, getStoredCredentials, deleteStoredCredentials } = await import(
-      `../src/keychain.ts?cache=${Date.now()}`
+      '../src/keychain.ts'
     );
 
     await storeCredentials(sampleCredentials);
@@ -235,10 +235,10 @@ describe('Keychain - Platform Detection', () => {
   // Ensure any stored credentials are removed between tests to avoid cross-test
   // contamination that may cause network calls in other modules.
   afterEach(async () => {
-    mock.restore();
-    mock.clearAllMocks();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
     try {
-      const { deleteStoredCredentials } = await import(`../src/keychain.ts?cache=${Date.now()}`);
+      const { deleteStoredCredentials } = await import(`../src/keychain.ts`);
       await deleteStoredCredentials();
     } catch {
       /* ignore cleanup errors */
@@ -247,7 +247,7 @@ describe('Keychain - Platform Detection', () => {
 
   afterAll(async () => {
     try {
-      const { deleteStoredCredentials } = await import(`../src/keychain.ts?cache=${Date.now()}`);
+      const { deleteStoredCredentials } = await import(`../src/keychain.ts`);
       await deleteStoredCredentials();
     } catch {
       /* ignore cleanup errors */
@@ -261,8 +261,8 @@ describe('Keychain - Platform Detection', () => {
   });
 
   afterEach(() => {
-    mock.restore();
-    mock.clearAllMocks();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
     rmSync(baseDir, { recursive: true, force: true });
     delete process.env.KEYRING_PASSWORD;
     delete process.env.DISPLAY;
@@ -272,7 +272,7 @@ describe('Keychain - Platform Detection', () => {
   test('uses file storage when KEYRING_PASSWORD is set', async () => {
     process.env.KEYRING_PASSWORD = 'explicit-file-storage';
     const { storeCredentials, getCredentialsFilePath, flushPendingWrites } = await import(
-      `../src/keychain.ts?cache=${Date.now()}`
+      `../src/keychain.ts`
     );
 
     await storeCredentials(sampleCredentials);
@@ -294,25 +294,23 @@ describe('Keychain - Error Handling', () => {
   });
 
   afterEach(() => {
-    mock.restore();
-    mock.clearAllMocks();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
     rmSync(baseDir, { recursive: true, force: true });
     delete process.env.KEYRING_PASSWORD;
   });
 
   test('deleteStoredCredentials does not throw when no credentials exist', async () => {
-    const { deleteStoredCredentials } = await import(`../src/keychain.ts?cache=${Date.now()}`);
+    const { deleteStoredCredentials } = await import('../src/keychain.ts');
 
     await expect(deleteStoredCredentials()).resolves.toBeUndefined();
   });
 
   test('handles corrupted file gracefully', async () => {
-    const { getCredentialsFilePath, getStoredCredentials } = await import(
-      `../src/keychain.ts?cache=${Date.now()}`
-    );
+    const { getCredentialsFilePath, getStoredCredentials } = await import('../src/keychain.ts');
 
     const filePath = getCredentialsFilePath();
-    const { getDataDir } = await import(`../src/paths.ts?cache=${Date.now()}`);
+    const { getDataDir } = await import('../src/paths.ts');
     getDataDir(); // Ensure directory exists
 
     // Write corrupted data
@@ -334,16 +332,14 @@ describe('Keychain - Credential Structure', () => {
   });
 
   afterEach(() => {
-    mock.restore();
-    mock.clearAllMocks();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
     rmSync(baseDir, { recursive: true, force: true });
     delete process.env.KEYRING_PASSWORD;
   });
 
   test('preserves all credential fields', async () => {
-    const { storeCredentials, getStoredCredentials } = await import(
-      `../src/keychain.ts?cache=${Date.now()}`
-    );
+    const { storeCredentials, getStoredCredentials } = await import('../src/keychain.ts');
 
     const fullCredentials = {
       parentUID: 'parent-uid',
@@ -366,9 +362,7 @@ describe('Keychain - Credential Structure', () => {
   });
 
   test('handles special characters in credentials', async () => {
-    const { storeCredentials, getStoredCredentials } = await import(
-      `../src/keychain.ts?cache=${Date.now()}`
-    );
+    const { storeCredentials, getStoredCredentials } = await import('../src/keychain.ts');
 
     const specialCredentials = {
       ...sampleCredentials,
@@ -391,13 +385,13 @@ describe('Keychain - Credential Structure', () => {
 describe('Keychain - Performance & Concurrency', () => {
   test('caches and coalesces concurrent reads', async () => {
     // Write credentials with one module instance and flush to storage
-    const m1 = await import(`../src/keychain.ts?cache=${Date.now()}`);
+    const m1 = await import('../src/keychain.ts');
     await m1.deleteStoredCredentials();
     await m1.storeCredentials(sampleCredentials);
     await m1.flushPendingWrites();
 
     // Import a fresh instance so it has no in-memory cache
-    const m2 = await import(`../src/keychain.ts?cache=${Date.now() + 1}`);
+    const m2 = await import('../src/keychain.ts');
     m2.resetKeyringInstrumentation();
 
     const [a, b, c] = await Promise.all([
@@ -415,7 +409,7 @@ describe('Keychain - Performance & Concurrency', () => {
   });
 
   test('debounces writes and coalesces concurrent writes', async () => {
-    const mod = await import(`../src/keychain.ts?cache=${Date.now()}`);
+    const mod = await import('../src/keychain.ts');
     mod.resetKeyringInstrumentation();
     await mod.deleteStoredCredentials();
 
@@ -434,7 +428,7 @@ describe('Keychain - Performance & Concurrency', () => {
   });
 
   test('instrumentation increments on get and store', async () => {
-    const mod = await import(`../src/keychain.ts?cache=${Date.now()}`);
+    const mod = await import('../src/keychain.ts');
     mod.resetKeyringInstrumentation();
     await mod.deleteStoredCredentials();
 
@@ -446,7 +440,7 @@ describe('Keychain - Performance & Concurrency', () => {
     expect(mod.getKeyringWriteCount()).toBe(1);
 
     // Import a fresh instance to force a backend read (cache not present)
-    const mod2 = await import(`../src/keychain.ts?cache=${Date.now() + 1}`);
+    const mod2 = await import('../src/keychain.ts');
     mod2.resetKeyringInstrumentation();
     const fetched = await mod2.getStoredCredentials();
     expect(fetched).not.toBeNull();

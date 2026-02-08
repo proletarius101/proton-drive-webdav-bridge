@@ -9,7 +9,7 @@
  * - URL generation
  */
 
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, vi, test } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -26,7 +26,7 @@ afterEach(async () => {
 const DEFAULT_PATHS_BASE = join(tmpdir(), 'pdb-webdav-default');
 let pathsBase = DEFAULT_PATHS_BASE;
 
-mock.module('env-paths', () => ({
+vi.mock('env-paths', () => ({
   default: () => ({
     config: join(pathsBase, 'config', 'proton-drive-webdav-bridge'),
     data: join(pathsBase, 'data', 'proton-drive-webdav-bridge'),
@@ -37,7 +37,7 @@ mock.module('env-paths', () => ({
 }));
 
 // Mock config to provide defaults
-mock.module('../src/config.js', () => ({
+vi.mock('../src/config.js', () => ({
   getConfig: () => ({
     webdav: {
       host: '127.0.0.1',
@@ -87,32 +87,32 @@ describe('WebDAV Server - Lifecycle', () => {
   });
 
   test('should instantiate WebDAVServer', async () => {
-    const { WebDAVServer } = await import(`../src/webdav/server.js?cache=${Date.now()}`);
+    const { WebDAVServer } = await import('../src/webdav/server.js');
     const server = new WebDAVServer();
     expect(server).toBeDefined();
     expect(typeof server).toBe('object');
   });
 
   test('should have start method', async () => {
-    const { WebDAVServer } = await import(`../src/webdav/server.js?cache=${Date.now()}`);
+    const { WebDAVServer } = await import('../src/webdav/server.js');
     const server = new WebDAVServer();
     expect(typeof server.start).toBe('function');
   });
 
   test('should have stop method', async () => {
-    const { WebDAVServer } = await import(`../src/webdav/server.js?cache=${Date.now()}`);
+    const { WebDAVServer } = await import('../src/webdav/server.js');
     const server = new WebDAVServer();
     expect(typeof server.stop).toBe('function');
   });
 
   test('should have getUrl method', async () => {
-    const { WebDAVServer } = await import(`../src/webdav/server.js?cache=${Date.now()}`);
+    const { WebDAVServer } = await import('../src/webdav/server.js');
     const server = new WebDAVServer();
     expect(typeof server.getUrl).toBe('function');
   });
 
   test('getUrl should return URL based on configuration', async () => {
-    const { WebDAVServer } = await import(`../src/webdav/server.js?cache=${Date.now()}`);
+    const { WebDAVServer } = await import('../src/webdav/server.js');
     const server = new WebDAVServer({ host: '127.0.0.1', port: 8080 });
     const url = server.getUrl();
     expect(url).toBe('http://127.0.0.1:8080');
@@ -133,7 +133,7 @@ describe('WebDAV Server - Configuration', () => {
   });
 
   test('should accept custom configuration', async () => {
-    const { WebDAVServer } = await import(`../src/webdav/server.js?cache=${Date.now()}`);
+    const { WebDAVServer } = await import('../src/webdav/server.js');
     const server = new WebDAVServer({
       host: '127.0.0.1',
       port: 9999,
@@ -143,7 +143,7 @@ describe('WebDAV Server - Configuration', () => {
   });
 
   test('should support HTTPS configuration', async () => {
-    const { WebDAVServer } = await import(`../src/webdav/server.js?cache=${Date.now()}`);
+    const { WebDAVServer } = await import('../src/webdav/server.js');
     const server = new WebDAVServer({
       https: true,
       certPath: '/path/to/cert.pem',
@@ -167,7 +167,7 @@ describe('WebDAV Server - Error Handling', () => {
   });
 
   test('stop should not throw when server not running', async () => {
-    const { WebDAVServer } = await import(`../src/webdav/server.js?cache=${Date.now()}`);
+    const { WebDAVServer } = await import('../src/webdav/server.js');
     const server = new WebDAVServer();
     await expect(server.stop()).resolves.toBeUndefined();
   });
@@ -204,7 +204,7 @@ describe('WebDAV Server - Configuration Integration', () => {
   });
 
   test('should apply host configuration correctly', async () => {
-    const { WebDAVServer } = await import(`../src/webdav/server.js?cache=${Date.now()}`);
+    const { WebDAVServer } = await import('../src/webdav/server.js');
     const server = new WebDAVServer({ host: '0.0.0.0', port: 9090 });
     const url = server.getUrl();
     expect(url).toContain('0.0.0.0');
@@ -212,29 +212,29 @@ describe('WebDAV Server - Configuration Integration', () => {
   });
 
   test('should apply HTTPS protocol configuration', async () => {
-    const { WebDAVServer } = await import(`../src/webdav/server.js?cache=${Date.now()}`);
+    const { WebDAVServer } = await import('../src/webdav/server.js');
     const server = new WebDAVServer({
       host: 'localhost',
       port: 8443,
       https: true,
     });
     const url = server.getUrl();
-    expect(url).toStartWith('https://');
+    expect(url).toMatch(/^https:\/\//);
   });
 
   test('should apply HTTP protocol configuration', async () => {
-    const { WebDAVServer } = await import(`../src/webdav/server.js?cache=${Date.now()}`);
+    const { WebDAVServer } = await import(`../src/webdav/server.js`);
     const server = new WebDAVServer({
       host: 'localhost',
       port: 8080,
       https: false,
     });
     const url = server.getUrl();
-    expect(url).toStartWith('http://');
+    expect(url).toMatch(/^http:\/\//);
   });
 
   test('should support authentication configuration', async () => {
-    const { WebDAVServer } = await import(`../src/webdav/server.js?cache=${Date.now()}`);
+    const { WebDAVServer } = await import(`../src/webdav/server.js`);
     const server = new WebDAVServer({
       requireAuth: true,
       username: 'testuser',
@@ -244,7 +244,7 @@ describe('WebDAV Server - Configuration Integration', () => {
   });
 
   test('should instantiate with minimal configuration', async () => {
-    const { WebDAVServer } = await import(`../src/webdav/server.js?cache=${Date.now()}`);
+    const { WebDAVServer } = await import(`../src/webdav/server.js`);
     const server = new WebDAVServer();
     expect(server).toBeDefined();
     expect(typeof server.start).toBe('function');
@@ -252,7 +252,7 @@ describe('WebDAV Server - Configuration Integration', () => {
   });
 
   test('should create multiple independent instances', async () => {
-    const { WebDAVServer } = await import(`../src/webdav/server.js?cache=${Date.now()}`);
+    const { WebDAVServer } = await import(`../src/webdav/server.js`);
     const server1 = new WebDAVServer({ port: 8080 });
     const server2 = new WebDAVServer({ port: 9090 });
 

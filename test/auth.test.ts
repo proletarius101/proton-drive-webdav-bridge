@@ -14,7 +14,7 @@
  * integration with keychain storage.
  */
 
-import { afterEach, beforeEach, beforeAll, describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, beforeAll, describe, expect, vi, test } from 'vitest';
 import { mkdirSync, mkdtempSync, rmSync } from 'fs';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
@@ -58,7 +58,7 @@ let testTempDir: string;
 beforeEach(async () => {
   testTempDir = await mkdtemp(join(tmpdir(), 'pdb-test-'));
 
-  mock.module('env-paths', () => ({
+  vi.mock('env-paths', () => ({
     default: () => ({
       config: join(testTempDir, 'config'),
       data: join(testTempDir, 'data'),
@@ -68,8 +68,8 @@ beforeEach(async () => {
     }),
   }));
 
-  const cacheBuster = `${Date.now()}-${Math.random()}`;
-  const mod = await import(`../src/auth.js?cache=${cacheBuster}`);
+  vi.resetModules();
+  const mod = await import('../src/auth.js');
   ProtonAuth = mod.ProtonAuth;
   authenticateAndStore = mod.authenticateAndStore;
   restoreSessionFromStorage = mod.restoreSessionFromStorage;
@@ -78,11 +78,11 @@ beforeEach(async () => {
 afterEach(async () => {
   // remove test dir and restore mocks
   await rm(testTempDir, { recursive: true, force: true });
-  mock.restore();
+  vi.restoreAllMocks();
 });
 
 // Rejects immediately so tests never hit the real Proton API.
-const rejectedApiRequester = mock(async () => {
+const rejectedApiRequester = vi.fn(async () => {
   throw new Error('Mocked network call');
 }) as unknown as ApiRequester;
 
@@ -92,7 +92,7 @@ describe('ProtonAuth - Initialization', () => {
   });
 
   afterEach(() => {
-    mock.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('should instantiate ProtonAuth with all required methods', () => {
@@ -167,7 +167,7 @@ describe('ProtonAuth - Error Types', () => {
 
 describe('ProtonAuth - Login Flow (Mocked)', () => {
   test('should handle invalid credentials error', async () => {
-    const mockApi = mock(async () => {
+    const mockApi = vi.fn(async () => {
       throw new Error('Invalid credentials');
     }) as unknown as ApiRequester;
 
@@ -176,7 +176,7 @@ describe('ProtonAuth - Login Flow (Mocked)', () => {
   });
 
   test('should handle network errors gracefully', async () => {
-    const mockApi = mock(async () => {
+    const mockApi = vi.fn(async () => {
       throw new Error('Network error');
     }) as unknown as ApiRequester;
 
@@ -216,7 +216,7 @@ describe('ProtonAuth - Credential Management', () => {
 
 describe('ProtonAuth - Session Restoration', () => {
   test('restoreSession should fail with invalid credentials', async () => {
-    const mockApi = mock(async () => {
+    const mockApi = vi.fn(async () => {
       throw new Error('Invalid session');
     }) as unknown as ApiRequester;
 
@@ -243,7 +243,7 @@ describe('ProtonAuth - Session Restoration', () => {
     // This test verifies that UserID is properly set on both session and parentSession.
 
     // Mock successful API responses using injected ApiRequester
-    const mockApi = mock(async (method: string, endpoint: string) => {
+    const mockApi = vi.fn(async (method: string, endpoint: string) => {
       if (endpoint.includes('/users')) {
         return {
           Code: 1000,
@@ -315,8 +315,8 @@ describe('ProtonAuth - Session State Management', () => {
   });
 
   afterEach(() => {
-    mock.restore();
-    mock.clearAllMocks();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
     rmSync(tempDir, { recursive: true, force: true });
     delete process.env.KEYRING_PASSWORD;
     // restore default handled by top-level afterEach
@@ -350,8 +350,8 @@ describe('ProtonAuth - Credential Storage Integration', () => {
   });
 
   afterEach(() => {
-    mock.restore();
-    mock.clearAllMocks();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
     rmSync(tempDir, { recursive: true, force: true });
     delete process.env.KEYRING_PASSWORD;
     // restore default handled by top-level afterEach
@@ -595,8 +595,8 @@ describe('ProtonAuth - Helper Functions Integration', () => {
   });
 
   afterEach(() => {
-    mock.restore();
-    mock.clearAllMocks();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
     rmSync(tempDir, { recursive: true, force: true });
     delete process.env.KEYRING_PASSWORD;
     // restore default handled by top-level afterEach
@@ -611,7 +611,7 @@ describe('ProtonAuth - Helper Functions Integration', () => {
   });
 
   test('restoreSessionFromStorage should throw when no credentials stored', async () => {
-    const { deleteStoredCredentials } = await import(`../src/keychain.ts?cache=${Date.now()}`);
+    const { deleteStoredCredentials } = await import(`../src/keychain.ts`);
     await deleteStoredCredentials();
     // May fail for other reasons (keyring vs file storage differences); assert that it rejects
     await expect(restoreSessionFromStorage()).rejects.toThrow();

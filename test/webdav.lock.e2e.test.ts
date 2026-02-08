@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdirSync, mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -13,23 +13,29 @@ afterEach(async () => {
 });
 
 // Mock env-paths to return fresh temp directories for each test
-// This prevents singleton conflicts when tests run in parallel
-let mockDirs: { config: string; data: string; log: string; temp: string; cache: string } | null =
-  null;
+const { mockEnvPaths, getMockDirs, resetMockDirs } = vi.hoisted(() => {
+  let cache: { config: string; data: string; log: string; temp: string; cache: string } | null = null;
+  
+  return {
+    mockEnvPaths: () => {
+      if (!cache) {
+        cache = {
+          config: mkdtempSync(join(tmpdir(), 'pdb-webdav-lock-config-')),
+          data: mkdtempSync(join(tmpdir(), 'pdb-webdav-lock-data-')),
+          log: mkdtempSync(join(tmpdir(), 'pdb-webdav-lock-log-')),
+          temp: mkdtempSync(join(tmpdir(), 'pdb-webdav-lock-temp-')),
+          cache: mkdtempSync(join(tmpdir(), 'pdb-webdav-lock-cache-')),
+        };
+      }
+      return cache;
+    },
+    getMockDirs: () => cache,
+    resetMockDirs: () => { cache = null; },
+  };
+});
 
-mock.module('env-paths', () => ({
-  default: () => {
-    if (!mockDirs) {
-      mockDirs = {
-        config: mkdtempSync(join(tmpdir(), 'pdb-webdav-lock-config-')),
-        data: mkdtempSync(join(tmpdir(), 'pdb-webdav-lock-data-')),
-        log: mkdtempSync(join(tmpdir(), 'pdb-webdav-lock-log-')),
-        temp: mkdtempSync(join(tmpdir(), 'pdb-webdav-lock-temp-')),
-        cache: mkdtempSync(join(tmpdir(), 'pdb-webdav-lock-cache-')),
-      };
-    }
-    return mockDirs;
-  },
+vi.mock('env-paths', () => ({
+  default: mockEnvPaths,
 }));
 
 import { writeFileSync } from 'fs';
@@ -43,7 +49,7 @@ let baseDir: string | null = null;
 
 beforeEach(() => {
   // Reset mock directories for this test to ensure isolation
-  mockDirs = null;
+  resetMockDirs();
 
   baseDir = mkdtempSync(join(tmpdir(), 'pdb-webdav-lock-'));
 
@@ -88,6 +94,7 @@ afterEach(async () => {
   baseDir = null;
 
   // Clean up mocked env-paths directories
+  const mockDirs = getMockDirs();
   if (mockDirs) {
     Object.values(mockDirs).forEach((dir) => {
       try {
@@ -96,7 +103,6 @@ afterEach(async () => {
         /* ignore cleanup errors */
       }
     });
-    mockDirs = null;
   }
 
   // Clean up keyring environment
@@ -108,6 +114,7 @@ afterEach(async () => {
 describe('WebDAV LOCK/UNLOCK integration', () => {
   it(
     'creates a lock via LOCK and removes it via UNLOCK',
+    { timeout: 10000 },
     async () => {
       server = new WebDAVServer({ host: '127.0.0.1', port: 0, requireAuth: false });
       await server.start();
@@ -155,12 +162,12 @@ describe('WebDAV LOCK/UNLOCK integration', () => {
 
       const locksAfter = lm.getLocksForPath('/locktest.txt');
       expect(locksAfter.length).toBe(0);
-    },
-    { timeout: 10000 }
+    }
   );
 
   it(
     'LOCK prevents other clients from creating conflicting locks',
+    { timeout: 10000 },
     async () => {
       server = new WebDAVServer({ host: '127.0.0.1', port: 0, requireAuth: false });
       await server.start();
@@ -211,7 +218,6 @@ describe('WebDAV LOCK/UNLOCK integration', () => {
       const lm = LockManager.getInstance();
       const locks = lm.getLocksForPath('/locktest.txt');
       for (const l of locks) lm.deleteLock(l.token);
-    },
-    { timeout: 10000 }
+    }
   );
 });

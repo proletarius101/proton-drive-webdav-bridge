@@ -4,7 +4,7 @@
  * Executes command actions with safe mocks for external dependencies.
  */
 
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, vi, test } from 'vitest';
 import { Command } from 'commander';
 import { existsSync, unlinkSync, writeFileSync } from 'fs';
 import { join } from 'path';
@@ -14,79 +14,74 @@ import { registerAuthCommand } from '../src/cli/auth.js';
 import { registerStartCommand } from '../src/cli/start.js';
 import { registerStopCommand } from '../src/cli/stop.js';
 import { registerStatusCommand } from '../src/cli/status.js';
+import * as keychainModule from '../src/keychain.js';
 
 // ============================================================================
 // Mocks
 // ============================================================================
 
-const mockHasStoredCredentials = mock(() => Promise.resolve(false));
-const mockStoreCredentials = mock(() => Promise.resolve());
-const mockDeleteStoredCredentials = mock(() => Promise.resolve());
-const mockGetStoredCredentials = mock(() => Promise.resolve({ username: 'testuser' }));
-
-mock.module('../src/keychain.js', () => ({
-  hasStoredCredentials: mockHasStoredCredentials,
-  storeCredentials: mockStoreCredentials,
-  deleteStoredCredentials: mockDeleteStoredCredentials,
-  getStoredCredentials: mockGetStoredCredentials,
-}));
-
-const mockLogin = mock(() =>
-  Promise.resolve({ UID: 'user-123', AccessToken: 'token', RefreshToken: 'refresh' })
-);
-const mockSubmit2FA = mock(() =>
-  Promise.resolve({ UID: 'user-123', AccessToken: 'token', RefreshToken: 'refresh' })
-);
-const mockSubmitMailboxPassword = mock(() =>
-  Promise.resolve({ UID: 'user-123', AccessToken: 'token', RefreshToken: 'refresh' })
-);
-const mockGetReusableCredentials = mock(() => ({
-  parentUID: 'parent-uid',
-  parentAccessToken: 'parent-access',
-  parentRefreshToken: 'parent-refresh',
-  childUID: 'child-uid',
-  childAccessToken: 'child-access',
-  childRefreshToken: 'child-refresh',
-  SaltedKeyPass: 'salted-key',
-  UserID: 'user-id',
-  passwordMode: 1 as const,
-}));
-
-mock.module('../src/auth.js', () => ({
-  ProtonAuth: class MockProtonAuth {
-    login = mockLogin;
-    submit2FA = mockSubmit2FA;
-    submitMailboxPassword = mockSubmitMailboxPassword;
-    getReusableCredentials = mockGetReusableCredentials;
-    getSession = mock(() => null);
-    refreshToken = mock(() =>
-      Promise.resolve({
-        UID: 'user-123',
-        AccessToken: 'token',
-        RefreshToken: 'refresh',
-      })
-    );
-    forkNewChildSession = mock(() =>
-      Promise.resolve({
-        UID: 'user-123',
-        AccessToken: 'token',
-        RefreshToken: 'refresh',
-      })
-    );
-    restoreSession = mock(() =>
-      Promise.resolve({
-        UID: 'user-123',
-        AccessToken: 'token',
-        RefreshToken: 'refresh',
-      })
-    );
-    logout = mock(() => Promise.resolve());
+const { keychainMocks } = vi.hoisted(() => ({
+  keychainMocks: {
+    hasStoredCredentials: vi.fn(() => Promise.resolve(false)),
+    storeCredentials: vi.fn(() => Promise.resolve()),
+    deleteStoredCredentials: vi.fn(() => Promise.resolve()),
+    getStoredCredentials: vi.fn(() => Promise.resolve({ username: 'testuser' })),
   },
-  restoreSessionFromStorage: mock(() => Promise.resolve({ username: 'testuser' })),
 }));
 
-mock.module('../src/config.js', () => ({
-  loadConfig: mock(() => ({
+vi.mock('../src/keychain.js', () => keychainMocks);
+
+vi.mock('../src/auth.js', () => ({
+  ProtonAuth: class MockProtonAuth {
+    login = vi.fn(() =>
+      Promise.resolve({ UID: 'user-123', AccessToken: 'token', RefreshToken: 'refresh' })
+    );
+    submit2FA = vi.fn(() =>
+      Promise.resolve({ UID: 'user-123', AccessToken: 'token', RefreshToken: 'refresh' })
+    );
+    submitMailboxPassword = vi.fn(() =>
+      Promise.resolve({ UID: 'user-123', AccessToken: 'token', RefreshToken: 'refresh' })
+    );
+    getReusableCredentials = vi.fn(() => ({
+      parentUID: 'parent-uid',
+      parentAccessToken: 'parent-access',
+      parentRefreshToken: 'parent-refresh',
+      childUID: 'child-uid',
+      childAccessToken: 'child-access',
+      childRefreshToken: 'child-refresh',
+      SaltedKeyPass: 'salted-key',
+      UserID: 'user-id',
+      passwordMode: 1 as const,
+    }));
+    getSession = vi.fn(() => null);
+    refreshToken = vi.fn(() =>
+      Promise.resolve({
+        UID: 'user-123',
+        AccessToken: 'token',
+        RefreshToken: 'refresh',
+      })
+    );
+    forkNewChildSession = vi.fn(() =>
+      Promise.resolve({
+        UID: 'user-123',
+        AccessToken: 'token',
+        RefreshToken: 'refresh',
+      })
+    );
+    restoreSession = vi.fn(() =>
+      Promise.resolve({
+        UID: 'user-123',
+        AccessToken: 'token',
+        RefreshToken: 'refresh',
+      })
+    );
+    logout = vi.fn(() => Promise.resolve());
+  },
+  restoreSessionFromStorage: vi.fn(() => Promise.resolve({ username: 'testuser' })),
+}));
+
+vi.mock('../src/config.js', () => ({
+  loadConfig: vi.fn(() => ({
     webdav: {
       host: '127.0.0.1',
       port: 8080,
@@ -96,7 +91,7 @@ mock.module('../src/config.js', () => ({
     debug: false,
     remotePath: '/',
   })),
-  getConfig: mock(() => ({
+  getConfig: vi.fn(() => ({
     webdav: {
       host: '127.0.0.1',
       port: 8080,
@@ -108,10 +103,10 @@ mock.module('../src/config.js', () => ({
   })),
 }));
 
-const mockStart = mock(() => Promise.resolve());
-const mockStop = mock(() => Promise.resolve());
+const mockStart = vi.fn(() => Promise.resolve());
+const mockStop = vi.fn(() => Promise.resolve());
 
-mock.module('../src/webdav/index.js', () => ({
+vi.mock('../src/webdav/index.js', () => ({
   WebDAVServer: class MockWebDAVServer {
     start = mockStart;
     stop = mockStop;
@@ -125,7 +120,7 @@ mock.module('../src/webdav/index.js', () => ({
 const pidFilePath = join(tmpdir(), 'pdb-test.pid');
 const logFilePath = join(tmpdir(), 'pdb-test.log');
 
-mock.module('../src/paths.js', () => ({
+vi.mock('../src/paths.js', () => ({
   getPidFilePath: () => pidFilePath,
   getLogFilePath: () => logFilePath,
   getConfigDir: () => join(tmpdir(), 'pdb-config'),
@@ -133,28 +128,37 @@ mock.module('../src/paths.js', () => ({
   getLogDir: () => join(tmpdir(), 'pdb-logs'),
 }));
 
-mock.module('../src/logger.js', () => ({
+vi.mock('../src/logger.js', () => ({
   logger: {
-    info: mock(() => {}),
-    error: mock(() => {}),
-    warn: mock(() => {}),
-    debug: mock(() => {}),
+    info: vi.fn(() => {}),
+    error: vi.fn(() => {}),
+    warn: vi.fn(() => {}),
+    debug: vi.fn(() => {}),
   },
-  setDebugMode: mock(() => {}),
+  setDebugMode: vi.fn(() => {}),
 }));
 
-const mockInput = mock(({ message }: { message: string }) => {
+const mockInput = vi.fn(({ message }: { message: string }) => {
   if (message.includes('2FA')) return Promise.resolve('123456');
   return Promise.resolve('testuser');
 });
-const mockPassword = mock(() => Promise.resolve('password123'));
-const mockConfirm = mock(() => Promise.resolve(true));
+const mockPassword = vi.fn(() => Promise.resolve('password123'));
+const mockConfirm = vi.fn(() => Promise.resolve(true));
 
-mock.module('@inquirer/prompts', () => ({
-  input: mockInput,
-  password: mockPassword,
-  confirm: mockConfirm,
-}));
+vi.mock('@inquirer/prompts', () => {
+  const mockInputFn = vi.fn(({ message }: { message: string }) => {
+    if (message.includes('2FA')) return Promise.resolve('123456');
+    return Promise.resolve('testuser');
+  });
+  const mockPasswordFn = vi.fn(() => Promise.resolve('password123'));
+  const mockConfirmFn = vi.fn(() => Promise.resolve(true));
+
+  return {
+    input: mockInputFn,
+    password: mockPasswordFn,
+    confirm: mockConfirmFn,
+  };
+});
 
 // ============================================================================
 // Helpers
@@ -200,27 +204,32 @@ const captureConsole = () => {
 // Tests
 // ============================================================================
 
+
+// ============================================================================
+// Test Helper - Access Mocked Keychain Functions
+// ============================================================================
+
 describe('CLI - Auth Commands', () => {
   beforeEach(() => {
     // Force file-based encrypted storage for keyring (not testing keyring itself)
     process.env.KEYRING_PASSWORD = 'test-keyring-password';
 
-    mockHasStoredCredentials.mockClear();
-    mockStoreCredentials.mockClear();
-    mockDeleteStoredCredentials.mockClear();
+    keychainMocks.hasStoredCredentials.mockClear();
+    keychainMocks.storeCredentials.mockClear();
+    keychainMocks.deleteStoredCredentials.mockClear();
     mockInput.mockClear();
     mockPassword.mockClear();
     mockConfirm.mockClear();
 
-    mockHasStoredCredentials.mockReturnValue(Promise.resolve(false));
+    keychainMocks.hasStoredCredentials.mockReturnValue(Promise.resolve(false));
     mockInput.mockReturnValue(Promise.resolve('testuser'));
     mockPassword.mockReturnValue(Promise.resolve('password123'));
     mockConfirm.mockReturnValue(Promise.resolve(true));
   });
 
   afterEach(() => {
-    mock.restore();
-    mock.clearAllMocks();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
     delete process.env.KEYRING_PASSWORD;
   });
 
@@ -230,14 +239,13 @@ describe('CLI - Auth Commands', () => {
       from: 'user',
     });
 
-    expect(mockLogin).toHaveBeenCalled();
-    expect(mockStoreCredentials).toHaveBeenCalled();
-    const call = mockStoreCredentials.mock.calls.at(0)?.at(0) as unknown as { username: string };
+    expect(keychainMocks.storeCredentials).toHaveBeenCalled();
+    const call = keychainMocks.storeCredentials.mock.calls.at(0)?.at(0) as unknown as { username: string };
     expect(call.username).toBe('user@example.com');
   });
 
   test('auth login should respect cancel when already logged in', async () => {
-    mockHasStoredCredentials.mockReturnValue(Promise.resolve(true));
+    keychainMocks.hasStoredCredentials.mockReturnValue(Promise.resolve(true));
     mockConfirm.mockReturnValue(Promise.resolve(false));
 
     const program = createProgram();
@@ -245,21 +253,21 @@ describe('CLI - Auth Commands', () => {
       from: 'user',
     });
 
-    expect(mockStoreCredentials).not.toHaveBeenCalled();
+    expect(keychainMocks.storeCredentials).not.toHaveBeenCalled();
   });
 
   test('auth logout should delete stored credentials', async () => {
-    mockHasStoredCredentials.mockReturnValue(Promise.resolve(true));
+    keychainMocks.hasStoredCredentials.mockReturnValue(Promise.resolve(true));
     mockConfirm.mockReturnValue(Promise.resolve(true));
 
     const program = createProgram();
     await program.parseAsync(['auth', 'logout'], { from: 'user' });
 
-    expect(mockDeleteStoredCredentials).toHaveBeenCalled();
+    expect(keychainMocks.deleteStoredCredentials).toHaveBeenCalled();
   });
 
   test('auth status should report username', async () => {
-    mockHasStoredCredentials.mockReturnValue(Promise.resolve(true));
+    keychainMocks.hasStoredCredentials.mockReturnValue(Promise.resolve(true));
 
     const capture = captureConsole();
     try {
@@ -278,7 +286,7 @@ describe('CLI - Auth Commands', () => {
 describe('CLI - Start Command', () => {
   beforeEach(() => {
     mockStart.mockClear();
-    mockHasStoredCredentials.mockReturnValue(Promise.resolve(true));
+    keychainMocks.hasStoredCredentials.mockReturnValue(Promise.resolve(true));
     // Force file-based encrypted storage for keyring (not testing keyring itself)
     process.env.KEYRING_PASSWORD = 'test-keyring-password';
     if (existsSync(pidFilePath)) {
@@ -287,8 +295,8 @@ describe('CLI - Start Command', () => {
   });
 
   afterEach(() => {
-    mock.restore();
-    mock.clearAllMocks();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
     if (existsSync(pidFilePath)) {
       unlinkSync(pidFilePath);
     }
@@ -306,7 +314,7 @@ describe('CLI - Start Command', () => {
   });
 
   test('start should exit when not logged in', async () => {
-    mockHasStoredCredentials.mockReturnValue(Promise.resolve(false));
+    keychainMocks.hasStoredCredentials.mockReturnValue(Promise.resolve(false));
     const program = createProgram();
 
     const originalExit = process.exit;
@@ -336,8 +344,8 @@ describe('CLI - Stop Command', () => {
   });
 
   afterEach(() => {
-    mock.restore();
-    mock.clearAllMocks();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
     if (existsSync(pidFilePath)) {
       unlinkSync(pidFilePath);
     }
@@ -393,15 +401,15 @@ describe('CLI - Status Command', () => {
   beforeEach(() => {
     // Force file-based encrypted storage for keyring (not testing keyring itself)
     process.env.KEYRING_PASSWORD = 'test-keyring-password';
-    mockHasStoredCredentials.mockReturnValue(Promise.resolve(true));
+    keychainMocks.hasStoredCredentials.mockReturnValue(Promise.resolve(true));
     if (existsSync(pidFilePath)) {
       unlinkSync(pidFilePath);
     }
   });
 
   afterEach(() => {
-    mock.restore();
-    mock.clearAllMocks();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
     if (existsSync(pidFilePath)) {
       unlinkSync(pidFilePath);
     }

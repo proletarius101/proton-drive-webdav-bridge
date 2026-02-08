@@ -7,32 +7,36 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { afterEach, beforeEach, describe, expect, test, mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const DEFAULT_PATHS_BASE = join(tmpdir(), 'pdb-config-default');
 let pathsBase = DEFAULT_PATHS_BASE;
 
-mock.module('env-paths', () => ({
-  default: () => {
-    const paths = {
-      config: join(pathsBase, 'config', 'proton-drive-webdav-bridge'),
-      data: join(pathsBase, 'data', 'proton-drive-webdav-bridge'),
-      log: join(pathsBase, 'log', 'proton-drive-webdav-bridge'),
-      temp: join(pathsBase, 'temp', 'proton-drive-webdav-bridge'),
-      cache: join(pathsBase, 'cache', 'proton-drive-webdav-bridge'),
-    };
+// Mock env-paths with a factory that will read pathsBase at runtime
+vi.mock('env-paths', async () => {
+  return {
+    default: () => {
+      const paths = {
+        config: join(pathsBase, 'config', 'proton-drive-webdav-bridge'),
+        data: join(pathsBase, 'data', 'proton-drive-webdav-bridge'),
+        log: join(pathsBase, 'log', 'proton-drive-webdav-bridge'),
+        temp: join(pathsBase, 'temp', 'proton-drive-webdav-bridge'),
+        cache: join(pathsBase, 'cache', 'proton-drive-webdav-bridge'),
+      };
 
-    // Create directories on access
-    Object.values(paths).forEach((path) => mkdirSync(path, { recursive: true }));
+      // Create directories on access
+      Object.values(paths).forEach((path) => mkdirSync(path, { recursive: true }));
 
-    return paths;
-  },
-}));
+      return paths;
+    },
+  };
+});
 
 describe('Config - Initialization and Defaults', () => {
   let baseDir: string;
 
   beforeEach(() => {
+    vi.resetModules();
     baseDir = mkdtempSync(join(tmpdir(), 'pdb-config-'));
     pathsBase = baseDir;
   });
@@ -40,17 +44,18 @@ describe('Config - Initialization and Defaults', () => {
   afterEach(async () => {
     // Dynamically import and unwatchConfigFile to clean up file watchers
     try {
-      const { unwatchConfigFile } = await import(`../src/config.ts?cache=${Date.now()}`);
+      const { unwatchConfigFile } = await import(`../src/config.ts`);
       unwatchConfigFile();
     } catch {
       // If import fails, continue cleanup
     }
     rmSync(baseDir, { recursive: true, force: true });
     pathsBase = DEFAULT_PATHS_BASE;
+    vi.resetModules();
   });
 
   test('creates default config when missing', async () => {
-    const { loadConfig, getConfigFilePath } = await import(`../src/config.ts?cache=${Date.now()}`);
+    const { loadConfig, getConfigFilePath } = await import(`../src/config.ts`);
 
     const configPath = getConfigFilePath();
     // Ensure no config exists before test
@@ -80,8 +85,8 @@ describe('Config - Initialization and Defaults', () => {
   });
 
   test('loads existing config from file', async () => {
-    const { loadConfig, getConfigFilePath } = await import(`../src/config.ts?cache=${Date.now()}`);
-    const { getConfigDir } = await import(`../src/paths.ts?cache=${Date.now()}`);
+    const { loadConfig, getConfigFilePath } = await import(`../src/config.ts?`);
+    const { getConfigDir } = await import(`../src/paths.ts?`);
 
     // Create custom config
     const configPath = getConfigFilePath();
@@ -106,8 +111,8 @@ describe('Config - Initialization and Defaults', () => {
   });
 
   test('merges partial config with defaults', async () => {
-    const { loadConfig, getConfigFilePath } = await import(`../src/config.ts?cache=${Date.now()}`);
-    const { getConfigDir } = await import(`../src/paths.ts?cache=${Date.now()}`);
+    const { loadConfig, getConfigFilePath } = await import(`../src/config.ts?`);
+    const { getConfigDir } = await import(`../src/paths.ts?`);
 
     const configPath = getConfigFilePath();
     getConfigDir();
@@ -122,8 +127,8 @@ describe('Config - Initialization and Defaults', () => {
   });
 
   test('handles invalid JSON gracefully', async () => {
-    const { loadConfig, getConfigFilePath } = await import(`../src/config.ts?cache=${Date.now()}`);
-    const { getConfigDir } = await import(`../src/paths.ts?cache=${Date.now()}`);
+    const { loadConfig, getConfigFilePath } = await import(`../src/config.ts?`);
+    const { getConfigDir } = await import(`../src/paths.ts?`);
 
     const configPath = getConfigFilePath();
     getConfigDir();
@@ -146,7 +151,7 @@ describe('Config - Updates and Persistence', () => {
 
   afterEach(async () => {
     try {
-      const { unwatchConfigFile } = await import(`../src/config.ts?cache=${Date.now()}`);
+      const { unwatchConfigFile } = await import(`../src/config.ts?`);
       unwatchConfigFile();
     } catch {
       // ignore
@@ -157,7 +162,7 @@ describe('Config - Updates and Persistence', () => {
 
   test('updates and persists config', async () => {
     const { loadConfig, updateConfig, getConfigFilePath, getConfig } = await import(
-      `../src/config.ts?cache=${Date.now()}`
+      `../src/config.ts`
     );
 
     loadConfig();
@@ -173,7 +178,7 @@ describe('Config - Updates and Persistence', () => {
   });
 
   test('updateConfig merges deeply', async () => {
-    const { loadConfig, updateConfig } = await import(`../src/config.ts?cache=${Date.now()}`);
+    const { loadConfig, updateConfig } = await import(`../src/config.ts?`);
 
     loadConfig();
     updateConfig({ webdav: { port: 5000 } });
@@ -186,7 +191,7 @@ describe('Config - Updates and Persistence', () => {
 
   test('saveConfig writes to file', async () => {
     const { loadConfig, saveConfig, getConfigFilePath } = await import(
-      `../src/config.ts?cache=${Date.now()}`
+      `../src/config.ts`
     );
 
     const config = loadConfig();
@@ -201,7 +206,7 @@ describe('Config - Updates and Persistence', () => {
 
   test('getConfig returns current config', async () => {
     const { loadConfig, getConfig, updateConfig } = await import(
-      `../src/config.ts?cache=${Date.now()}`
+      `../src/config.ts`
     );
 
     loadConfig();
@@ -221,7 +226,7 @@ describe('Config - Change Callbacks', () => {
 
   afterEach(async () => {
     try {
-      const { unwatchConfigFile } = await import(`../src/config.ts?cache=${Date.now()}`);
+      const { unwatchConfigFile } = await import(`../src/config.ts?`);
       unwatchConfigFile();
     } catch {
       // ignore
@@ -232,7 +237,7 @@ describe('Config - Change Callbacks', () => {
 
   test('onConfigChange callback is invoked on update', async () => {
     const { loadConfig, updateConfig, onConfigChange } = await import(
-      `../src/config.ts?cache=${Date.now()}`
+      `../src/config.ts`
     );
 
     loadConfig();
@@ -254,7 +259,7 @@ describe('Config - Change Callbacks', () => {
 
   test('onConfigChange returns unsubscribe function', async () => {
     const { loadConfig, updateConfig, onConfigChange } = await import(
-      `../src/config.ts?cache=${Date.now()}`
+      `../src/config.ts`
     );
 
     loadConfig();
@@ -274,7 +279,7 @@ describe('Config - Change Callbacks', () => {
 
   test('multiple callbacks can be registered', async () => {
     const { loadConfig, updateConfig, onConfigChange } = await import(
-      `../src/config.ts?cache=${Date.now()}`
+      `../src/config.ts`
     );
 
     loadConfig();
@@ -294,7 +299,7 @@ describe('Config - Change Callbacks', () => {
 
 describe('Config - Validation', () => {
   test('validateWebDAVConfig rejects invalid port', async () => {
-    const { validateWebDAVConfig } = await import(`../src/config.ts?cache=${Date.now()}`);
+    const { validateWebDAVConfig } = await import(`../src/config.ts?`);
 
     const invalidConfig = {
       host: '127.0.0.1',
@@ -309,7 +314,7 @@ describe('Config - Validation', () => {
   });
 
   test('validateWebDAVConfig requires auth credentials when enabled', async () => {
-    const { validateWebDAVConfig } = await import(`../src/config.ts?cache=${Date.now()}`);
+    const { validateWebDAVConfig } = await import(`../src/config.ts?`);
 
     const config = {
       host: '127.0.0.1',
@@ -324,7 +329,7 @@ describe('Config - Validation', () => {
   });
 
   test('validateWebDAVConfig requires cert/key for HTTPS', async () => {
-    const { validateWebDAVConfig } = await import(`../src/config.ts?cache=${Date.now()}`);
+    const { validateWebDAVConfig } = await import(`../src/config.ts?`);
 
     const config = {
       host: '127.0.0.1',
@@ -340,7 +345,7 @@ describe('Config - Validation', () => {
   });
 
   test('validateWebDAVConfig accepts valid config', async () => {
-    const { validateWebDAVConfig } = await import(`../src/config.ts?cache=${Date.now()}`);
+    const { validateWebDAVConfig } = await import(`../src/config.ts?`);
 
     const config = {
       host: '127.0.0.1',
@@ -369,7 +374,7 @@ describe('Config - File Watching', () => {
 
   test('watchConfigFile and unwatchConfigFile execute without error', async () => {
     const { loadConfig, watchConfigFile, unwatchConfigFile } = await import(
-      `../src/config.ts?cache=${Date.now()}`
+      `../src/config.ts`
     );
 
     loadConfig();
@@ -378,7 +383,7 @@ describe('Config - File Watching', () => {
   });
 
   test('watchConfigFile is idempotent', async () => {
-    const { loadConfig, watchConfigFile } = await import(`../src/config.ts?cache=${Date.now()}`);
+    const { loadConfig, watchConfigFile } = await import(`../src/config.ts?`);
 
     loadConfig();
     watchConfigFile();

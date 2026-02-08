@@ -1,7 +1,7 @@
 /**
  * Tests for validation utilities
  */
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import {
   combinePaths,
   getFilename,

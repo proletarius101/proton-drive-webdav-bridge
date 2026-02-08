@@ -37,7 +37,7 @@ Quick, focused notes to help an AI coding agent be productive in this repo.
 - Singleton DBs: `locks.db` also stores metadata; E2E tests should run in isolation (mock `env-paths` to sandbox dirs).
 
 ## Testing tips 💡
-- Unit tests use Bun mocks: `mock.module('...')` to stub native modules and `env-paths` to avoid touching real user dirs.
+- Unit tests use Bun mocks: `vi.mock('...')` to stub native modules and `env-paths` to avoid touching real user dirs.
 - Run sensitive E2E tests individually: `bun test test/webdav.propfind.e2e.test.ts` (avoids singleton/db collisions).
 - When adding WebDAV behavior (PROPFIND, MOVE, COPY, LOCK), add both unit and at least one focused E2E test validating HTTP behavior.
 

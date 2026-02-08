@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import type { DriveClientManager } from '../src/drive.js';
 import MetadataManager from '../src/webdav/MetadataManager.js';
 import ProtonDriveAdapter from '../src/webdav/ProtonDriveAdapter.js';

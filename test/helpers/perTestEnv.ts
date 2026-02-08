@@ -15,12 +15,11 @@ export async function setupPerTestEnv(): Promise<PerTestEnv> {
   const baseDir = await mkdtemp(join(tmpdir(), 'pdb-test-'));
 
   // Register a file-scoped module mock for env-paths so modules that read
-  // paths at import time will use our test directory. Import `mock` lazily
+  // paths at import time will use our test directory. Import `vi` lazily
   // so we don't reference test-runner globals during module evaluation.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { mock } = await import('bun:test');
-    mock.module('env-paths', () => ({
+    const { vi } = await import('vitest');
+    vi.doMock('env-paths', () => ({
       default: () => ({
         config: join(baseDir, 'config'),
         data: join(baseDir, 'data'),
@@ -43,12 +42,14 @@ export async function setupPerTestEnv(): Promise<PerTestEnv> {
         /* ignore */
       }
       try {
-        mock.restore();
+        const { vi } = await import('vitest');
+        vi.restoreAllMocks();
       } catch {
         /* ignore */
       }
       try {
-        mock.clearAllMocks();
+        const { vi } = await import('vitest');
+        vi.clearAllMocks();
       } catch {
         /* ignore */
       }

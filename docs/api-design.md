@@ -20,14 +20,14 @@
 The Proton Drive WebDAV Bridge uses three primary communication interfaces:
 
 1. **Tauri IPC (Inter-Process Communication)**: Rust backend ↔ TypeScript/Web frontend
-2. **CLI Interface**: User/Shell ↔ Node.js/Bun CLI binary
+2. **CLI Interface**: User/Shell ↔ Node.js CLI binary
 3. **Sidecar Protocol**: Tauri GUI ↔ CLI sidecar binary (via shell subprocess)
 
 ### Technology Stack
 
 - **Tauri**: IPC via command/invoke pattern (async RPC-style)
 - **CLI**: Commander.js with JSON output support
-- **Runtime**: Bun (TypeScript/JavaScript execution)
+- **Runtime**: Node.js (TypeScript/JavaScript execution via tsc or tsx)
 - **WebDAV**: Nephele server (RFC 4918 compliant)
 - **GIO/GVFS**: Native mount integration via GLib/GIO bindings
 
@@ -51,7 +51,7 @@ The Proton Drive WebDAV Bridge uses three primary communication interfaces:
             │                          ▼
             │                   ┌──────────────────┐
             │                   │  CLI Sidecar     │
-            │                   │  (Bun/TS)        │
+            │                   │  (Node.js/TS)    │
             │                   │                  │
             │                   │  - Auth          │
             │                   │  - WebDAV Server │
@@ -68,6 +68,12 @@ The Proton Drive WebDAV Bridge uses three primary communication interfaces:
             │
             └─────────────── Direct CLI Usage ──────────────►
 ```
+
+**Execution Flow**:
+
+- **GUI Mode**: Tauri app spawns CLI sidecar via `child_process.spawn()` → runs WebDAV server → IPC communication
+- **CLI Mode**: Direct execution → WebDAV server → foreground or daemon mode
+- **Sidecar**: Node.js process running compiled WebDAV server
 
 ## Tauri IPC API
 

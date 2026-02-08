@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdirSync, writeFileSync } from 'fs';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
@@ -17,14 +17,14 @@ beforeEach(async () => {
   const cache = await mkdtemp(join(tmpdir(), 'pdb-lock-cache-'));
   baseDirs.push(config, data, log, temp, cache);
 
-  // Register per-test env-paths mock
-  mock.module('env-paths', () => ({
+  // Register per-test env-paths mock and reset module cache so imports pick it up
+  vi.resetModules();
+  vi.doMock('env-paths', () => ({
     default: () => ({ config, data, log, temp, cache }),
   }));
 
   // Import paths and lock manager after mock is registered
-  const cacheBuster = `${Date.now()}-${Math.random()}`;
-  const pathsMod = await import(`../src/paths.js?cache=${cacheBuster}`);
+  const pathsMod = await import('../src/paths.js');
   const getDataDir = pathsMod.getDataDir;
 
   // Ensure data dir exists for SQLite and pre-create database file
@@ -33,7 +33,7 @@ beforeEach(async () => {
   const dbPath = join(dataDir, 'locks.db');
   writeFileSync(dbPath, '', { flag: 'a' });
 
-  const lmMod = await import(`../src/webdav/LockManager.js?cache=${cacheBuster}`);
+  const lmMod = await import('../src/webdav/LockManager.js');
   LockManager = lmMod.LockManager;
 });
 
@@ -55,8 +55,9 @@ afterEach(async () => {
     /* ignore close errors */
   }
   // Restore mocks
-  mock.restore();
-  mock.clearAllMocks();
+  vi.resetModules();
+  vi.restoreAllMocks();
+  vi.clearAllMocks();
 });
 
 describe('LockManager - basic operations', () => {

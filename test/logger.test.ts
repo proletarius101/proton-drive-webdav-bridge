@@ -4,7 +4,7 @@
  * Tests logger with real file I/O, log file creation, and format validation.
  */
 
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, vi, test } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -13,7 +13,7 @@ import { logger, setDebugMode } from '../src/logger.js';
 const DEFAULT_PATHS_BASE = join(tmpdir(), 'pdb-logger-default');
 let pathsBase = DEFAULT_PATHS_BASE;
 
-mock.module('env-paths', () => ({
+vi.mock('env-paths', () => ({
   default: () => ({
     config: join(pathsBase, 'config', 'proton-drive-webdav-bridge'),
     data: join(pathsBase, 'data', 'proton-drive-webdav-bridge'),
@@ -154,7 +154,7 @@ describe('Logger - File Transports', () => {
   });
 
   test('should create log directory', async () => {
-    const { logger: testLogger } = await import(`../src/logger.js?cache=${Date.now()}`);
+    const { logger: testLogger } = await import('../src/logger.js');
     testLogger.info('Test log message');
 
     // Wait a bit for file write
