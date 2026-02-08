@@ -20,15 +20,6 @@ afterEach(async () => {
 
 const DEFAULT_PATHS_BASE = mkdtempSync(join(tmpdir(), 'pdb-webdav-e2e-default-'));
 let pathsBase = DEFAULT_PATHS_BASE;
-vi.doMock('env-paths', () => ({
-  default: () => ({
-    config: join(pathsBase, 'config'),
-    data: join(pathsBase, 'data'),
-    log: join(pathsBase, 'log'),
-    temp: join(pathsBase, 'temp'),
-    cache: join(pathsBase, 'cache'),
-  }),
-}));
 
 interface InMemoryNode {
   uid: string;

@@ -20,6 +20,7 @@ import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { keyringStore } from './setup.js';
+import { envPathsMockDynamic } from './helpers/perTestEnv';
 import type {
   ApiError,
   Session,
@@ -58,17 +59,8 @@ let testTempDir: string;
 beforeEach(async () => {
   testTempDir = await mkdtemp(join(tmpdir(), 'pdb-test-'));
 
-  vi.mock('env-paths', () => ({
-    default: () => ({
-      config: join(testTempDir, 'config'),
-      data: join(testTempDir, 'data'),
-      log: join(testTempDir, 'log'),
-      temp: join(testTempDir, 'temp'),
-      cache: join(testTempDir, 'cache'),
-    }),
-  }));
-
   vi.resetModules();
+  vi.doMock('env-paths', envPathsMockDynamic(() => testTempDir));
   const mod = await import('../src/auth.js');
   ProtonAuth = mod.ProtonAuth;
   authenticateAndStore = mod.authenticateAndStore;

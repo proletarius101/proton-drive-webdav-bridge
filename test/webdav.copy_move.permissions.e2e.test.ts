@@ -14,15 +14,17 @@ let pathsBase = mkdtempSync(join(tmpdir(), 'pdb-webdav-copymove-'));
 beforeEach(async () => {
   __perTestEnv = await setupPerTestEnv();
   // Setup env-paths mock for this test
-  vi.doMock('env-paths', () => ({
-    default: () => ({
+  const { envPathsMockFromMap } = await import('./helpers/perTestEnv');
+  vi.doMock(
+    'env-paths',
+    envPathsMockFromMap({
       config: join(__perTestEnv.baseDir, 'config'),
       data: join(__perTestEnv.baseDir, 'data'),
       log: join(__perTestEnv.baseDir, 'log'),
       temp: join(__perTestEnv.baseDir, 'temp'),
       cache: join(__perTestEnv.baseDir, 'cache'),
-    }),
-  }));
+    })
+  );
 });
 
 afterEach(async () => {

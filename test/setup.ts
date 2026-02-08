@@ -1,34 +1,17 @@
 /**
  * Global test setup
  * 
- * Loaded via --preload before any test files run.
- * Provides common mocks that all tests need (env-paths, etc.)
+ * Loaded via setupFiles in vitest.config.ts before any test files run.
+ * Provides global mocks for keyring access.
+ * 
+ * For per-test directory isolation, use setupPerTestEnv() from './helpers/perTestEnv'
+ * with dynamic imports in your tests. Static module-level env-paths mocking doesn't
+ * provide true per-test isolation due to module caching.
+ * 
+ * See: https://main.vitest.dev/api/vi#vi-mock
  */
 
 import { vi } from 'vitest';
-import { join } from 'path';
-import { tmpdir } from 'os';
-
-// Global base path for test directories
-export let pathsBase = join(tmpdir(), 'pdb-test-default');
-
-export function setPathsBase(newBase: string) {
-  pathsBase = newBase;
-}
-
-/**
- * Mock env-paths to use temporary directories for all tests
- * This prevents tests from touching real user directories
- */
-vi.mock('env-paths', () => ({
-  default: () => ({
-    config: join(pathsBase, 'config'),
-    data: join(pathsBase, 'data'),
-    log: join(pathsBase, 'log'),
-    temp: join(pathsBase, 'temp'),
-    cache: join(pathsBase, 'cache'),
-  }),
-}));
 
 /**
  * Mock @napi-rs/keyring with in-memory store for tests

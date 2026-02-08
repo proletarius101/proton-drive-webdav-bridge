@@ -12,31 +12,8 @@ afterEach(async () => {
   await __perTestEnv.cleanup();
 });
 
-// Mock env-paths to return fresh temp directories for each test
-const { mockEnvPaths, getMockDirs, resetMockDirs } = vi.hoisted(() => {
-  let cache: { config: string; data: string; log: string; temp: string; cache: string } | null = null;
-  
-  return {
-    mockEnvPaths: () => {
-      if (!cache) {
-        cache = {
-          config: mkdtempSync(join(tmpdir(), 'pdb-webdav-lock-config-')),
-          data: mkdtempSync(join(tmpdir(), 'pdb-webdav-lock-data-')),
-          log: mkdtempSync(join(tmpdir(), 'pdb-webdav-lock-log-')),
-          temp: mkdtempSync(join(tmpdir(), 'pdb-webdav-lock-temp-')),
-          cache: mkdtempSync(join(tmpdir(), 'pdb-webdav-lock-cache-')),
-        };
-      }
-      return cache;
-    },
-    getMockDirs: () => cache,
-    resetMockDirs: () => { cache = null; },
-  };
-});
-
-vi.mock('env-paths', () => ({
-  default: mockEnvPaths,
-}));
+// Use `setupPerTestEnv()` to install a dynamic per-test env-paths mock so
+// each test gets an isolated directory. The helper also registers a doMock.
 
 import { writeFileSync } from 'fs';
 import { driveClient } from '../src/drive.js';
@@ -48,9 +25,6 @@ let server: InstanceType<typeof WebDAVServer> | null = null;
 let baseDir: string | null = null;
 
 beforeEach(() => {
-  // Reset mock directories for this test to ensure isolation
-  resetMockDirs();
-
   baseDir = mkdtempSync(join(tmpdir(), 'pdb-webdav-lock-'));
 
   // Force file-based encrypted storage for keyring (not testing keyring itself)
@@ -93,17 +67,7 @@ afterEach(async () => {
   if (baseDir) rmSync(baseDir, { recursive: true, force: true });
   baseDir = null;
 
-  // Clean up mocked env-paths directories
-  const mockDirs = getMockDirs();
-  if (mockDirs) {
-    Object.values(mockDirs).forEach((dir) => {
-      try {
-        rmSync(dir, { recursive: true, force: true });
-      } catch {
-        /* ignore cleanup errors */
-      }
-    });
-  }
+  // env-paths directories are cleaned up by __perTestEnv.cleanup()
 
   // Clean up keyring environment
   delete process.env.KEYRING_PASSWORD;

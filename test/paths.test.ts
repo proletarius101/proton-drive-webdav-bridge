@@ -10,26 +10,15 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 
 let tempBase: string;
-
-// Set up the mock BEFORE any imports that might use env-paths
-vi.mock('env-paths', async () => {
-  // Get tempBase from module scope when this factory runs
-  return {
-    default: () => ({
-      config: join(tempBase, 'config', 'proton-drive-webdav-bridge'),
-      data: join(tempBase, 'data', 'proton-drive-webdav-bridge'),
-      log: join(tempBase, 'log', 'proton-drive-webdav-bridge'),
-      temp: join(tempBase, 'temp', 'proton-drive-webdav-bridge'),
-      cache: join(tempBase, 'cache', 'proton-drive-webdav-bridge'),
-    }),
-  };
-});
+import { envPathsMockDynamic } from './helpers/perTestEnv';
 
 const loadPaths = async () => import('../src/paths.js');
 
 describe('Paths - Directory Functions Availability', () => {
   beforeEach(() => {
     tempBase = mkdtempSync(join(tmpdir(), 'pdb-paths-'));
+    vi.resetModules();
+    vi.doMock('env-paths', envPathsMockDynamic(() => tempBase, 'proton-drive-webdav-bridge'));
   });
 
   afterEach(() => {

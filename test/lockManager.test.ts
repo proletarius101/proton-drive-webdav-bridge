@@ -19,9 +19,8 @@ beforeEach(async () => {
 
   // Register per-test env-paths mock and reset module cache so imports pick it up
   vi.resetModules();
-  vi.doMock('env-paths', () => ({
-    default: () => ({ config, data, log, temp, cache }),
-  }));
+  const { envPathsMockFromMap } = await import('./helpers/perTestEnv');
+  vi.doMock('env-paths', envPathsMockFromMap({ config, data, log, temp, cache }));
 
   // Import paths and lock manager after mock is registered
   const pathsMod = await import('../src/paths.js');

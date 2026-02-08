@@ -16,30 +16,8 @@ afterEach(async () => {
 // Note: These E2E tests should be run separately from other tests to avoid
 // singleton/resource conflicts. Run with: bun test test/webdav.lock.conflicts.e2e.test.ts
 
-// Mock env-paths to return fresh temp directories for each test
-const { mockEnvPaths, getMockDirs } = vi.hoisted(() => {
-  let cache: { config: string; data: string; log: string; temp: string; cache: string } | null = null;
-  
-  return {
-    mockEnvPaths: () => {
-      if (!cache) {
-        cache = {
-          config: mkdtempSync(join(tmpdir(), 'pdb-webdav-lockconf-config-')),
-          data: mkdtempSync(join(tmpdir(), 'pdb-webdav-lockconf-data-')),
-          log: mkdtempSync(join(tmpdir(), 'pdb-webdav-lockconf-log-')),
-          temp: mkdtempSync(join(tmpdir(), 'pdb-webdav-lockconf-temp-')),
-          cache: mkdtempSync(join(tmpdir(), 'pdb-webdav-lockconf-cache-')),
-        };
-      }
-      return cache;
-    },
-    getMockDirs: () => cache,
-  };
-});
-
-vi.mock('env-paths', () => ({
-  default: mockEnvPaths,
-}));
+// Use `setupPerTestEnv()` to install a dynamic per-test env-paths mock so
+// each test gets an isolated directory. The helper also registers a doMock.
 
 import { driveClient } from '../src/drive.js';
 import { LockManager } from '../src/webdav/LockManager.js';
@@ -86,14 +64,7 @@ afterEach(async () => {
   if (baseDir) rmSync(baseDir, { recursive: true, force: true });
   baseDir = null;
 
-  const mockDirs = getMockDirs();
-  if (mockDirs) {
-    Object.values(mockDirs).forEach((dir) => {
-      try {
-        rmSync(dir, { recursive: true, force: true });
-      } catch {}
-    });
-  }
+  // env-paths directories are cleaned up by __perTestEnv.cleanup()
 
   // Clean up keyring environment
   delete process.env.KEYRING_PASSWORD;

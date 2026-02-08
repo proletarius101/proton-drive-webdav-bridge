@@ -25,15 +25,17 @@ let pathsBase = DEFAULT_PATHS_BASE;
 
 beforeEach(async () => {
   __perTestEnv = await setupPerTestEnv();
-  vi.doMock('env-paths', () => ({
-    default: () => ({
+  const { envPathsMockFromMap } = await import('./helpers/perTestEnv');
+  vi.doMock(
+    'env-paths',
+    envPathsMockFromMap({
       config: join(__perTestEnv.baseDir, 'config'),
       data: join(pathsBase, 'data'),
       log: join(pathsBase, 'log'),
       temp: join(pathsBase, 'temp'),
       cache: join(pathsBase, 'cache'),
-    }),
-  }));
+    })
+  );
 });
 
 afterEach(async () => {

@@ -2,60 +2,33 @@
  * Comprehensive Integration Tests - Configuration Module
  *
  * Tests config loading, saving, updates, validation, file watching, and callbacks.
+ * Uses dynamic imports with setupPerTestEnv() for true per-test isolation.
  */
 
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-
-const DEFAULT_PATHS_BASE = join(tmpdir(), 'pdb-config-default');
-let pathsBase = DEFAULT_PATHS_BASE;
-
-// Mock env-paths with a factory that will read pathsBase at runtime
-vi.mock('env-paths', async () => {
-  return {
-    default: () => {
-      const paths = {
-        config: join(pathsBase, 'config', 'proton-drive-webdav-bridge'),
-        data: join(pathsBase, 'data', 'proton-drive-webdav-bridge'),
-        log: join(pathsBase, 'log', 'proton-drive-webdav-bridge'),
-        temp: join(pathsBase, 'temp', 'proton-drive-webdav-bridge'),
-        cache: join(pathsBase, 'cache', 'proton-drive-webdav-bridge'),
-      };
-
-      // Create directories on access
-      Object.values(paths).forEach((path) => mkdirSync(path, { recursive: true }));
-
-      return paths;
-    },
-  };
-});
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { setupPerTestEnv, type PerTestEnv } from './helpers/perTestEnv.js';
 
 describe('Config - Initialization and Defaults', () => {
-  let baseDir: string;
+  let env: PerTestEnv;
 
-  beforeEach(() => {
-    vi.resetModules();
-    baseDir = mkdtempSync(join(tmpdir(), 'pdb-config-'));
-    pathsBase = baseDir;
+  beforeEach(async () => {
+    env = await setupPerTestEnv();
   });
 
   afterEach(async () => {
     // Dynamically import and unwatchConfigFile to clean up file watchers
     try {
-      const { unwatchConfigFile } = await import(`../src/config.ts`);
+      const { unwatchConfigFile } = await import(`../src/config.js`);
       unwatchConfigFile();
     } catch {
       // If import fails, continue cleanup
     }
-    rmSync(baseDir, { recursive: true, force: true });
-    pathsBase = DEFAULT_PATHS_BASE;
-    vi.resetModules();
+    await env.cleanup();
   });
 
   test('creates default config when missing', async () => {
-    const { loadConfig, getConfigFilePath } = await import(`../src/config.ts`);
+    const { loadConfig, getConfigFilePath } = await import(`../src/config.js`);
 
     const configPath = getConfigFilePath();
     // Ensure no config exists before test
@@ -85,8 +58,8 @@ describe('Config - Initialization and Defaults', () => {
   });
 
   test('loads existing config from file', async () => {
-    const { loadConfig, getConfigFilePath } = await import(`../src/config.ts?`);
-    const { getConfigDir } = await import(`../src/paths.ts?`);
+    const { loadConfig, getConfigFilePath } = await import(`../src/config.js`);
+    const { getConfigDir } = await import(`../src/paths.js`);
 
     // Create custom config
     const configPath = getConfigFilePath();
@@ -111,8 +84,8 @@ describe('Config - Initialization and Defaults', () => {
   });
 
   test('merges partial config with defaults', async () => {
-    const { loadConfig, getConfigFilePath } = await import(`../src/config.ts?`);
-    const { getConfigDir } = await import(`../src/paths.ts?`);
+    const { loadConfig, getConfigFilePath } = await import(`../src/config.js`);
+    const { getConfigDir } = await import(`../src/paths.js`);
 
     const configPath = getConfigFilePath();
     getConfigDir();
@@ -127,8 +100,8 @@ describe('Config - Initialization and Defaults', () => {
   });
 
   test('handles invalid JSON gracefully', async () => {
-    const { loadConfig, getConfigFilePath } = await import(`../src/config.ts?`);
-    const { getConfigDir } = await import(`../src/paths.ts?`);
+    const { loadConfig, getConfigFilePath } = await import(`../src/config.js`);
+    const { getConfigDir } = await import(`../src/paths.js`);
 
     const configPath = getConfigFilePath();
     getConfigDir();
@@ -142,31 +115,31 @@ describe('Config - Initialization and Defaults', () => {
 });
 
 describe('Config - Updates and Persistence', () => {
-  let baseDir: string;
+  let env: PerTestEnv;
 
-  beforeEach(() => {
-    baseDir = mkdtempSync(join(tmpdir(), 'pdb-config-'));
-    pathsBase = baseDir;
+  beforeEach(async () => {
+    env = await setupPerTestEnv();
   });
 
   afterEach(async () => {
     try {
-      const { unwatchConfigFile } = await import(`../src/config.ts?`);
+      const { unwatchConfigFile } = await import(`../src/config.js`);
       unwatchConfigFile();
     } catch {
       // ignore
     }
-    rmSync(baseDir, { recursive: true, force: true });
-    pathsBase = DEFAULT_PATHS_BASE;
+    await env.cleanup();
   });
 
   test('updates and persists config', async () => {
     const { loadConfig, updateConfig, getConfigFilePath, getConfig } = await import(
-      `../src/config.ts`
+      `../src/config.js`
     );
 
     loadConfig();
-    const updated = updateConfig({ webdav: { port: 9090, requireAuth: false } });
+    const updated = updateConfig({
+      webdav: { host: '127.0.0.1', port: 9090, requireAuth: false, https: false },
+    });
 
     expect(updated.webdav.port).toBe(9090);
     expect(updated.webdav.requireAuth).toBe(false);
@@ -178,10 +151,10 @@ describe('Config - Updates and Persistence', () => {
   });
 
   test('updateConfig merges deeply', async () => {
-    const { loadConfig, updateConfig } = await import(`../src/config.ts?`);
+    const { loadConfig, updateConfig } = await import(`../src/config.js`);
 
     loadConfig();
-    updateConfig({ webdav: { port: 5000 } });
+    updateConfig({ webdav: { host: '127.0.0.1', port: 5000, requireAuth: true, https: false } });
     const config = updateConfig({ debug: true });
 
     expect(config.webdav.port).toBe(5000); // Previous update preserved
@@ -191,7 +164,7 @@ describe('Config - Updates and Persistence', () => {
 
   test('saveConfig writes to file', async () => {
     const { loadConfig, saveConfig, getConfigFilePath } = await import(
-      `../src/config.ts`
+      `../src/config.js`
     );
 
     const config = loadConfig();
@@ -206,7 +179,7 @@ describe('Config - Updates and Persistence', () => {
 
   test('getConfig returns current config', async () => {
     const { loadConfig, getConfig, updateConfig } = await import(
-      `../src/config.ts`
+      `../src/config.js`
     );
 
     loadConfig();
@@ -217,34 +190,32 @@ describe('Config - Updates and Persistence', () => {
 });
 
 describe('Config - Change Callbacks', () => {
-  let baseDir: string;
+  let env: PerTestEnv;
 
-  beforeEach(() => {
-    baseDir = mkdtempSync(join(tmpdir(), 'pdb-config-'));
-    pathsBase = baseDir;
+  beforeEach(async () => {
+    env = await setupPerTestEnv();
   });
 
   afterEach(async () => {
     try {
-      const { unwatchConfigFile } = await import(`../src/config.ts?`);
+      const { unwatchConfigFile } = await import(`../src/config.js`);
       unwatchConfigFile();
     } catch {
       // ignore
     }
-    rmSync(baseDir, { recursive: true, force: true });
-    pathsBase = DEFAULT_PATHS_BASE;
+    await env.cleanup();
   });
 
   test('onConfigChange callback is invoked on update', async () => {
     const { loadConfig, updateConfig, onConfigChange } = await import(
-      `../src/config.ts`
+      `../src/config.js`
     );
 
     loadConfig();
 
     let callbackInvoked = false;
     type ConfigType = ReturnType<typeof loadConfig>;
-    let callbackConfig: ConfigType | null = null;
+    let callbackConfig: any = null;
     onConfigChange((config: ConfigType) => {
       callbackInvoked = true;
       callbackConfig = config;
@@ -259,7 +230,7 @@ describe('Config - Change Callbacks', () => {
 
   test('onConfigChange returns unsubscribe function', async () => {
     const { loadConfig, updateConfig, onConfigChange } = await import(
-      `../src/config.ts`
+      `../src/config.js`
     );
 
     loadConfig();
@@ -279,7 +250,7 @@ describe('Config - Change Callbacks', () => {
 
   test('multiple callbacks can be registered', async () => {
     const { loadConfig, updateConfig, onConfigChange } = await import(
-      `../src/config.ts`
+      `../src/config.js`
     );
 
     loadConfig();
@@ -299,7 +270,7 @@ describe('Config - Change Callbacks', () => {
 
 describe('Config - Validation', () => {
   test('validateWebDAVConfig rejects invalid port', async () => {
-    const { validateWebDAVConfig } = await import(`../src/config.ts?`);
+    const { validateWebDAVConfig } = await import(`../src/config.js`);
 
     const invalidConfig = {
       host: '127.0.0.1',
@@ -314,7 +285,7 @@ describe('Config - Validation', () => {
   });
 
   test('validateWebDAVConfig requires auth credentials when enabled', async () => {
-    const { validateWebDAVConfig } = await import(`../src/config.ts?`);
+    const { validateWebDAVConfig } = await import(`../src/config.js`);
 
     const config = {
       host: '127.0.0.1',
@@ -329,7 +300,7 @@ describe('Config - Validation', () => {
   });
 
   test('validateWebDAVConfig requires cert/key for HTTPS', async () => {
-    const { validateWebDAVConfig } = await import(`../src/config.ts?`);
+    const { validateWebDAVConfig } = await import(`../src/config.js`);
 
     const config = {
       host: '127.0.0.1',
@@ -345,7 +316,7 @@ describe('Config - Validation', () => {
   });
 
   test('validateWebDAVConfig accepts valid config', async () => {
-    const { validateWebDAVConfig } = await import(`../src/config.ts?`);
+    const { validateWebDAVConfig } = await import(`../src/config.js`);
 
     const config = {
       host: '127.0.0.1',
@@ -360,21 +331,19 @@ describe('Config - Validation', () => {
 });
 
 describe('Config - File Watching', () => {
-  let baseDir: string;
+  let env: PerTestEnv;
 
-  beforeEach(() => {
-    baseDir = mkdtempSync(join(tmpdir(), 'pdb-config-'));
-    pathsBase = baseDir;
+  beforeEach(async () => {
+    env = await setupPerTestEnv();
   });
 
-  afterEach(() => {
-    rmSync(baseDir, { recursive: true, force: true });
-    pathsBase = DEFAULT_PATHS_BASE;
+  afterEach(async () => {
+    await env.cleanup();
   });
 
   test('watchConfigFile and unwatchConfigFile execute without error', async () => {
     const { loadConfig, watchConfigFile, unwatchConfigFile } = await import(
-      `../src/config.ts`
+      `../src/config.js`
     );
 
     loadConfig();
@@ -383,7 +352,7 @@ describe('Config - File Watching', () => {
   });
 
   test('watchConfigFile is idempotent', async () => {
-    const { loadConfig, watchConfigFile } = await import(`../src/config.ts?`);
+    const { loadConfig, watchConfigFile } = await import(`../src/config.js`);
 
     loadConfig();
     watchConfigFile();
