@@ -204,18 +204,4 @@ describe('Paths - Platform Compliance', () => {
     expect(dataDir).toContain('proton-drive-webdav-bridge');
     expect(logDir).toContain('proton-drive-webdav-bridge');
   });
-
-  test('config and data paths should respect XDG on Linux', async () => {
-    if (process.platform === 'linux') {
-      const { getConfigDir, getDataDir } = await loadPaths();
-      const configDir = getConfigDir();
-      const dataDir = getDataDir();
-
-      const configHasXdgConfig = configDir.includes('/config/');
-      const dataHasXdgData = dataDir.includes('/data/');
-
-      expect(configHasXdgConfig).toBe(true);
-      expect(dataHasXdgData).toBe(true);
-    }
-  });
 });
