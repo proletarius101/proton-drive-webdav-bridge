@@ -79,7 +79,6 @@
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
-    "@types/bun": "^1.3.5",
     "@types/express": "^5.0.6",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.10",
@@ -116,5 +115,20 @@
   },
   "patchedDependencies": {
     "nephele@1.0.0-alpha.67": "patches/nephele@1.0.0-alpha.67.patch"
+  },
+  "//": "To avoid dependency conflict with newer React",
+  "overrides": {
+    "@mielo-ui/adwaita-symbolic-icons-react": {
+      "react": "^19.2.4",
+      "react-dom": "^19.2.4"
+    },
+    "@mielo-ui/mielo-react": {
+      "react": "^19.2.4",
+      "react-dom": "^19.2.4"
+    },
+    "@mielo-ui/mielo-react-slider": {
+      "react": "^19.2.4",
+      "react-dom": "^19.2.4"
+    }
   }
 }
