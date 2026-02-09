@@ -1,6 +1,6 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import path from 'path'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import path from 'path';
 
 export default defineConfig({
   root: path.resolve(__dirname, 'src/gui'),
@@ -13,18 +13,18 @@ export default defineConfig({
       host: process.env.TAURI_DEV_HOST || 'localhost',
     },
     watch: {
-      ignored: ['**/src-tauri/**']
-    }
+      ignored: ['**/src-tauri/**'],
+    },
   },
   build: {
     outDir: path.resolve(__dirname, 'dist/gui'),
     emptyOutDir: true,
     sourcemap: true,
-    target: 'es2020'
+    target: 'es2020',
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, 'src')
-    }
-  }
-})
+      '@': path.resolve(__dirname, 'src'),
+    },
+  },
+});
