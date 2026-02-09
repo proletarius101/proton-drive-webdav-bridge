@@ -21,7 +21,7 @@ Quick, focused notes to help an AI coding agent be productive in this repo.
 - Credentials: `src/keychain.ts` (native keyring via `@napi-rs/keyring` + AES file fallback; env var `KEY_FILE_PASSWORD` forces file mode)
 - Drive SDK wrapper: `src/drive.ts` (DriveClientManager) — see `listFolder`, `resolvePath`, `uploadFile`, `downloadFile` for core patterns
 - WebDAV interface: `src/webdav/server.ts`, `ProtonDriveAdapter.ts`, `ProtonDriveResource.ts` — Nephele adapter & resource mapping
-- Locking & metadata persistence: `src/webdav/LockManager.ts`, `src/webdav/MetadataManager.ts` (uses `bun:sqlite`) 💾
+- Locking & metadata persistence: `src/webdav/LockManager.ts`, `src/webdav/MetadataManager.ts` (uses SQLite via a Node-compatible package) 💾
 - Frontend/UI: React components live in `src/gui/` (see `src/gui/components/`), styled with Mielo UI to provide the Adwaita look & feel — see `MIGRATION_TO_MIELO_UI.md` for migration notes
 - Reference implementations: `https://github.com/sciactive/nephele/tree/master/packages/adapter-s3` (WebDAV server & adapter examples) and `https://github.com/ProtonMail/WebClients` (Drive API usage, pagination, and client-side patterns)
 
