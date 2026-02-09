@@ -5,7 +5,7 @@
  * - macOS: Keychain via @napi-rs/keyring
  * - Windows: Credential Manager via @napi-rs/keyring
  * - Linux desktop: libsecret via @napi-rs/keyring
- * - Linux headless: AES-256-GCM encrypted file with KEYRING_PASSWORD env var
+ * - Linux headless: AES-256-GCM encrypted file with KEY_FILE_PASSWORD env var
  *
  * Security Features:
  * - Native OS credential storage where available
@@ -26,7 +26,7 @@ import { getCredentialsFilePath } from './paths.js';
 
 const SERVICE_NAME = 'proton-drive-webdav-bridge';
 const ACCOUNT_NAME = 'proton-drive-webdav-bridge:credentials';
-const DEFAULT_KEYRING_PASSWORD = 'proton-drive-webdav-bridge-default';
+const DEFAULT_KEY_FILE_PASSWORD = 'proton-drive-webdav-bridge-default';
 
 // Encryption constants
 const SALT_LENGTH = 32;
@@ -71,8 +71,8 @@ export type PasswordMode = 1 | 2;
  * Otherwise, try native keyring.
  */
 function shouldUseFileStorage(): boolean {
-  // If KEYRING_PASSWORD is set, user explicitly wants file storage
-  if (process.env.KEYRING_PASSWORD) {
+  // If KEY_FILE_PASSWORD is set, user explicitly wants file storage
+  if (process.env.KEY_FILE_PASSWORD) {
     return true;
   }
 
@@ -89,16 +89,16 @@ function shouldUseFileStorage(): boolean {
 }
 
 /**
- * Get the keyring password for file-based storage.
- * Uses KEYRING_PASSWORD env var if set, otherwise falls back to default.
+ * Get the keyfile password for file-based storage.
+ * Uses KEY_FILE_PASSWORD env var if set, otherwise falls back to default.
  */
-function getKeyringPassword(): string {
-  const password = process.env.KEYRING_PASSWORD;
+function getKeyFilePassword(): string {
+  const password = process.env.KEY_FILE_PASSWORD;
   if (!password) {
     logger.warn(
-      'KEYRING_PASSWORD not set, using default (less secure). Set KEYRING_PASSWORD for production.'
+      'KEY_FILE_PASSWORD not set, using default (less secure). Set KEY_FILE_PASSWORD for production.'
     );
-    return DEFAULT_KEYRING_PASSWORD;
+    return DEFAULT_KEY_FILE_PASSWORD;
   }
   return password;
 }
@@ -265,6 +265,11 @@ const WRITE_DEBOUNCE_MS = 1_000; // 1s debounce for writes
 let _cachedCreds: StoredCredentials | null = null;
 let _cacheExpiresAt = 0;
 let _inFlightGet: Promise<StoredCredentials | null> | null = null;
+// Track metadata about the cached value so we can invalidate when storage
+// strategy or password changes (important for tests that switch
+// KEY_FILE_PASSWORD between operations).
+let _cachedIsFileStorage: boolean | null = null;
+let _cachedPassword: string | null = null;
 
 // Write queue state
 let _pendingWrite: StoredCredentials | null = null;
@@ -304,6 +309,14 @@ export function resetKeyringInstrumentation(): void {
   _getCallCount = 0;
   _backendReadCount = 0;
   _writeCount = 0;
+
+  // Also clear in-memory cache and any in-flight reads so tests can reset
+  // module-like state without re-importing the module.
+  _cachedCreds = null;
+  _cacheExpiresAt = 0;
+  _inFlightGet = null;
+  _cachedIsFileStorage = null;
+  _cachedPassword = null;
 }
 
 async function performPersist(creds: StoredCredentials | null): Promise<void> {
@@ -314,7 +327,7 @@ async function performPersist(creds: StoredCredentials | null): Promise<void> {
   // Try preferred storage first
   if (shouldUseFileStorage()) {
     try {
-      storeCredentialsToFile(creds, getKeyringPassword());
+      storeCredentialsToFile(creds, getKeyFilePassword());
       return;
     } catch (error) {
       logger.warn(`File-based storage persist failed: ${error}`);
@@ -327,7 +340,7 @@ async function performPersist(creds: StoredCredentials | null): Promise<void> {
   } catch (error) {
     logger.warn(`Native keyring persist failed, falling back to file storage: ${error}`);
     try {
-      storeCredentialsToFile(creds, getKeyringPassword());
+      storeCredentialsToFile(creds, getKeyFilePassword());
     } catch (err) {
       logger.error(`Failed to persist credentials to fallback file storage: ${err}`);
       throw err;
@@ -355,16 +368,13 @@ export async function storeCredentials(credentials: StoredCredentials): Promise<
   // Update in-memory cache immediately
   _cachedCreds = credentials;
   _cacheExpiresAt = Date.now() + CACHE_TTL_MS;
+  // Record storage metadata for cache validation
+  _cachedIsFileStorage = shouldUseFileStorage();
+  _cachedPassword = getKeyFilePassword();
 
   // Coalesce writes: keep latest and debounce persistence
   _pendingWrite = credentials;
   schedulePersist();
-  // In file-based storage mode we want writes to persist immediately so
-  // tests that switch passwords and re-import the module will observe the
-  // persisted file. Native keyring writes remain debounced.
-  if (shouldUseFileStorage()) {
-    await flushPendingWrites();
-  }
 }
 
 /**
@@ -395,7 +405,23 @@ export async function getStoredCredentials(): Promise<StoredCredentials | null> 
 
   const now = Date.now();
   if (_cachedCreds && now < _cacheExpiresAt) {
-    return _cachedCreds;
+    // If storage strategy or password have changed since we cached the
+    // credentials, invalidate cache so we read from backend with the
+    // current configuration (this mirrors behaviour when the module is
+    // re-imported in tests).
+    const nowIsFile = shouldUseFileStorage();
+    const nowPass = getKeyFilePassword();
+    if (
+      _cachedIsFileStorage !== null &&
+      (_cachedIsFileStorage !== nowIsFile || (_cachedIsFileStorage && _cachedPassword !== nowPass))
+    ) {
+      // invalidate cache and continue to backend read
+      _cachedCreds = null;
+      _cachedIsFileStorage = null;
+      _cachedPassword = null;
+    } else {
+      return _cachedCreds;
+    }
   }
 
   if (_inFlightGet) return _inFlightGet;
@@ -405,13 +431,13 @@ export async function getStoredCredentials(): Promise<StoredCredentials | null> 
       let result: StoredCredentials | null;
       _backendReadCount++;
       if (shouldUseFileStorage()) {
-        result = getCredentialsFromFile(getKeyringPassword());
+        result = getCredentialsFromFile(getKeyFilePassword());
       } else {
         try {
           result = getCredentialsFromKeyring();
         } catch (error) {
           logger.warn(`Native keyring failed, trying file storage: ${error}`);
-          result = getCredentialsFromFile(getKeyringPassword());
+          result = getCredentialsFromFile(getKeyFilePassword());
         }
       }
 
@@ -440,6 +466,8 @@ export async function deleteStoredCredentials(): Promise<void> {
   // Clear in-memory cache
   _cachedCreds = null;
   _cacheExpiresAt = 0;
+  _cachedIsFileStorage = null;
+  _cachedPassword = null;
 
   // Delete from appropriate storage (or both for migration safety)
   if (shouldUseFileStorage()) {

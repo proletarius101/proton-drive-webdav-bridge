@@ -15,6 +15,18 @@ import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { vol } from 'memfs';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { keyringStore } from './setup.js';
+import {
+  storeCredentials,
+  getStoredCredentials,
+  hasStoredCredentials,
+  deleteStoredCredentials,
+  getCredentialsFilePath,
+  flushPendingWrites,
+  resetKeyringInstrumentation,
+  getKeyringReadCount,
+  getKeyringWriteCount,
+  getGetStoredCallCount,
+} from '../src/keychain.js';
 
 vi.mock('fs');
 vi.mock('fs/promises');
@@ -28,7 +40,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   keyringStore.clear();
-  delete process.env.KEYRING_PASSWORD;
+  delete process.env.KEY_FILE_PASSWORD;
   delete process.env.DISPLAY;
   delete process.env.WAYLAND_DISPLAY;
   vi.restoreAllMocks();
@@ -50,13 +62,10 @@ const sampleCredentials = {
 
 describe('Keychain - File-Based Storage', () => {
   beforeEach(() => {
-    process.env.KEYRING_PASSWORD = 'secure-test-password-123';
+    process.env.KEY_FILE_PASSWORD = 'secure-test-password-123';
   });
 
   test('stores and retrieves credentials with encryption', async () => {
-    const { storeCredentials, getStoredCredentials, hasStoredCredentials } =
-      await import('../src/keychain.js');
-
     await storeCredentials(sampleCredentials);
 
     expect(await hasStoredCredentials()).toBe(true);
@@ -68,9 +77,6 @@ describe('Keychain - File-Based Storage', () => {
   });
 
   test('returns null when no credentials stored', async () => {
-    const { getStoredCredentials, hasStoredCredentials, deleteStoredCredentials } =
-      await import('../src/keychain.js');
-
     // Ensure clean state
     await deleteStoredCredentials();
 
@@ -80,9 +86,6 @@ describe('Keychain - File-Based Storage', () => {
   });
 
   test('deletes stored credentials', async () => {
-    const { storeCredentials, getStoredCredentials, deleteStoredCredentials } =
-      await import('../src/keychain.js');
-
     await storeCredentials(sampleCredentials);
     expect(await getStoredCredentials()).not.toBeNull();
 
@@ -93,9 +96,6 @@ describe('Keychain - File-Based Storage', () => {
   });
 
   test('creates encrypted file with secure permissions', async () => {
-    const { storeCredentials, getCredentialsFilePath, flushPendingWrites } =
-      await import('../src/keychain.js');
-
     await storeCredentials(sampleCredentials);
     await flushPendingWrites();
     const filePath = getCredentialsFilePath();
@@ -110,8 +110,6 @@ describe('Keychain - File-Based Storage', () => {
   });
 
   test('overwrites existing credentials', async () => {
-    const { storeCredentials, getStoredCredentials } = await import('../src/keychain.js');
-
     await storeCredentials(sampleCredentials);
 
     const updated = { ...sampleCredentials, username: 'newuser@proton.me' };
@@ -122,8 +120,6 @@ describe('Keychain - File-Based Storage', () => {
   });
 
   test('handles different password modes', async () => {
-    const { storeCredentials, getStoredCredentials } = await import('../src/keychain.js');
-
     const twoPasswordCreds = { ...sampleCredentials, passwordMode: 2 as const };
     await storeCredentials(twoPasswordCreds);
 
@@ -134,23 +130,17 @@ describe('Keychain - File-Based Storage', () => {
 
 describe('Keychain - Encryption and Security', () => {
   test('uses different encryption key with different passwords', async () => {
-    process.env.KEYRING_PASSWORD = 'password1';
-    const { storeCredentials, getCredentialsFilePath, flushPendingWrites } =
-      await import('../src/keychain.js');
-
+    process.env.KEY_FILE_PASSWORD = 'password1';
     await storeCredentials(sampleCredentials);
     await flushPendingWrites();
     const filePath = getCredentialsFilePath();
     const encrypted1 = readFileSync(filePath);
 
     // Change password and re-encrypt
-    delete process.env.KEYRING_PASSWORD;
-    process.env.KEYRING_PASSWORD = 'password2';
-    const { storeCredentials: storeCredentials2, flushPendingWrites: flush2 } =
-      await import('../src/keychain.js');
-
-    await storeCredentials2(sampleCredentials);
-    await flush2();
+    delete process.env.KEY_FILE_PASSWORD;
+    process.env.KEY_FILE_PASSWORD = 'password2';
+    await storeCredentials(sampleCredentials);
+    await flushPendingWrites();
     const encrypted2 = readFileSync(filePath);
 
     // Files should be different due to different keys
@@ -158,25 +148,19 @@ describe('Keychain - Encryption and Security', () => {
   });
 
   test('fails to decrypt with wrong password', async () => {
-    process.env.KEYRING_PASSWORD = 'correct-password';
-    const { storeCredentials } = await import('../src/keychain.js');
-
+    process.env.KEY_FILE_PASSWORD = 'correct-password';
     await storeCredentials(sampleCredentials);
 
     // Try to read with wrong password
-    delete process.env.KEYRING_PASSWORD;
-    process.env.KEYRING_PASSWORD = 'wrong-password';
-    const { getStoredCredentials } = await import('../src/keychain.js');
+    delete process.env.KEY_FILE_PASSWORD;
+    process.env.KEY_FILE_PASSWORD = 'wrong-password';
 
     const stored = await getStoredCredentials();
     expect(stored).toBeNull(); // Should return null on decryption failure
   });
 
-  test('uses default password when KEYRING_PASSWORD not set', async () => {
-    delete process.env.KEYRING_PASSWORD;
-    const { storeCredentials, getStoredCredentials, deleteStoredCredentials } =
-      await import('../src/keychain.js');
-
+  test('uses default password when KEY_FILE_PASSWORD not set', async () => {
+    delete process.env.KEY_FILE_PASSWORD;
     await storeCredentials(sampleCredentials);
     const stored = await getStoredCredentials();
 
@@ -189,11 +173,8 @@ describe('Keychain - Encryption and Security', () => {
 });
 
 describe('Keychain - Platform Detection', () => {
-  test('uses file storage when KEYRING_PASSWORD is set', async () => {
-    process.env.KEYRING_PASSWORD = 'explicit-file-storage';
-    const { storeCredentials, getCredentialsFilePath, flushPendingWrites } =
-      await import('../src/keychain.js');
-
+  test('uses file storage when KEY_FILE_PASSWORD is set', async () => {
+    process.env.KEY_FILE_PASSWORD = 'explicit-file-storage';
     await storeCredentials(sampleCredentials);
     await flushPendingWrites();
 
@@ -205,18 +186,14 @@ describe('Keychain - Platform Detection', () => {
 
 describe('Keychain - Error Handling', () => {
   beforeEach(() => {
-    process.env.KEYRING_PASSWORD = 'test-password';
+    process.env.KEY_FILE_PASSWORD = 'test-password';
   });
 
   test('deleteStoredCredentials does not throw when no credentials exist', async () => {
-    const { deleteStoredCredentials } = await import('../src/keychain.js');
-
     await expect(deleteStoredCredentials()).resolves.toBeUndefined();
   });
 
   test('handles corrupted file gracefully', async () => {
-    const { getCredentialsFilePath, getStoredCredentials } = await import('../src/keychain.js');
-
     const filePath = getCredentialsFilePath();
     const { getDataDir } = await import('../src/paths.js');
     getDataDir(); // Ensure directory exists
@@ -231,12 +208,10 @@ describe('Keychain - Error Handling', () => {
 
 describe('Keychain - Credential Structure', () => {
   beforeEach(() => {
-    process.env.KEYRING_PASSWORD = 'test-password';
+    process.env.KEY_FILE_PASSWORD = 'test-password';
   });
 
   test('preserves all credential fields', async () => {
-    const { storeCredentials, getStoredCredentials } = await import('../src/keychain.js');
-
     const fullCredentials = {
       parentUID: 'parent-uid',
       parentAccessToken: 'parent-access',
@@ -258,8 +233,6 @@ describe('Keychain - Credential Structure', () => {
   });
 
   test('handles special characters in credentials', async () => {
-    const { storeCredentials, getStoredCredentials } = await import('../src/keychain.js');
-
     const specialCredentials = {
       ...sampleCredentials,
       username: 'user+special@proton.me',
@@ -277,19 +250,17 @@ describe('Keychain - Credential Structure', () => {
 describe('Keychain - Performance & Concurrency', () => {
   test('caches and coalesces concurrent reads', async () => {
     // Write credentials with one module instance and flush to storage
-    const m1 = await import('../src/keychain.js');
-    await m1.deleteStoredCredentials();
-    await m1.storeCredentials(sampleCredentials);
-    await m1.flushPendingWrites();
+    await deleteStoredCredentials();
+    await storeCredentials(sampleCredentials);
+    await flushPendingWrites();
 
-    // Import a fresh instance so it has no in-memory cache
-    const m2 = await import('../src/keychain.js');
-    m2.resetKeyringInstrumentation();
+    // Ensure instrumentation reset
+    resetKeyringInstrumentation();
 
     const [a, b, c] = await Promise.all([
-      m2.getStoredCredentials(),
-      m2.getStoredCredentials(),
-      m2.getStoredCredentials(),
+      getStoredCredentials(),
+      getStoredCredentials(),
+      getStoredCredentials(),
     ]);
 
     expect(a).toEqual(sampleCredentials);
@@ -297,45 +268,76 @@ describe('Keychain - Performance & Concurrency', () => {
     expect(c).toEqual(sampleCredentials);
 
     // Underlying keyring/file read should have happened only once
-    expect(m2.getKeyringReadCount()).toBe(1);
+    expect(getKeyringReadCount()).toBe(1);
   });
 
   test('debounces writes and coalesces concurrent writes', async () => {
-    const mod = await import('../src/keychain.js');
-    mod.resetKeyringInstrumentation();
-    await mod.deleteStoredCredentials();
+    resetKeyringInstrumentation();
+    await deleteStoredCredentials();
 
     // Rapid successive writes - only the last should persist after debounce
-    await mod.storeCredentials({ ...sampleCredentials, username: 'a' });
-    await mod.storeCredentials({ ...sampleCredentials, username: 'b' });
-    await mod.storeCredentials({ ...sampleCredentials, username: 'c' });
+    await storeCredentials({ ...sampleCredentials, username: 'a' });
+    await storeCredentials({ ...sampleCredentials, username: 'b' });
+    await storeCredentials({ ...sampleCredentials, username: 'c' });
 
-    await mod.flushPendingWrites();
+    await flushPendingWrites();
 
     // Only one underlying write should have been performed
-    expect(mod.getKeyringWriteCount()).toBeLessThanOrEqual(1);
+    expect(getKeyringWriteCount()).toBeLessThanOrEqual(1);
 
-    const stored = await mod.getStoredCredentials();
+    const stored = await getStoredCredentials();
     expect(stored?.username).toBe('c');
   });
 
   test('instrumentation increments on get and store', async () => {
-    const mod = await import('../src/keychain.js');
-    mod.resetKeyringInstrumentation();
-    await mod.deleteStoredCredentials();
+    resetKeyringInstrumentation();
+    await deleteStoredCredentials();
 
-    expect(mod.getKeyringReadCount()).toBe(0);
-    expect(mod.getKeyringWriteCount()).toBe(0);
+    expect(getKeyringReadCount()).toBe(0);
+    expect(getKeyringWriteCount()).toBe(0);
 
-    await mod.storeCredentials(sampleCredentials);
-    await mod.flushPendingWrites();
-    expect(mod.getKeyringWriteCount()).toBe(1);
+    await storeCredentials(sampleCredentials);
+    await flushPendingWrites();
+    expect(getKeyringWriteCount()).toBe(1);
 
-    // Import a fresh instance to force a backend read (cache not present)
-    const mod2 = await import('../src/keychain.js');
-    mod2.resetKeyringInstrumentation();
-    const fetched = await mod2.getStoredCredentials();
+    // Force a backend read by clearing cached state in module (if provided)
+    resetKeyringInstrumentation();
+    const fetched = await getStoredCredentials();
     expect(fetched).not.toBeNull();
-    expect(mod2.getKeyringReadCount()).toBe(1);
+    expect(getKeyringReadCount()).toBe(1);
+  });
+
+  test('getStored call count reflects top-level calls', async () => {
+    resetKeyringInstrumentation();
+    await deleteStoredCredentials();
+
+    // Call several times (will trigger backend read on first after reset)
+    await storeCredentials(sampleCredentials);
+    await flushPendingWrites();
+
+    // Call getStoredCredentials multiple times concurrently
+    await Promise.all([getStoredCredentials(), getStoredCredentials()]);
+    // getStored call count should be >= 2 (top-level calls)
+    expect(getGetStoredCallCount()).toBeGreaterThanOrEqual(2);
+  });
+
+  test('cache expiry causes a backend read', async () => {
+    // Use fake timers to advance time beyond CACHE_TTL_MS
+    vi.useFakeTimers();
+    await storeCredentials(sampleCredentials);
+    await flushPendingWrites();
+
+    // First read - should be served from cache and not increment backend read (if cached)
+    await getStoredCredentials();
+    const before = getKeyringReadCount();
+
+    // Advance time by 31s to expire cache (CACHE_TTL_MS = 30_000)
+    vi.setSystemTime(Date.now() + 31_000);
+    // Next read should trigger backend read
+    await getStoredCredentials();
+    const after = getKeyringReadCount();
+
+    expect(after).toBeGreaterThanOrEqual(before + 1);
+    vi.useRealTimers();
   });
 });

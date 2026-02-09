@@ -134,16 +134,9 @@ describe('webdav range requests', () => {
     return result;
   };
 
-  // Create isolated temporary directories for this test suite
-  let baseDir: string;
-
   beforeAll(() => {
-    // Set up isolated temp directory for this entire test suite
-    baseDir = mkdtempSync(join(tmpdir(), 'pdb-range-e2e-'));
-    pathsBase = baseDir;
-
     // Force file-based encrypted storage for keyring (not testing keyring itself)
-    process.env.KEYRING_PASSWORD = 'test-keyring-password';
+    process.env.KEY_FILE_PASSWORD = 'test-keyring-password';
 
     const rootNode: InMemoryNode = {
       uid: 'root',
@@ -317,8 +310,7 @@ describe('webdav range requests', () => {
     driveClient.resolvePath = originalMethods.resolvePath;
     driveClient.findNodeByName = originalMethods.findNodeByName;
     driveClient.getNode = originalMethods.getNode;
-    rmSync(baseDir, { recursive: true, force: true });
-    delete process.env.KEYRING_PASSWORD;
+    delete process.env.KEY_FILE_PASSWORD;
   });
 
   it('returns 206 Partial Content for Range requests', async () => {

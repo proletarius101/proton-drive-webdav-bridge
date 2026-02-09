@@ -18,7 +18,7 @@ Quick, focused notes to help an AI coding agent be productive in this repo.
 ## Architecture & where to look 🔎
 - Entry & CLI: `src/index.ts`, `src/cli/*.ts` (start/stop/status/auth/config)
 - Auth & sessions: `src/auth.ts` (SRP, session forking, OpenPGP)
-- Credentials: `src/keychain.ts` (native keyring via `@napi-rs/keyring` + AES file fallback; env var `KEYRING_PASSWORD` forces file mode)
+- Credentials: `src/keychain.ts` (native keyring via `@napi-rs/keyring` + AES file fallback; env var `KEY_FILE_PASSWORD` forces file mode)
 - Drive SDK wrapper: `src/drive.ts` (DriveClientManager) — see `listFolder`, `resolvePath`, `uploadFile`, `downloadFile` for core patterns
 - WebDAV interface: `src/webdav/server.ts`, `ProtonDriveAdapter.ts`, `ProtonDriveResource.ts` — Nephele adapter & resource mapping
 - Locking & metadata persistence: `src/webdav/LockManager.ts`, `src/webdav/MetadataManager.ts` (uses `bun:sqlite`) 💾
@@ -33,7 +33,7 @@ Quick, focused notes to help an AI coding agent be productive in this repo.
 - Large-folder listing: `drive.ts::listFolder` uses a direct API pagination path when UIDs contain `~`, and then `iterateNodes` to preserve order — changing this can affect performance and ordering.
 - Cache invalidation: after mutations call `adapter.invalidateFolderCache(parentUid)` and clear cached node/metadata (`this._node = undefined; this._metaReady = null; this._cachedProps = null`) — see `ProtonDriveResource.create/setStream/delete/move`.
 -- Locking: LOCK/UNLOCK handled in `webdav/server.ts` with `LockManager`; resource methods must call `checkLock(user, token)` to respect locks. Tests cover conflicts in `test/webdav.lock.*.e2e.test.ts`.
--- Keyring in CI: set `KEYRING_PASSWORD` to force file-based encrypted storage (see `test/keychain.test.ts` for examples and `getCredentialsFilePath()` for file location).
+-- Keyring in CI: set `KEY_FILE_PASSWORD` to force file-based encrypted storage (see `test/keychain.test.ts` for examples and `getCredentialsFilePath()` for file location).
 -- Singleton DBs: `locks.db` also stores metadata; E2E tests should run in isolation (mock `env-paths` to sandbox dirs).
 
 ## Testing tips 💡
@@ -54,4 +54,4 @@ Quick, focused notes to help an AI coding agent be productive in this repo.
 - `invalidateFolderCache` — where mutation cache is cleared
 - `checkLock` / `LockManager` — locking semantics
 - `getFileDownloader` / `uploadFile` — streaming I/O
-- `KEYRING_PASSWORD` / `getCredentialsFilePath` — credential storage guidance
+- `KEY_FILE_PASSWORD` / `getCredentialsFilePath` — credential storage guidance

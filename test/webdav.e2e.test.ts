@@ -113,7 +113,7 @@ describe('webdav e2e', () => {
 
   beforeAll(() => {
     // Force file-based encrypted storage for keyring (not testing keyring itself)
-    process.env.KEYRING_PASSWORD = 'test-keyring-password';
+    process.env.KEY_FILE_PASSWORD = 'test-keyring-password';
 
     const rootNode: InMemoryNode = {
       uid: 'root',
@@ -230,7 +230,7 @@ describe('webdav e2e', () => {
     driveClient.getFileDownloader = originalMethods.getFileDownloader;
     driveClient.renameNode = originalMethods.renameNode;
     driveClient.moveNode = originalMethods.moveNode;
-    delete process.env.KEYRING_PASSWORD;
+    delete process.env.KEY_FILE_PASSWORD;
   });
 
   it('supports PUT/GET/DELETE', async () => {

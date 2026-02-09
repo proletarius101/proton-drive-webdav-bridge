@@ -18,7 +18,7 @@ let server: InstanceType<typeof WebDAVServer> | null = null;
 
 beforeEach(() => {
   // Force file-based encrypted storage for keyring (not testing keyring itself)
-  process.env.KEYRING_PASSWORD = 'test-keyring-password';
+  process.env.KEY_FILE_PASSWORD = 'test-keyring-password';
 
   // Ensure DB file exists for LockManager
   const dataDir = getDataDir();
@@ -54,7 +54,7 @@ afterEach(async () => {
   server = null;
 
   // Clean up keyring environment
-  delete process.env.KEYRING_PASSWORD;
+  delete process.env.KEY_FILE_PASSWORD;
 });
 
 // Note: These E2E tests should be run separately from other tests to avoid

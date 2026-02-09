@@ -298,7 +298,7 @@ describe('ProtonAuth - Session State Management', () => {
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'pdb-auth-state-'));
     // pathsBase set via per-test env-paths mock in top-level beforeEach
-    process.env.KEYRING_PASSWORD = 'test-password';
+    process.env.KEY_FILE_PASSWORD = 'test-password';
     originalFetch = global.fetch;
   });
 
@@ -306,7 +306,7 @@ describe('ProtonAuth - Session State Management', () => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
     rmSync(tempDir, { recursive: true, force: true });
-    delete process.env.KEYRING_PASSWORD;
+    delete process.env.KEY_FILE_PASSWORD;
     // restore default handled by top-level afterEach
     global.fetch = originalFetch;
   });
@@ -334,14 +334,14 @@ describe('ProtonAuth - Credential Storage Integration', () => {
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'pdb-auth-storage-'));
     // pathsBase set via per-test env-paths mock in top-level beforeEach
-    process.env.KEYRING_PASSWORD = 'test-password';
+    process.env.KEY_FILE_PASSWORD = 'test-password';
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
     rmSync(tempDir, { recursive: true, force: true });
-    delete process.env.KEYRING_PASSWORD;
+    delete process.env.KEY_FILE_PASSWORD;
     // restore default handled by top-level afterEach
   });
 
@@ -579,14 +579,14 @@ describe('ProtonAuth - Helper Functions Integration', () => {
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'pdb-auth-helpers-'));
     // pathsBase set via per-test env-paths mock in top-level beforeEach
-    process.env.KEYRING_PASSWORD = 'test-password';
+    process.env.KEY_FILE_PASSWORD = 'test-password';
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
     rmSync(tempDir, { recursive: true, force: true });
-    delete process.env.KEYRING_PASSWORD;
+    delete process.env.KEY_FILE_PASSWORD;
     // restore default handled by top-level afterEach
   });
 

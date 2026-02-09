@@ -40,11 +40,8 @@ describe('WebDAV COPY/MOVE permission semantics', () => {
   };
 
   beforeAll(() => {
-    // Set up isolated temp directory for this entire test suite
-    baseDir = mkdtempSync(join(tmpdir(), 'pdb-webdav-copymove-'));
-
     // Force file-based encrypted storage for keyring (not testing keyring itself)
-    process.env.KEYRING_PASSWORD = 'test-keyring-password';
+    process.env.KEY_FILE_PASSWORD = 'test-keyring-password';
 
     const root = { uid: 'root', name: '', type: 'folder', parentUid: null };
     add(root as Node);
@@ -94,8 +91,7 @@ describe('WebDAV COPY/MOVE permission semantics', () => {
   });
 
   afterAll(() => {
-    rmSync(baseDir, { recursive: true, force: true });
-    delete process.env.KEYRING_PASSWORD;
+    delete process.env.KEY_FILE_PASSWORD;
   });
 
   it('COPY to existing destination with Overwrite:F returns 412', async () => {

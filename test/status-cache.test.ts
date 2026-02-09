@@ -108,14 +108,13 @@ describe('CLI - status command', () => {
 
     baseDir = mkdtempSync(join(tmpdir(), 'pdb-status-'));
     // Force file-based encrypted storage for keyring (not testing keyring itself)
-    process.env.KEYRING_PASSWORD = 'test-keyring-password';
+    process.env.KEY_FILE_PASSWORD = 'test-keyring-password';
   });
 
   afterEach(async () => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
-    rmSync(baseDir, { recursive: true, force: true });
-    delete process.env.KEYRING_PASSWORD;
+    delete process.env.KEY_FILE_PASSWORD;
   });
 
   test('status --json shows logged-in user with username from config', async () => {

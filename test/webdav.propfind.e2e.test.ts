@@ -71,17 +71,9 @@ describe('WebDAV PROPFIND recursion and filtering', () => {
     }
     return res;
   };
-
-  // Create isolated temporary directories for this test suite
-  let baseDir: string;
-
   beforeAll(() => {
-    // Set up isolated temp directory for this entire test suite
-    baseDir = mkdtempSync(join(tmpdir(), 'pdb-webdav-propfind-'));
-    pathsBase = baseDir;
-
     // Force file-based encrypted storage for keyring (not testing keyring itself)
-    process.env.KEYRING_PASSWORD = 'test-keyring-password';
+    process.env.KEY_FILE_PASSWORD = 'test-keyring-password';
 
     const root: Node = {
       uid: 'root',
@@ -190,8 +182,7 @@ describe('WebDAV PROPFIND recursion and filtering', () => {
   });
 
   afterAll(() => {
-    rmSync(baseDir, { recursive: true, force: true });
-    delete process.env.KEYRING_PASSWORD;
+    delete process.env.KEY_FILE_PASSWORD;
   });
 
   it('PROPFIND depth=infinity returns all members', async () => {
