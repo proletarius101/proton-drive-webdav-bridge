@@ -2,15 +2,15 @@ import { describe, expect, test } from 'vitest';
 import { getClaimedAdditionalMetadata } from '../src/webdav/sdkHelpers.js';
 
 import type { Result, Revision } from '@protontech/drive-sdk';
-import { afterEach, beforeEach } from 'vitest';
-import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
+import { vol } from 'memfs';
+import { beforeEach, vi } from 'vitest';
 
-let __perTestEnv: PerTestEnv;
-beforeEach(async () => {
-  __perTestEnv = await setupPerTestEnv();
-});
-afterEach(async () => {
-  await __perTestEnv.cleanup();
+vi.mock('fs');
+vi.mock('fs/promises');
+
+beforeEach(() => {
+  // reset the state of in-memory fs
+  vol.reset();
 });
 
 describe('getClaimedAdditionalMetadata helper', () => {

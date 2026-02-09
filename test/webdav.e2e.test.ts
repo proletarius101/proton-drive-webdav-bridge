@@ -1,25 +1,19 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'crypto';
-import { mkdtempSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { afterEach, beforeEach } from 'vitest';
+import { vol } from 'memfs';
+import { beforeEach } from 'vitest';
 import { driveClient } from '../src/drive.ts';
 import { WebDAVServer } from '../src/webdav/server.ts';
-import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
 import { createFileDownloader } from './utils/seekableMock.ts';
 
-let __perTestEnv: PerTestEnv;
-beforeEach(async () => {
-  __perTestEnv = await setupPerTestEnv();
-});
-afterEach(async () => {
-  await __perTestEnv.cleanup();
-});
+vi.mock('fs');
+vi.mock('fs/promises');
 
-const DEFAULT_PATHS_BASE = mkdtempSync(join(tmpdir(), 'pdb-webdav-e2e-default-'));
-let pathsBase = DEFAULT_PATHS_BASE;
+beforeEach(() => {
+  // reset the state of in-memory fs
+  vol.reset();
+});
 
 interface InMemoryNode {
   uid: string;
@@ -117,14 +111,7 @@ describe('webdav e2e', () => {
     return result;
   };
 
-  // Create isolated temporary directories for this test suite
-  let baseDir: string;
-
   beforeAll(() => {
-    // Set up isolated temp directory for this entire test suite
-    baseDir = mkdtempSync(join(tmpdir(), 'pdb-webdav-e2e-'));
-    pathsBase = baseDir;
-
     // Force file-based encrypted storage for keyring (not testing keyring itself)
     process.env.KEYRING_PASSWORD = 'test-keyring-password';
 
@@ -243,8 +230,6 @@ describe('webdav e2e', () => {
     driveClient.getFileDownloader = originalMethods.getFileDownloader;
     driveClient.renameNode = originalMethods.renameNode;
     driveClient.moveNode = originalMethods.moveNode;
-    rmSync(baseDir, { recursive: true, force: true });
-    pathsBase = DEFAULT_PATHS_BASE;
     delete process.env.KEYRING_PASSWORD;
   });
 

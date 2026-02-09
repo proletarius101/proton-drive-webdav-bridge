@@ -1,14 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { vol } from 'memfs';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ProtonDriveResource from '../src/webdav/ProtonDriveResource.js';
-import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
 import { createFileDownloader } from './utils/seekableMock';
 
-let __perTestEnv: PerTestEnv;
-beforeEach(async () => {
-  __perTestEnv = await setupPerTestEnv();
-});
-afterEach(async () => {
-  await __perTestEnv.cleanup();
+vi.mock('fs');
+vi.mock('fs/promises');
+
+beforeEach(() => {
+  // reset the state of in-memory fs
+  vol.reset();
 });
 
 const gatherStreamData = async (stream: NodeJS.ReadableStream | any) => {

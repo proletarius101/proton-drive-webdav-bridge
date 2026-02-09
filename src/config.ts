@@ -10,9 +10,6 @@ import { dirname } from 'path';
 import { getConfigFilePath } from './paths.js';
 import { logger } from './logger.js';
 
-// Re-export for convenience
-export { getConfigFilePath } from './paths.js';
-
 // ============================================================================
 // Types
 // ============================================================================

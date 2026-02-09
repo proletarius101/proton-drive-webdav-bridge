@@ -101,6 +101,7 @@ vi.mock('../src/config.js', () => ({
     debug: false,
     remotePath: '/',
   })),
+  updateConfig: vi.fn(() => {}),
 }));
 
 const mockStart = vi.fn(() => Promise.resolve());
@@ -126,6 +127,7 @@ vi.mock('../src/paths.js', () => ({
   getConfigDir: () => join(tmpdir(), 'pdb-config'),
   getDataDir: () => join(tmpdir(), 'pdb-data'),
   getLogDir: () => join(tmpdir(), 'pdb-logs'),
+  getCredentialsFilePath: () => join(tmpdir(), 'pdb-creds.json'),
 }));
 
 vi.mock('../src/logger.js', () => ({
@@ -138,27 +140,20 @@ vi.mock('../src/logger.js', () => ({
   setDebugMode: vi.fn(() => {}),
 }));
 
-const mockInput = vi.fn(({ message }: { message: string }) => {
-  if (message.includes('2FA')) return Promise.resolve('123456');
-  return Promise.resolve('testuser');
-});
-const mockPassword = vi.fn(() => Promise.resolve('password123'));
-const mockConfirm = vi.fn(() => Promise.resolve(true));
-
-vi.mock('@inquirer/prompts', () => {
-  const mockInputFn = vi.fn(({ message }: { message: string }) => {
+const { mockInput, mockPassword, mockConfirm } = vi.hoisted(() => ({
+  mockInput: vi.fn(({ message }: { message: string }) => {
     if (message.includes('2FA')) return Promise.resolve('123456');
     return Promise.resolve('testuser');
-  });
-  const mockPasswordFn = vi.fn(() => Promise.resolve('password123'));
-  const mockConfirmFn = vi.fn(() => Promise.resolve(true));
+  }),
+  mockPassword: vi.fn(() => Promise.resolve('password123')),
+  mockConfirm: vi.fn(() => Promise.resolve(true)),
+}));
 
-  return {
-    input: mockInputFn,
-    password: mockPasswordFn,
-    confirm: mockConfirmFn,
-  };
-});
+vi.mock('@inquirer/prompts', () => ({
+  input: mockInput,
+  password: mockPassword,
+  confirm: mockConfirm,
+}));
 
 // ============================================================================
 // Helpers

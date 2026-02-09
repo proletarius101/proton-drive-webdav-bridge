@@ -16,11 +16,10 @@
 
 import { afterEach, beforeEach, beforeAll, describe, expect, vi, test } from 'vitest';
 import { mkdirSync, mkdtempSync, rmSync } from 'fs';
-import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { keyringStore } from './setup.js';
-import { envPathsMockDynamic } from './helpers/perTestEnv';
+import { mockFileSystem } from './helpers/perTestEnv';
 import type {
   ApiError,
   Session,
@@ -55,12 +54,10 @@ let restoreSessionFromStorage: () => Promise<{
 }>;
 
 // Per-test setup: create isolated temp dir and load module after mocking env-paths
-let testTempDir: string;
 beforeEach(async () => {
-  testTempDir = await mkdtemp(join(tmpdir(), 'pdb-test-'));
-
+  // Install per-test in-memory fs and reset module cache so imports use the mock
+  await mockFileSystem();
   vi.resetModules();
-  vi.doMock('env-paths', envPathsMockDynamic(() => testTempDir));
   const mod = await import('../src/auth.js');
   ProtonAuth = mod.ProtonAuth;
   authenticateAndStore = mod.authenticateAndStore;
@@ -68,8 +65,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  // remove test dir and restore mocks
-  await rm(testTempDir, { recursive: true, force: true });
+  // restore mocks
   vi.restoreAllMocks();
 });
 

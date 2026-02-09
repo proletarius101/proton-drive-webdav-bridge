@@ -1,14 +1,14 @@
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { vol } from 'memfs';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import ProtonDriveAdapter from '../src/webdav/ProtonDriveAdapter.js';
 import ProtonDriveResource from '../src/webdav/ProtonDriveResource.js';
-import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
 
-let __perTestEnv: PerTestEnv;
-beforeEach(async () => {
-  __perTestEnv = await setupPerTestEnv();
-});
-afterEach(async () => {
-  await __perTestEnv.cleanup();
+vi.mock('fs');
+vi.mock('fs/promises');
+
+beforeEach(() => {
+  // reset the state of in-memory fs
+  vol.reset();
 });
 
 // Simple integration test for properties persistence using MetadataManager

@@ -7,24 +7,26 @@
  * - Platform detection and fallback logic
  * - Password derivation with PBKDF2
  * - Error handling and decryption failures
- * 
- * Uses dynamic imports with setupPerTestEnv() for true per-test isolation.
+ *
+ * Uses dynamic imports with mockFileSystem() for true per-test isolation.
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { vol } from 'memfs';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { keyringStore } from './setup.js';
-import { setupPerTestEnv, type PerTestEnv } from './helpers/perTestEnv.js';
+
+vi.mock('fs');
+vi.mock('fs/promises');
 
 // Setup per-test isolated environment
-let env: PerTestEnv;
 beforeEach(async () => {
-  env = await setupPerTestEnv();
+  // reset the state of in-memory fs
+  vol.reset();
   keyringStore.clear();
 });
 
 afterEach(async () => {
-  await env.cleanup();
   keyringStore.clear();
   delete process.env.KEYRING_PASSWORD;
   delete process.env.DISPLAY;
@@ -52,9 +54,8 @@ describe('Keychain - File-Based Storage', () => {
   });
 
   test('stores and retrieves credentials with encryption', async () => {
-    const { storeCredentials, getStoredCredentials, hasStoredCredentials } = await import(
-      '../src/keychain.js'
-    );
+    const { storeCredentials, getStoredCredentials, hasStoredCredentials } =
+      await import('../src/keychain.js');
 
     await storeCredentials(sampleCredentials);
 
@@ -67,9 +68,8 @@ describe('Keychain - File-Based Storage', () => {
   });
 
   test('returns null when no credentials stored', async () => {
-    const { getStoredCredentials, hasStoredCredentials, deleteStoredCredentials } = await import(
-      '../src/keychain.js'
-    );
+    const { getStoredCredentials, hasStoredCredentials, deleteStoredCredentials } =
+      await import('../src/keychain.js');
 
     // Ensure clean state
     await deleteStoredCredentials();
@@ -80,9 +80,8 @@ describe('Keychain - File-Based Storage', () => {
   });
 
   test('deletes stored credentials', async () => {
-    const { storeCredentials, getStoredCredentials, deleteStoredCredentials } = await import(
-      '../src/keychain.js'
-    );
+    const { storeCredentials, getStoredCredentials, deleteStoredCredentials } =
+      await import('../src/keychain.js');
 
     await storeCredentials(sampleCredentials);
     expect(await getStoredCredentials()).not.toBeNull();
@@ -94,9 +93,8 @@ describe('Keychain - File-Based Storage', () => {
   });
 
   test('creates encrypted file with secure permissions', async () => {
-    const { storeCredentials, getCredentialsFilePath, flushPendingWrites } = await import(
-      '../src/keychain.js'
-    );
+    const { storeCredentials, getCredentialsFilePath, flushPendingWrites } =
+      await import('../src/keychain.js');
 
     await storeCredentials(sampleCredentials);
     await flushPendingWrites();
@@ -137,9 +135,8 @@ describe('Keychain - File-Based Storage', () => {
 describe('Keychain - Encryption and Security', () => {
   test('uses different encryption key with different passwords', async () => {
     process.env.KEYRING_PASSWORD = 'password1';
-    const { storeCredentials, getCredentialsFilePath, flushPendingWrites } = await import(
-      '../src/keychain.js'
-    );
+    const { storeCredentials, getCredentialsFilePath, flushPendingWrites } =
+      await import('../src/keychain.js');
 
     await storeCredentials(sampleCredentials);
     await flushPendingWrites();
@@ -149,9 +146,8 @@ describe('Keychain - Encryption and Security', () => {
     // Change password and re-encrypt
     delete process.env.KEYRING_PASSWORD;
     process.env.KEYRING_PASSWORD = 'password2';
-    const { storeCredentials: storeCredentials2, flushPendingWrites: flush2 } = await import(
-      '../src/keychain.js'
-    );
+    const { storeCredentials: storeCredentials2, flushPendingWrites: flush2 } =
+      await import('../src/keychain.js');
 
     await storeCredentials2(sampleCredentials);
     await flush2();
@@ -178,9 +174,8 @@ describe('Keychain - Encryption and Security', () => {
 
   test('uses default password when KEYRING_PASSWORD not set', async () => {
     delete process.env.KEYRING_PASSWORD;
-    const { storeCredentials, getStoredCredentials, deleteStoredCredentials } = await import(
-      '../src/keychain.js'
-    );
+    const { storeCredentials, getStoredCredentials, deleteStoredCredentials } =
+      await import('../src/keychain.js');
 
     await storeCredentials(sampleCredentials);
     const stored = await getStoredCredentials();
@@ -196,9 +191,8 @@ describe('Keychain - Encryption and Security', () => {
 describe('Keychain - Platform Detection', () => {
   test('uses file storage when KEYRING_PASSWORD is set', async () => {
     process.env.KEYRING_PASSWORD = 'explicit-file-storage';
-    const { storeCredentials, getCredentialsFilePath, flushPendingWrites } = await import(
-      '../src/keychain.js'
-    );
+    const { storeCredentials, getCredentialsFilePath, flushPendingWrites } =
+      await import('../src/keychain.js');
 
     await storeCredentials(sampleCredentials);
     await flushPendingWrites();

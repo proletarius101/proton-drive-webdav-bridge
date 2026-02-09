@@ -118,7 +118,7 @@ export function registerStatusCommand(program: Command): void {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error(`Error getting status: ${message}`);
-        process.exit(1);
+        throw error;
       }
     });
 }

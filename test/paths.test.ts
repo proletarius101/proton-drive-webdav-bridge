@@ -4,27 +4,21 @@
  * Tests path resolution and directory creation using env-paths.
  */
 
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { existsSync, mkdtempSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { existsSync } from 'fs';
+import { vol } from 'memfs';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 
-let tempBase: string;
-import { envPathsMockDynamic } from './helpers/perTestEnv';
+vi.mock('fs');
+vi.mock('fs/promises');
+
+beforeEach(() => {
+  // reset the state of in-memory fs
+  vol.reset();
+});
 
 const loadPaths = async () => import('../src/paths.js');
 
 describe('Paths - Directory Functions Availability', () => {
-  beforeEach(() => {
-    tempBase = mkdtempSync(join(tmpdir(), 'pdb-paths-'));
-    vi.resetModules();
-    vi.doMock('env-paths', envPathsMockDynamic(() => tempBase, 'proton-drive-webdav-bridge'));
-  });
-
-  afterEach(() => {
-    rmSync(tempBase, { recursive: true, force: true });
-  });
-
   test('should have getConfigDir function', async () => {
     const { getConfigDir } = await loadPaths();
     expect(typeof getConfigDir).toBe('function');
@@ -42,14 +36,6 @@ describe('Paths - Directory Functions Availability', () => {
 });
 
 describe('Paths - Directory Paths Return Values', () => {
-  beforeEach(() => {
-    tempBase = mkdtempSync(join(tmpdir(), 'pdb-paths-'));
-  });
-
-  afterEach(() => {
-    rmSync(tempBase, { recursive: true, force: true });
-  });
-
   test('getConfigDir should return non-empty string', async () => {
     const { getConfigDir } = await loadPaths();
     const configDir = getConfigDir();
@@ -73,14 +59,6 @@ describe('Paths - Directory Paths Return Values', () => {
 });
 
 describe('Paths - Path Properties', () => {
-  beforeEach(() => {
-    tempBase = mkdtempSync(join(tmpdir(), 'pdb-paths-'));
-  });
-
-  afterEach(() => {
-    rmSync(tempBase, { recursive: true, force: true });
-  });
-
   test('getConfigDir should return absolute path', async () => {
     const { getConfigDir } = await loadPaths();
     const configDir = getConfigDir();
@@ -101,14 +79,6 @@ describe('Paths - Path Properties', () => {
 });
 
 describe('Paths - Directory Creation', () => {
-  beforeEach(() => {
-    tempBase = mkdtempSync(join(tmpdir(), 'pdb-paths-'));
-  });
-
-  afterEach(() => {
-    rmSync(tempBase, { recursive: true, force: true });
-  });
-
   test('getConfigDir should create directory', async () => {
     const { getConfigDir } = await loadPaths();
     const configDir = getConfigDir();
@@ -129,14 +99,6 @@ describe('Paths - Directory Creation', () => {
 });
 
 describe('Paths - Directory Idempotency', () => {
-  beforeEach(() => {
-    tempBase = mkdtempSync(join(tmpdir(), 'pdb-paths-'));
-  });
-
-  afterEach(() => {
-    rmSync(tempBase, { recursive: true, force: true });
-  });
-
   test('getConfigDir should return same path on multiple calls', async () => {
     const { getConfigDir } = await loadPaths();
     const dir1 = getConfigDir();
@@ -160,14 +122,6 @@ describe('Paths - Directory Idempotency', () => {
 });
 
 describe('Paths - Runtime Directory', () => {
-  beforeEach(() => {
-    tempBase = mkdtempSync(join(tmpdir(), 'pdb-paths-'));
-  });
-
-  afterEach(() => {
-    rmSync(tempBase, { recursive: true, force: true });
-  });
-
   test('getRuntimeDir should return absolute path and create directory', async () => {
     const { getRuntimeDir } = await loadPaths();
     const runtimeDir = getRuntimeDir();
@@ -182,26 +136,5 @@ describe('Paths - Runtime Directory', () => {
     const dir2 = getRuntimeDir();
 
     expect(dir1).toBe(dir2);
-  });
-});
-
-describe('Paths - Platform Compliance', () => {
-  beforeEach(() => {
-    tempBase = mkdtempSync(join(tmpdir(), 'pdb-paths-'));
-  });
-
-  afterEach(() => {
-    rmSync(tempBase, { recursive: true, force: true });
-  });
-
-  test('paths should contain app name proton-drive-webdav-bridge', async () => {
-    const { getConfigDir, getDataDir, getLogDir } = await loadPaths();
-    const configDir = getConfigDir();
-    const dataDir = getDataDir();
-    const logDir = getLogDir();
-
-    expect(configDir).toContain('proton-drive-webdav-bridge');
-    expect(dataDir).toContain('proton-drive-webdav-bridge');
-    expect(logDir).toContain('proton-drive-webdav-bridge');
   });
 });

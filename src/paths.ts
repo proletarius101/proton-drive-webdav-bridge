@@ -15,7 +15,7 @@ import logger from './logger';
 // ============================================================================
 
 const APP_NAME = 'proton-drive-webdav-bridge';
-const paths = envPaths(APP_NAME, { suffix: '' });
+export const paths = envPaths(APP_NAME, { suffix: '' });
 
 const ensureDir = (dirPath?: string): string => {
   try {

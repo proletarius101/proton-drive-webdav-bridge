@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { afterEach, beforeEach, beforeAll, describe, test, expect, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 
 // Create module-level mockState object
 const mockState = {
@@ -31,8 +31,8 @@ const { keychainMocks, configMocks } = vi.hoisted(() => ({
     getStoredCredentials: vi.fn(async () => mockState.credentials),
   },
   configMocks: {
-    getConfig: vi.fn(async () => mockState.config),
-    updateConfig: vi.fn(async (updates: any) => {
+    getConfig: vi.fn(() => mockState.config),
+    updateConfig: vi.fn((updates: any) => {
       mockState.config = { ...mockState.config, ...updates };
     }),
   },
@@ -72,11 +72,11 @@ async function captureConsoleAsync(fn: () => Promise<void>) {
   const originalLog = console.log;
   const originalError = console.error;
   const originalWarn = console.warn;
-  
+
   console.log = (...args: any[]) => logs.push(args.map(String).join(' '));
   console.error = (...args: any[]) => logs.push(args.map(String).join(' '));
   console.warn = (...args: any[]) => logs.push(args.map(String).join(' '));
-  
+
   try {
     await fn();
   } finally {
@@ -84,7 +84,7 @@ async function captureConsoleAsync(fn: () => Promise<void>) {
     console.error = originalError;
     console.warn = originalWarn;
   }
-  
+
   return { logs };
 }
 

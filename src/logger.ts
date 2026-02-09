@@ -4,49 +4,14 @@
  * Winston-based logging with console and optional rotating file transports.
  */
 
+import { join } from 'path';
 import winston from 'winston';
 import DailyRotateFile from 'winston-daily-rotate-file';
-import { join } from 'path';
-import { mkdirSync } from 'fs';
+import { paths } from './paths';
 
 // ============================================================================
 // Configuration
 // ============================================================================
-
-// Lazy-loaded to avoid circular dependency issues with tests
-let LOG_DIR: string | null = null;
-
-const ensureLogDir = async (): Promise<string> => {
-  if (!LOG_DIR) {
-    const { getLogDir } = await import('./paths.js');
-    LOG_DIR = getLogDir();
-
-    try {
-      mkdirSync(LOG_DIR, { recursive: true });
-    } catch (error) {
-      // Log error but continue - directory might already exist or be inaccessible
-      console.error(`Failed to create log directory: ${error}`);
-    }
-  }
-  return LOG_DIR;
-};
-
-const ensureLogDirSync = (): string => {
-  if (!LOG_DIR) {
-    // This is a workaround: we'll just create a sync wrapper that fails gracefully
-    // In test environment, files won't be written anyway
-    const isTestEnv =
-      process.env.NODE_ENV === 'test' || process.argv.some((arg) => arg.includes('test'));
-    if (isTestEnv) {
-      // For tests, just use a temp directory name that won't be accessed
-      LOG_DIR = '/tmp/test-logs';
-      return LOG_DIR;
-    }
-    // For production, this will be called lazily
-    throw new Error('Log directory not initialized');
-  }
-  return LOG_DIR;
-};
 
 // ============================================================================
 // Log Format
@@ -84,11 +49,8 @@ const consoleTransport = new winston.transports.Console({
 const transports: winston.transport[] = [consoleTransport];
 
 if (!isTestEnv) {
-  // Lazy-create file transports that reference LOG_DIR getter
-  const getLogDirForTransport = () => ensureLogDirSync();
-
   const fileTransport = new DailyRotateFile({
-    dirname: getLogDirForTransport(),
+    dirname: paths.log,
     filename: 'proton-drive-webdav-bridge-%DATE%.log',
     datePattern: 'YYYY-MM-DD',
     maxSize: '20m',
@@ -98,7 +60,7 @@ if (!isTestEnv) {
   });
 
   const errorFileTransport = new DailyRotateFile({
-    dirname: getLogDirForTransport(),
+    dirname: paths.log,
     filename: 'proton-drive-webdav-bridge-error-%DATE%.log',
     datePattern: 'YYYY-MM-DD',
     maxSize: '20m',
@@ -146,7 +108,7 @@ export function isDebugMode(): boolean {
  */
 export function getLogFilePath(): string {
   const date = new Date().toISOString().split('T')[0];
-  return join(ensureLogDirSync(), `proton-drive-webdav-bridge-${date}.log`);
+  return join(paths.log, `proton-drive-webdav-bridge-${date}.log`);
 }
 
 export default logger;

@@ -1,32 +1,22 @@
+import { mkdirSync, writeFileSync } from 'fs';
+import { vol } from 'memfs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdirSync, mkdtempSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
-import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
-
-let __perTestEnv: PerTestEnv;
-beforeEach(async () => {
-  __perTestEnv = await setupPerTestEnv();
-});
-afterEach(async () => {
-  await __perTestEnv.cleanup();
-});
-
-// Use `setupPerTestEnv()` to install a dynamic per-test env-paths mock so
-// each test gets an isolated directory. The helper also registers a doMock.
-
-import { writeFileSync } from 'fs';
 import { driveClient } from '../src/drive.js';
 import { getDataDir } from '../src/paths.js';
 import { LockManager } from '../src/webdav/LockManager.js';
 import { WebDAVServer } from '../src/webdav/server.js';
 
-let server: InstanceType<typeof WebDAVServer> | null = null;
-let baseDir: string | null = null;
+vi.mock('fs');
+vi.mock('fs/promises');
 
 beforeEach(() => {
-  baseDir = mkdtempSync(join(tmpdir(), 'pdb-webdav-lock-'));
+  // reset the state of in-memory fs
+  vol.reset();
+});
 
+let server: InstanceType<typeof WebDAVServer> | null = null;
+
+beforeEach(() => {
   // Force file-based encrypted storage for keyring (not testing keyring itself)
   process.env.KEYRING_PASSWORD = 'test-keyring-password';
 
@@ -63,12 +53,6 @@ afterEach(async () => {
   if (server) await server.stop();
   server = null;
 
-  // Clean up temp directories
-  if (baseDir) rmSync(baseDir, { recursive: true, force: true });
-  baseDir = null;
-
-  // env-paths directories are cleaned up by __perTestEnv.cleanup()
-
   // Clean up keyring environment
   delete process.env.KEYRING_PASSWORD;
 });
@@ -76,58 +60,54 @@ afterEach(async () => {
 // Note: These E2E tests should be run separately from other tests to avoid
 // singleton/resource conflicts. Run with: bun test test/webdav.lock.e2e.test.ts
 describe('WebDAV LOCK/UNLOCK integration', () => {
-  it(
-    'creates a lock via LOCK and removes it via UNLOCK',
-    { timeout: 10000 },
-    async () => {
-      server = new WebDAVServer({ host: '127.0.0.1', port: 0, requireAuth: false });
-      await server.start();
+  it('creates a lock via LOCK and removes it via UNLOCK', { timeout: 10000 }, async () => {
+    server = new WebDAVServer({ host: '127.0.0.1', port: 0, requireAuth: false });
+    await server.start();
 
-      const httpServer = server?.getHttpServer();
-      if (!httpServer) throw new Error('HTTP server not available');
-      const port = (httpServer.address() as import('net').AddressInfo).port;
-      const baseUrl = `http://127.0.0.1:${port}`;
+    const httpServer = server?.getHttpServer();
+    if (!httpServer) throw new Error('HTTP server not available');
+    const port = (httpServer.address() as import('net').AddressInfo).port;
+    const baseUrl = `http://127.0.0.1:${port}`;
 
-      // Send LOCK request
-      const lockBody = `<?xml version="1.0" encoding="utf-8" ?>\n<D:lockinfo xmlns:D="DAV:">\n  <D:lockscope><D:exclusive/></D:lockscope>\n  <D:locktype><D:write/></D:locktype>\n  <D:owner><D:href>testuser</D:href></D:owner>\n</D:lockinfo>`;
+    // Send LOCK request
+    const lockBody = `<?xml version="1.0" encoding="utf-8" ?>\n<D:lockinfo xmlns:D="DAV:">\n  <D:lockscope><D:exclusive/></D:lockscope>\n  <D:locktype><D:write/></D:locktype>\n  <D:owner><D:href>testuser</D:href></D:owner>\n</D:lockinfo>`;
 
-      const lockResp = await fetch(`${baseUrl}/locktest.txt`, {
-        method: 'LOCK',
-        headers: {
-          Depth: '0',
-          Timeout: 'Second-3600',
-          'Content-Type': 'application/xml; charset="utf-8"',
-        },
-        body: lockBody,
-      });
+    const lockResp = await fetch(`${baseUrl}/locktest.txt`, {
+      method: 'LOCK',
+      headers: {
+        Depth: '0',
+        Timeout: 'Second-3600',
+        'Content-Type': 'application/xml; charset="utf-8"',
+      },
+      body: lockBody,
+    });
 
-      if (lockResp.status < 200 || lockResp.status >= 300) {
-        const body = await lockResp.text();
-        throw new Error(`LOCK failed: ${lockResp.status} - ${body}`);
-      }
-
-      // Lock should be present in LockManager
-      const lm = LockManager.getInstance();
-      const locks = lm.getLocksForPath('/locktest.txt');
-      expect(locks.length).toBeGreaterThan(0);
-      const token = locks[0].token;
-      expect(token).toMatch(/^opaquelocktoken:/);
-
-      // Attempt UNLOCK using Lock-Token header (with angle brackets as RDF expects)
-      const unlockResp = await fetch(`${baseUrl}/locktest.txt`, {
-        method: 'UNLOCK',
-        headers: {
-          'Lock-Token': `<${token}>`,
-        },
-      });
-
-      expect(unlockResp.status).toBeGreaterThanOrEqual(200);
-      expect(unlockResp.status).toBeLessThan(300);
-
-      const locksAfter = lm.getLocksForPath('/locktest.txt');
-      expect(locksAfter.length).toBe(0);
+    if (lockResp.status < 200 || lockResp.status >= 300) {
+      const body = await lockResp.text();
+      throw new Error(`LOCK failed: ${lockResp.status} - ${body}`);
     }
-  );
+
+    // Lock should be present in LockManager
+    const lm = LockManager.getInstance();
+    const locks = lm.getLocksForPath('/locktest.txt');
+    expect(locks.length).toBeGreaterThan(0);
+    const token = locks[0].token;
+    expect(token).toMatch(/^opaquelocktoken:/);
+
+    // Attempt UNLOCK using Lock-Token header (with angle brackets as RDF expects)
+    const unlockResp = await fetch(`${baseUrl}/locktest.txt`, {
+      method: 'UNLOCK',
+      headers: {
+        'Lock-Token': `<${token}>`,
+      },
+    });
+
+    expect(unlockResp.status).toBeGreaterThanOrEqual(200);
+    expect(unlockResp.status).toBeLessThan(300);
+
+    const locksAfter = lm.getLocksForPath('/locktest.txt');
+    expect(locksAfter.length).toBe(0);
+  });
 
   it(
     'LOCK prevents other clients from creating conflicting locks',

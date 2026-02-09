@@ -1,38 +1,18 @@
-import { afterAll, beforeAll, beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { vol } from 'memfs';
 import { driveClient } from '../src/drive.ts';
 import { WebDAVServer } from '../src/webdav/server.ts';
-import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
 
-let __perTestEnv: PerTestEnv;
+vi.mock('fs');
+vi.mock('fs/promises');
 
-// Note: These E2E tests should be run separately from other tests to avoid
-// singleton/resource conflicts. Run with: bun test test/webdav.propfind.e2e.test.ts
-// Mock env-paths to avoid using real data dirs
-const DEFAULT_PATHS_BASE = mkdtempSync(join(tmpdir(), 'pdb-webdav-propfind-default-'));
-let pathsBase = DEFAULT_PATHS_BASE;
-
-beforeEach(async () => {
-  __perTestEnv = await setupPerTestEnv();
-  const { envPathsMockFromMap } = await import('./helpers/perTestEnv');
-  vi.doMock(
-    'env-paths',
-    envPathsMockFromMap({
-      config: join(__perTestEnv.baseDir, 'config'),
-      data: join(pathsBase, 'data'),
-      log: join(pathsBase, 'log'),
-      temp: join(pathsBase, 'temp'),
-      cache: join(pathsBase, 'cache'),
-    })
-  );
-});
-
-afterEach(async () => {
-  await __perTestEnv.cleanup();
-  vi.doUnmock('env-paths');
+beforeEach(() => {
+  // reset the state of in-memory fs
+  vol.reset();
 });
 
 interface Node {
@@ -211,7 +191,6 @@ describe('WebDAV PROPFIND recursion and filtering', () => {
 
   afterAll(() => {
     rmSync(baseDir, { recursive: true, force: true });
-    pathsBase = DEFAULT_PATHS_BASE;
     delete process.env.KEYRING_PASSWORD;
   });
 

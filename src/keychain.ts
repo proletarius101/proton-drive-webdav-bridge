@@ -359,6 +359,12 @@ export async function storeCredentials(credentials: StoredCredentials): Promise<
   // Coalesce writes: keep latest and debounce persistence
   _pendingWrite = credentials;
   schedulePersist();
+  // In file-based storage mode we want writes to persist immediately so
+  // tests that switch passwords and re-import the module will observe the
+  // persisted file. Native keyring writes remain debounced.
+  if (shouldUseFileStorage()) {
+    await flushPendingWrites();
+  }
 }
 
 /**

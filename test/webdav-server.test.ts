@@ -9,18 +9,17 @@
  * - URL generation
  */
 
-import { afterEach, beforeEach, describe, expect, vi, test } from 'vitest';
-import { mkdtempSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
 import { join } from 'path';
-import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { paths } from '../src/paths.js';
+import { vol } from 'memfs';
 
-let __perTestEnv: PerTestEnv;
-beforeEach(async () => {
-  __perTestEnv = await setupPerTestEnv();
-});
-afterEach(async () => {
-  await __perTestEnv.cleanup();
+vi.mock('fs');
+vi.mock('fs/promises');
+
+beforeEach(() => {
+  // reset the state of in-memory fs
+  vol.reset();
 });
 
 // Mock config to provide defaults - uses the preloaded env-paths from setup.ts
@@ -44,7 +43,7 @@ vi.mock('../src/config.js', () => ({
   loadConfig: () => ({}),
   saveConfig: () => {},
   updateConfig: () => ({}),
-  getConfigFilePath: () => join(__perTestEnv.baseDir, 'config', 'proton-drive-webdav-bridge', 'config.json'),
+  getConfigFilePath: () => join(paths.config, 'config.json'),
 }));
 
 describe('WebDAV Server - Initialization', () => {

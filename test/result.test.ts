@@ -1,7 +1,8 @@
 /**
  * Tests for Result type and utilities
  */
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { vol } from 'memfs';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import {
   andThen,
   collectResults,
@@ -17,14 +18,13 @@ import {
   unwrap,
   unwrapOr,
 } from '../src/utils/result.js';
-import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
 
-let __perTestEnv: PerTestEnv;
-beforeEach(async () => {
-  __perTestEnv = await setupPerTestEnv();
-});
-afterEach(async () => {
-  await __perTestEnv.cleanup();
+vi.mock('fs');
+vi.mock('fs/promises');
+
+beforeEach(() => {
+  // reset the state of in-memory fs
+  vol.reset();
 });
 
 describe('Result type - Creation', () => {

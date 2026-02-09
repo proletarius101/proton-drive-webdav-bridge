@@ -1,36 +1,18 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { afterEach, beforeEach } from 'vitest';
+import { vol } from 'memfs';
 import { driveClient } from '../src/drive.ts';
 import { WebDAVServer } from '../src/webdav/server.ts';
-import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
 
-let __perTestEnv: PerTestEnv;
-let pathsBase = mkdtempSync(join(tmpdir(), 'pdb-webdav-copymove-'));
+vi.mock('fs');
+vi.mock('fs/promises');
 
-beforeEach(async () => {
-  __perTestEnv = await setupPerTestEnv();
-  // Setup env-paths mock for this test
-  const { envPathsMockFromMap } = await import('./helpers/perTestEnv');
-  vi.doMock(
-    'env-paths',
-    envPathsMockFromMap({
-      config: join(__perTestEnv.baseDir, 'config'),
-      data: join(__perTestEnv.baseDir, 'data'),
-      log: join(__perTestEnv.baseDir, 'log'),
-      temp: join(__perTestEnv.baseDir, 'temp'),
-      cache: join(__perTestEnv.baseDir, 'cache'),
-    })
-  );
-});
-
-afterEach(async () => {
-  await __perTestEnv.cleanup();
-  vi.resetModules();
-  if (pathsBase) rmSync(pathsBase, { recursive: true, force: true });
+beforeEach(() => {
+  // reset the state of in-memory fs
+  vol.reset();
 });
 
 interface Node {
@@ -60,7 +42,6 @@ describe('WebDAV COPY/MOVE permission semantics', () => {
   beforeAll(() => {
     // Set up isolated temp directory for this entire test suite
     baseDir = mkdtempSync(join(tmpdir(), 'pdb-webdav-copymove-'));
-    pathsBase = baseDir;
 
     // Force file-based encrypted storage for keyring (not testing keyring itself)
     process.env.KEYRING_PASSWORD = 'test-keyring-password';

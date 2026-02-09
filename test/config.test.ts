@@ -2,40 +2,35 @@
  * Comprehensive Integration Tests - Configuration Module
  *
  * Tests config loading, saving, updates, validation, file watching, and callbacks.
- * Uses dynamic imports with setupPerTestEnv() for true per-test isolation.
+ * Uses dynamic imports with mockFileSystem() for true per-test isolation.
  */
 
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'fs';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { setupPerTestEnv, type PerTestEnv } from './helpers/perTestEnv.js';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { vol } from 'memfs';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import {
+  getConfig,
+  loadConfig,
+  onConfigChange,
+  saveConfig,
+  unwatchConfigFile,
+  updateConfig,
+  validateWebDAVConfig,
+  watchConfigFile,
+} from '../src/config.js';
+import { getConfigFilePath } from '../src/paths.js';
+
+vi.mock('fs');
+vi.mock('fs/promises');
+
+beforeEach(() => {
+  // reset the state of in-memory fs
+  vol.reset();
+});
 
 describe('Config - Initialization and Defaults', () => {
-  let env: PerTestEnv;
-
-  beforeEach(async () => {
-    env = await setupPerTestEnv();
-  });
-
-  afterEach(async () => {
-    // Dynamically import and unwatchConfigFile to clean up file watchers
-    try {
-      const { unwatchConfigFile } = await import(`../src/config.js`);
-      unwatchConfigFile();
-    } catch {
-      // If import fails, continue cleanup
-    }
-    await env.cleanup();
-  });
-
   test('creates default config when missing', async () => {
-    const { loadConfig, getConfigFilePath } = await import(`../src/config.js`);
-
     const configPath = getConfigFilePath();
-    // Ensure no config exists before test
-    if (existsSync(configPath)) {
-      rmSync(configPath);
-    }
-
     const config = loadConfig();
 
     // Verify defaults
@@ -58,7 +53,6 @@ describe('Config - Initialization and Defaults', () => {
   });
 
   test('loads existing config from file', async () => {
-    const { loadConfig, getConfigFilePath } = await import(`../src/config.js`);
     const { getConfigDir } = await import(`../src/paths.js`);
 
     // Create custom config
@@ -84,7 +78,6 @@ describe('Config - Initialization and Defaults', () => {
   });
 
   test('merges partial config with defaults', async () => {
-    const { loadConfig, getConfigFilePath } = await import(`../src/config.js`);
     const { getConfigDir } = await import(`../src/paths.js`);
 
     const configPath = getConfigFilePath();
@@ -100,7 +93,6 @@ describe('Config - Initialization and Defaults', () => {
   });
 
   test('handles invalid JSON gracefully', async () => {
-    const { loadConfig, getConfigFilePath } = await import(`../src/config.js`);
     const { getConfigDir } = await import(`../src/paths.js`);
 
     const configPath = getConfigFilePath();
@@ -115,27 +107,15 @@ describe('Config - Initialization and Defaults', () => {
 });
 
 describe('Config - Updates and Persistence', () => {
-  let env: PerTestEnv;
-
-  beforeEach(async () => {
-    env = await setupPerTestEnv();
-  });
-
   afterEach(async () => {
     try {
-      const { unwatchConfigFile } = await import(`../src/config.js`);
       unwatchConfigFile();
     } catch {
       // ignore
     }
-    await env.cleanup();
   });
 
   test('updates and persists config', async () => {
-    const { loadConfig, updateConfig, getConfigFilePath, getConfig } = await import(
-      `../src/config.js`
-    );
-
     loadConfig();
     const updated = updateConfig({
       webdav: { host: '127.0.0.1', port: 9090, requireAuth: false, https: false },
@@ -151,8 +131,6 @@ describe('Config - Updates and Persistence', () => {
   });
 
   test('updateConfig merges deeply', async () => {
-    const { loadConfig, updateConfig } = await import(`../src/config.js`);
-
     loadConfig();
     updateConfig({ webdav: { host: '127.0.0.1', port: 5000, requireAuth: true, https: false } });
     const config = updateConfig({ debug: true });
@@ -163,10 +141,6 @@ describe('Config - Updates and Persistence', () => {
   });
 
   test('saveConfig writes to file', async () => {
-    const { loadConfig, saveConfig, getConfigFilePath } = await import(
-      `../src/config.js`
-    );
-
     const config = loadConfig();
     config.debug = true;
     config.webdav.port = 7777;
@@ -178,10 +152,6 @@ describe('Config - Updates and Persistence', () => {
   });
 
   test('getConfig returns current config', async () => {
-    const { loadConfig, getConfig, updateConfig } = await import(
-      `../src/config.js`
-    );
-
     loadConfig();
     updateConfig({ debug: true });
     const config = getConfig();
@@ -190,27 +160,15 @@ describe('Config - Updates and Persistence', () => {
 });
 
 describe('Config - Change Callbacks', () => {
-  let env: PerTestEnv;
-
-  beforeEach(async () => {
-    env = await setupPerTestEnv();
-  });
-
   afterEach(async () => {
     try {
-      const { unwatchConfigFile } = await import(`../src/config.js`);
       unwatchConfigFile();
     } catch {
       // ignore
     }
-    await env.cleanup();
   });
 
   test('onConfigChange callback is invoked on update', async () => {
-    const { loadConfig, updateConfig, onConfigChange } = await import(
-      `../src/config.js`
-    );
-
     loadConfig();
 
     let callbackInvoked = false;
@@ -229,10 +187,6 @@ describe('Config - Change Callbacks', () => {
   });
 
   test('onConfigChange returns unsubscribe function', async () => {
-    const { loadConfig, updateConfig, onConfigChange } = await import(
-      `../src/config.js`
-    );
-
     loadConfig();
 
     let callCount = 0;
@@ -249,10 +203,6 @@ describe('Config - Change Callbacks', () => {
   });
 
   test('multiple callbacks can be registered', async () => {
-    const { loadConfig, updateConfig, onConfigChange } = await import(
-      `../src/config.js`
-    );
-
     loadConfig();
 
     let callback1Count = 0;
@@ -270,8 +220,6 @@ describe('Config - Change Callbacks', () => {
 
 describe('Config - Validation', () => {
   test('validateWebDAVConfig rejects invalid port', async () => {
-    const { validateWebDAVConfig } = await import(`../src/config.js`);
-
     const invalidConfig = {
       host: '127.0.0.1',
       port: 99999,
@@ -285,8 +233,6 @@ describe('Config - Validation', () => {
   });
 
   test('validateWebDAVConfig requires auth credentials when enabled', async () => {
-    const { validateWebDAVConfig } = await import(`../src/config.js`);
-
     const config = {
       host: '127.0.0.1',
       port: 8080,
@@ -300,8 +246,6 @@ describe('Config - Validation', () => {
   });
 
   test('validateWebDAVConfig requires cert/key for HTTPS', async () => {
-    const { validateWebDAVConfig } = await import(`../src/config.js`);
-
     const config = {
       host: '127.0.0.1',
       port: 8080,
@@ -316,8 +260,6 @@ describe('Config - Validation', () => {
   });
 
   test('validateWebDAVConfig accepts valid config', async () => {
-    const { validateWebDAVConfig } = await import(`../src/config.js`);
-
     const config = {
       host: '127.0.0.1',
       port: 8080,
@@ -331,29 +273,15 @@ describe('Config - Validation', () => {
 });
 
 describe('Config - File Watching', () => {
-  let env: PerTestEnv;
-
-  beforeEach(async () => {
-    env = await setupPerTestEnv();
-  });
-
-  afterEach(async () => {
-    await env.cleanup();
-  });
+  afterEach(async () => {});
 
   test('watchConfigFile and unwatchConfigFile execute without error', async () => {
-    const { loadConfig, watchConfigFile, unwatchConfigFile } = await import(
-      `../src/config.js`
-    );
-
     loadConfig();
     expect(() => watchConfigFile()).not.toThrow();
     expect(() => unwatchConfigFile()).not.toThrow();
   });
 
   test('watchConfigFile is idempotent', async () => {
-    const { loadConfig, watchConfigFile } = await import(`../src/config.js`);
-
     loadConfig();
     watchConfigFile();
     expect(() => watchConfigFile()).not.toThrow(); // Should not error on second call

@@ -1,30 +1,15 @@
-import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdirSync, writeFileSync } from 'fs';
-import { mkdtemp, rm } from 'fs/promises';
-import { tmpdir } from 'os';
+import { User } from 'nephele';
 import { join } from 'path';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { getDataDir } from '../src/paths.js';
+import { mockFileSystem } from './helpers/perTestEnv.js';
 
 // Per-test dynamic setup: create unique temp dirs and register env-paths mock
-let baseDirs: string[] = [];
 let LockManager: any;
 
 beforeEach(async () => {
-  // Create per-test temp dirs
-  const config = await mkdtemp(join(tmpdir(), 'pdb-lock-config-'));
-  const data = await mkdtemp(join(tmpdir(), 'pdb-lock-data-'));
-  const log = await mkdtemp(join(tmpdir(), 'pdb-lock-log-'));
-  const temp = await mkdtemp(join(tmpdir(), 'pdb-lock-temp-'));
-  const cache = await mkdtemp(join(tmpdir(), 'pdb-lock-cache-'));
-  baseDirs.push(config, data, log, temp, cache);
-
-  // Register per-test env-paths mock and reset module cache so imports pick it up
-  vi.resetModules();
-  const { envPathsMockFromMap } = await import('./helpers/perTestEnv');
-  vi.doMock('env-paths', envPathsMockFromMap({ config, data, log, temp, cache }));
-
-  // Import paths and lock manager after mock is registered
-  const pathsMod = await import('../src/paths.js');
-  const getDataDir = pathsMod.getDataDir;
+  await mockFileSystem();
 
   // Ensure data dir exists for SQLite and pre-create database file
   const dataDir = getDataDir();
@@ -37,15 +22,6 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  // Remove temporary directories
-  for (const d of baseDirs) {
-    try {
-      await rm(d, { recursive: true, force: true });
-    } catch {
-      /* ignore errors during cleanup */
-    }
-  }
-  baseDirs = [];
   // Ensure LockManager singleton is reset
   try {
     const inst = LockManager.getInstance();
