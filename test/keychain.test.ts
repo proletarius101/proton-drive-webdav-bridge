@@ -40,9 +40,6 @@ beforeEach(async () => {
 
 afterEach(async () => {
   keyringStore.clear();
-  delete process.env.KEY_FILE_PASSWORD;
-  delete process.env.DISPLAY;
-  delete process.env.WAYLAND_DISPLAY;
   vi.restoreAllMocks();
   vi.clearAllMocks();
 });
@@ -62,7 +59,7 @@ const sampleCredentials = {
 
 describe('Keychain - File-Based Storage', () => {
   beforeEach(() => {
-    process.env.KEY_FILE_PASSWORD = 'secure-test-password-123';
+    vi.stubEnv('KEY_FILE_PASSWORD', 'secure-test-password-123');
   });
 
   test('stores and retrieves credentials with encryption', async () => {
@@ -130,15 +127,14 @@ describe('Keychain - File-Based Storage', () => {
 
 describe('Keychain - Encryption and Security', () => {
   test('uses different encryption key with different passwords', async () => {
-    process.env.KEY_FILE_PASSWORD = 'password1';
+    vi.stubEnv('KEY_FILE_PASSWORD', 'password1');
     await storeCredentials(sampleCredentials);
     await flushPendingWrites();
     const filePath = getCredentialsFilePath();
     const encrypted1 = readFileSync(filePath);
 
     // Change password and re-encrypt
-    delete process.env.KEY_FILE_PASSWORD;
-    process.env.KEY_FILE_PASSWORD = 'password2';
+    vi.stubEnv('KEY_FILE_PASSWORD', 'password2');
     await storeCredentials(sampleCredentials);
     await flushPendingWrites();
     const encrypted2 = readFileSync(filePath);
@@ -148,19 +144,18 @@ describe('Keychain - Encryption and Security', () => {
   });
 
   test('fails to decrypt with wrong password', async () => {
-    process.env.KEY_FILE_PASSWORD = 'correct-password';
+    vi.stubEnv('KEY_FILE_PASSWORD', 'correct-password');
     await storeCredentials(sampleCredentials);
 
     // Try to read with wrong password
-    delete process.env.KEY_FILE_PASSWORD;
-    process.env.KEY_FILE_PASSWORD = 'wrong-password';
+    vi.stubEnv('KEY_FILE_PASSWORD', 'wrong-password');
 
     const stored = await getStoredCredentials();
     expect(stored).toBeNull(); // Should return null on decryption failure
   });
 
   test('uses default password when KEY_FILE_PASSWORD not set', async () => {
-    delete process.env.KEY_FILE_PASSWORD;
+    vi.stubEnv('KEY_FILE_PASSWORD', undefined);
     await storeCredentials(sampleCredentials);
     const stored = await getStoredCredentials();
 
@@ -174,7 +169,7 @@ describe('Keychain - Encryption and Security', () => {
 
 describe('Keychain - Platform Detection', () => {
   test('uses file storage when KEY_FILE_PASSWORD is set', async () => {
-    process.env.KEY_FILE_PASSWORD = 'explicit-file-storage';
+    vi.stubEnv('KEY_FILE_PASSWORD', 'explicit-file-storage');
     await storeCredentials(sampleCredentials);
     await flushPendingWrites();
 
@@ -186,7 +181,7 @@ describe('Keychain - Platform Detection', () => {
 
 describe('Keychain - Error Handling', () => {
   beforeEach(() => {
-    process.env.KEY_FILE_PASSWORD = 'test-password';
+    vi.stubEnv('KEY_FILE_PASSWORD', 'test-password');
   });
 
   test('deleteStoredCredentials does not throw when no credentials exist', async () => {
@@ -208,7 +203,7 @@ describe('Keychain - Error Handling', () => {
 
 describe('Keychain - Credential Structure', () => {
   beforeEach(() => {
-    process.env.KEY_FILE_PASSWORD = 'test-password';
+    vi.stubEnv('KEY_FILE_PASSWORD', 'test-password');
   });
 
   test('preserves all credential fields', async () => {

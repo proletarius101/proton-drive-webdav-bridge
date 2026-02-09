@@ -27,7 +27,6 @@ describe('WebDAV COPY/MOVE permission semantics', () => {
   const nodes = new Map<string, Node>();
   const children = new Map<string, Set<string>>();
   let uidCounter = 0;
-  let baseDir: string;
 
   const createUid = () => `n-${uidCounter++}`;
   const ensure = (p: string) => {
@@ -41,7 +40,7 @@ describe('WebDAV COPY/MOVE permission semantics', () => {
 
   beforeAll(() => {
     // Force file-based encrypted storage for keyring (not testing keyring itself)
-    process.env.KEY_FILE_PASSWORD = 'test-keyring-password';
+    vi.stubEnv('KEY_FILE_PASSWORD', 'test-keyring-password');
 
     const root = { uid: 'root', name: '', type: 'folder', parentUid: null };
     add(root as Node);
@@ -88,10 +87,6 @@ describe('WebDAV COPY/MOVE permission semantics', () => {
       const node = nodes.get(uid);
       if (node) node.name = newName;
     };
-  });
-
-  afterAll(() => {
-    delete process.env.KEY_FILE_PASSWORD;
   });
 
   it('COPY to existing destination with Overwrite:F returns 412', async () => {

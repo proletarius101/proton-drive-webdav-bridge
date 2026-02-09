@@ -132,7 +132,7 @@ describe('webdav range requests', () => {
 
   beforeAll(() => {
     // Force file-based encrypted storage for keyring (not testing keyring itself)
-    process.env.KEY_FILE_PASSWORD = 'test-keyring-password';
+    vi.stubEnv('KEY_FILE_PASSWORD', 'test-keyring-password');
 
     const rootNode: InMemoryNode = {
       uid: 'root',
@@ -306,7 +306,6 @@ describe('webdav range requests', () => {
     driveClient.resolvePath = originalMethods.resolvePath;
     driveClient.findNodeByName = originalMethods.findNodeByName;
     driveClient.getNode = originalMethods.getNode;
-    delete process.env.KEY_FILE_PASSWORD;
   });
 
   it('returns 206 Partial Content for Range requests', async () => {

@@ -73,7 +73,7 @@ describe('WebDAV PROPFIND recursion and filtering', () => {
   };
   beforeAll(() => {
     // Force file-based encrypted storage for keyring (not testing keyring itself)
-    process.env.KEY_FILE_PASSWORD = 'test-keyring-password';
+    vi.stubEnv('KEY_FILE_PASSWORD', 'test-keyring-password');
 
     const root: Node = {
       uid: 'root',
@@ -179,10 +179,6 @@ describe('WebDAV PROPFIND recursion and filtering', () => {
       });
       return newUid;
     };
-  });
-
-  afterAll(() => {
-    delete process.env.KEY_FILE_PASSWORD;
   });
 
   it('PROPFIND depth=infinity returns all members', async () => {

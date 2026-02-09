@@ -18,7 +18,7 @@ let server: InstanceType<typeof WebDAVServer> | null = null;
 
 beforeEach(() => {
   // Force file-based encrypted storage for keyring (not testing keyring itself)
-  process.env.KEY_FILE_PASSWORD = 'test-keyring-password';
+  vi.stubEnv('KEY_FILE_PASSWORD', 'test-keyring-password');
 
   // Ensure DB file exists (create data dir and touch locks DB)
   const dataDir = getDataDir();
@@ -48,9 +48,6 @@ afterEach(async () => {
 
   if (server) await server.stop();
   server = null;
-
-  // Clean up keyring environment
-  delete process.env.KEY_FILE_PASSWORD;
 });
 
 // These tests assert behavior when a depth:infinity lock is applied to a collection

@@ -1,6 +1,3 @@
-import { mkdtempSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 
 // Create module-level mockState object
@@ -51,6 +48,7 @@ vi.mock('@inquirer/prompts', () => ({
 }));
 
 // Use real modules
+import { Command } from 'commander';
 import { buildProgram } from '../src/index.js';
 
 const sample = {
@@ -89,8 +87,7 @@ async function captureConsoleAsync(fn: () => Promise<void>) {
 }
 
 describe('CLI - status command', () => {
-  let baseDir: string;
-  let program: any;
+  let program: Command;
 
   beforeAll(() => {
     // Build the CLI program once to avoid duplicate commander option registration
@@ -106,15 +103,13 @@ describe('CLI - status command', () => {
     keychainMocks.hasStoredCredentials.mockClear();
     keychainMocks.deleteStoredCredentials.mockClear();
 
-    baseDir = mkdtempSync(join(tmpdir(), 'pdb-status-'));
     // Force file-based encrypted storage for keyring (not testing keyring itself)
-    process.env.KEY_FILE_PASSWORD = 'test-keyring-password';
+    vi.stubEnv('KEY_FILE_PASSWORD', 'test-keyring-password');
   });
 
   afterEach(async () => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
-    delete process.env.KEY_FILE_PASSWORD;
   });
 
   test('status --json shows logged-in user with username from config', async () => {
