@@ -14,7 +14,7 @@ include:
 variables:
   GITLAB_ADVANCED_SAST_ENABLED: 'true'
 
-image: oven/bun:latest
+image: node:latest
 stages:
 - lint
 - test
@@ -25,32 +25,30 @@ cache:
   key: "${CI_JOB_NAME}-${CI_COMMIT_REF_SLUG}"
   paths:
   - node_modules/
-  - ".bun/"
-  - bun.lockb
-".before_script":
-- bun -v
-- bun install --frozen-lockfile
 lint:
   stage: lint
   before_script:
-  - bun -v
-  - bun install --frozen-lockfile
+  - node -v && npm -v
+  - npm ci
   script:
-  - bun run lint
+  - npm run lint -- --format gitlab
   rules:
   - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     when: always
   - if: $CI_PIPELINE_SOURCE == "push"
     when: on_success
+  artifacts:
+    reports:
+      codequality: gl-code-quality-report.json
 unit_tests:
   stage: test
   before_script:
-  - bun -v
-  - bun install --frozen-lockfile
+  - node -v && npm -v
+  - npm ci
   script:
   - mkdir -p test-results
-  - bun run build:check
-  - bun run test:ci
+  - npm run build:check
+  - npm run test:ci
   rules:
   - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     when: always
@@ -66,11 +64,11 @@ unit_tests:
 e2e_tests:
   stage: test
   before_script:
-  - bun -v
-  - bun install --frozen-lockfile
+  - node -v && npm -v
+  - npm ci
   script:
   - mkdir -p test-results
-  - bun run test:e2e:ci
+  - npm run test:e2e:ci
   rules:
   - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     when: manual
@@ -87,11 +85,11 @@ e2e_tests:
 build:
   stage: build
   before_script:
-  - bun -v
-  - bun install --frozen-lockfile
+  - node -v && npm -v
+  - npm ci
   script:
-  - bun run build
-  - bun run build:bin
+  - npm run build
+  - npm run build:bin
   artifacts:
     paths:
     - dist/
@@ -105,11 +103,11 @@ build:
 release:
   stage: release
   before_script:
-  - bun -v
-  - bun install --frozen-lockfile
+  - node -v && npm -v
+  - npm ci
   script:
-  - bun run build
-  - bun run build:bin
+  - npm run build
+  - npm run build:bin
   - tar -czf "proton-drive-webdav-bridge-${CI_COMMIT_TAG}.tar.gz" -C dist .
   rules:
   - if: "$CI_COMMIT_TAG"
@@ -139,7 +137,7 @@ generate-sbom:
   stage: test
   image: sbomifyhub/sbomify-action
   variables:
-    LOCK_FILE: bun.lock
+    LOCK_FILE: package-lock.json
     OUTPUT_FILE: gl-sbom-report.cdx.json
     UPLOAD: "false"
     ENRICH: "true"
