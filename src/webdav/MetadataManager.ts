@@ -16,7 +16,7 @@ interface MetaRow {
 }
 
 export class MetadataManager {
-  private db: Database;
+  private db: InstanceType<typeof Database>;
   private static instance: MetadataManager | null = null;
 
   private constructor() {
@@ -59,13 +59,15 @@ export class MetadataManager {
       .prepare<[string], MetaRow>('SELECT * FROM metadata WHERE node_uid = ?')
       .get(nodeUid);
     if (existing) {
-      this.db.prepare(
-        'UPDATE metadata SET props = ?, updated_at = ?, version = version + 1 WHERE node_uid = ?'
-      ).run(propsJson, now, nodeUid);
+      this.db
+        .prepare(
+          'UPDATE metadata SET props = ?, updated_at = ?, version = version + 1 WHERE node_uid = ?'
+        )
+        .run(propsJson, now, nodeUid);
     } else {
-      this.db.prepare(
-        'INSERT INTO metadata (node_uid, props, updated_at, version) VALUES (?, ?, ?, 1)'
-      ).run(nodeUid, propsJson, now);
+      this.db
+        .prepare('INSERT INTO metadata (node_uid, props, updated_at, version) VALUES (?, ?, ?, 1)')
+        .run(nodeUid, propsJson, now);
     }
   }
 

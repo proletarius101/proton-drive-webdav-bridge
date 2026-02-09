@@ -46,7 +46,7 @@ interface LockRow {
 // ============================================================================
 
 export class LockManager {
-  private db: Database;
+  private db: InstanceType<typeof Database>;
   private static instance: LockManager | null = null;
 
   private constructor() {
@@ -125,21 +125,23 @@ export class LockManager {
     const now = Date.now();
     const expiresAt = now + timeout * 1000;
 
-    this.db.prepare(
-      `INSERT INTO locks (token, path, username, created_at, expires_at, timeout, scope, depth, provisional, owner)
+    this.db
+      .prepare(
+        `INSERT INTO locks (token, path, username, created_at, expires_at, timeout, scope, depth, provisional, owner)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      token,
-      path,
-      user.username,
-      now,
-      expiresAt,
-      timeout,
-      scope,
-      depth,
-      provisional ? 1 : 0,
-      JSON.stringify(owner)
-    );
+      )
+      .run(
+        token,
+        path,
+        user.username,
+        now,
+        expiresAt,
+        timeout,
+        scope,
+        depth,
+        provisional ? 1 : 0,
+        JSON.stringify(owner)
+      );
 
     return {
       token,
@@ -181,9 +183,11 @@ export class LockManager {
   getLocksForPath(path: string): LockInfo[] {
     this.cleanupExpiredLocks();
 
-    const rows = this.db.prepare<[string], LockRow>('SELECT * FROM locks WHERE path = ?').all(path);
+    const rows = this.db
+      .prepare<[string], LockRow>('SELECT * FROM locks WHERE path = ?')
+      .all(path) as LockRow[];
 
-    return rows.map((row) => this.rowToLockInfo(row));
+    return rows.map((row: LockRow) => this.rowToLockInfo(row));
   }
 
   getLocksForUser(username: string): LockInfo[] {
@@ -191,17 +195,17 @@ export class LockManager {
 
     const rows = this.db
       .prepare<[string], LockRow>('SELECT * FROM locks WHERE username = ?')
-      .all(username);
+      .all(username) as LockRow[];
 
-    return rows.map((row) => this.rowToLockInfo(row));
+    return rows.map((row: LockRow) => this.rowToLockInfo(row));
   }
 
   getAllLocks(): LockInfo[] {
     this.cleanupExpiredLocks();
 
-    const rows = this.db.prepare<[], LockRow>('SELECT * FROM locks').all();
+    const rows = this.db.prepare<[], LockRow>('SELECT * FROM locks').all() as LockRow[];
 
-    return rows.map((row) => this.rowToLockInfo(row));
+    return rows.map((row: LockRow) => this.rowToLockInfo(row));
   }
 
   refreshLock(token: string, timeout: number): boolean {
@@ -218,11 +222,9 @@ export class LockManager {
     const now = Date.now();
     const expiresAt = now + timeout * 1000;
 
-    const result = this.db.prepare('UPDATE locks SET expires_at = ?, timeout = ? WHERE token = ?').run(
-      expiresAt,
-      timeout,
-      normalized
-    );
+    const result = this.db
+      .prepare('UPDATE locks SET expires_at = ?, timeout = ? WHERE token = ?')
+      .run(expiresAt, timeout, normalized);
 
     return result.changes > 0;
   }
@@ -250,9 +252,13 @@ export class LockManager {
       params.push(ignoreToken);
     }
 
-    const result = this.db
-      .prepare<[string] | [string, string], { count: number }>(query)
-      .get(...(params as [string] | [string, string]));
+    const stmt = this.db.prepare(query);
+    let result: { count: number } | undefined;
+    if (ignoreToken) {
+      result = stmt.get(path, ignoreToken) as { count: number } | undefined;
+    } else {
+      result = stmt.get(path) as { count: number } | undefined;
+    }
 
     return (result?.count ?? 0) > 0;
   }
@@ -299,7 +305,7 @@ export class LockManager {
       const childLocks = this.db
         .prepare<[string], LockRow>('SELECT * FROM locks WHERE path LIKE ?')
         .all(`${path}/%`);
-      locks.push(...childLocks.map((row) => this.rowToLockInfo(row)));
+      locks.push(...(childLocks as LockRow[]).map((row: LockRow) => this.rowToLockInfo(row)));
     }
 
     // Check for parent locks with depth infinity
@@ -309,7 +315,7 @@ export class LockManager {
       const parentLocks = this.db
         .prepare<[string, string], LockRow>('SELECT * FROM locks WHERE path = ? AND depth = ?')
         .all(parentPath, 'infinity');
-      locks.push(...parentLocks.map((row) => this.rowToLockInfo(row)));
+      locks.push(...(parentLocks as LockRow[]).map((row: LockRow) => this.rowToLockInfo(row)));
     }
 
     return locks;
