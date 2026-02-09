@@ -14,7 +14,7 @@ include:
 variables:
   GITLAB_ADVANCED_SAST_ENABLED: 'true'
 
-image: node:latest
+image: node:slim
 stages:
 - lint
 - test
