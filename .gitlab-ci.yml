@@ -8,7 +8,7 @@
 
 include:
 - template: Security/SAST.gitlab-ci.yml
-- template: Security/Dependency-Scanning.gitlab-ci.yml
+- template: Security/Dependency-Scanning.v2.gitlab-ci.yml
 - template: Security/Secret-Detection.gitlab-ci.yml
 
 variables:
@@ -132,19 +132,3 @@ secret_detection:
 
 sast:
   stage: test
-
-generate-sbom:
-  stage: test
-  image: sbomifyhub/sbomify-action
-  variables:
-    LOCK_FILE: package-lock.json
-    OUTPUT_FILE: gl-sbom-report.cdx.json
-    UPLOAD: "false"
-    ENRICH: "true"
-  script:
-    - /opt/venv/bin/sbomify-action
-  artifacts:
-    paths:
-      - gl-sbom-report.cdx.json
-    reports:
-      cyclonedx: gl-sbom-report.cdx.json
