@@ -15,10 +15,6 @@ import { driveClient } from '../src/drive.ts';
 import { WebDAVServer } from '../src/webdav/server.ts';
 import { createFileDownloader } from './utils/seekableMock.ts';
 
-// Mock env-paths to avoid auth attempts
-// Note: These E2E tests should be run separately to avoid singleton/resource conflicts.
-// Run with: bun test test/webdav.range.e2e.test.ts
-
 vi.mock('fs');
 vi.mock('fs/promises');
 

@@ -58,7 +58,7 @@ afterEach(async () => {
 });
 
 // Note: These E2E tests should be run separately from other tests to avoid
-// singleton/resource conflicts. Run with: bun test test/webdav.lock.e2e.test.ts
+// singleton/resource conflicts.
 describe('WebDAV LOCK/UNLOCK integration', () => {
   it('creates a lock via LOCK and removes it via UNLOCK', { timeout: 10000 }, async () => {
     server = new WebDAVServer({ host: '127.0.0.1', port: 0, requireAuth: false });
