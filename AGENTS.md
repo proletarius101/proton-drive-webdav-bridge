@@ -26,7 +26,7 @@ Quick, focused notes to help an AI coding agent be productive in this repo.
 - Reference implementations: `https://github.com/sciactive/nephele/tree/master/packages/adapter-s3` (WebDAV server & adapter examples) and `https://github.com/ProtonMail/WebClients` (Drive API usage, pagination, and client-side patterns)
 
 ## Project-specific patterns & gotchas ⚠️
-- Runtime: the project uses Node.js and npm for development and testing. Some historical notes reference Bun; the repository has been migrated to run under Node.js.
+- Runtime: the project uses Node.js and npm for development and testing.
 - ESM imports include `.js` extension in source imports (keep `./foo.js` in imports).
 - Frontend: the UI is implemented with React and styled using Mielo UI to achieve an Adwaita look & feel. See `src/gui/` and `MIGRATION_TO_MIELO_UI.md` for guidance when modifying UI components and styles.
 - Streaming: prefer streaming for uploads/downloads (avoid buffering). See `getFileDownloader()` + `downloadToStream(...)` and `uploadFile(...)` which accepts ReadableStream / Buffer / Uint8Array.
