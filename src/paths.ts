@@ -8,7 +8,7 @@ import envPaths from 'env-paths';
 import { join } from 'path';
 import { mkdirSync } from 'fs';
 import { tmpdir } from 'os';
-import logger from './logger';
+import logger from './logger.js';
 
 // ============================================================================
 // Path Constants

@@ -7,7 +7,7 @@
 import { join } from 'path';
 import winston from 'winston';
 import DailyRotateFile from 'winston-daily-rotate-file';
-import { paths } from './paths';
+import { paths } from './paths.js';
 
 // ============================================================================
 // Configuration
