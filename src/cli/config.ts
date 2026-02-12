@@ -7,8 +7,9 @@
 import { Command } from 'commander';
 import { input, confirm, password as passwordPrompt } from '@inquirer/prompts';
 import { createHash } from 'crypto';
-import { updateConfig, loadConfig, getConfigFilePath, validateWebDAVConfig } from '../config.js';
+import { updateConfig, loadConfig, validateWebDAVConfig } from '../config.js';
 import { logger } from '../logger.js';
+import { getConfigFilePath } from '../paths.js';
 
 export function registerConfigCommand(program: Command): void {
   const configCmd = program.command('config').description('Manage configuration settings');

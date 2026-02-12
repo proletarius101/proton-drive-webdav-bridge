@@ -1,16 +1,16 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { vol } from 'memfs';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { DriveClientManager } from '../src/drive.js';
 import MetadataManager from '../src/webdav/MetadataManager.js';
 import ProtonDriveAdapter from '../src/webdav/ProtonDriveAdapter.js';
 import ProtonDriveResource from '../src/webdav/ProtonDriveResource.js';
-import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
 
-let __perTestEnv: PerTestEnv;
-beforeEach(async () => {
-  __perTestEnv = await setupPerTestEnv();
-});
-afterEach(async () => {
-  await __perTestEnv.cleanup();
+vi.mock('fs');
+vi.mock('fs/promises');
+
+beforeEach(() => {
+  // reset the state of in-memory fs
+  vol.reset();
 });
 
 let adapter: ProtonDriveAdapter;

@@ -8,7 +8,7 @@
  * - Version information
  */
 
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect } from 'vitest';
 
 describe('CLI Entry Point - Program Structure', () => {
   test('should have program name proton-drive-webdav-bridge', async () => {

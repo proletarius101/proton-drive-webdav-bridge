@@ -2,62 +2,35 @@
  * Comprehensive Integration Tests - Configuration Module
  *
  * Tests config loading, saving, updates, validation, file watching, and callbacks.
+ * Uses dynamic imports with mockFileSystem() for true per-test isolation.
  */
 
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
-import { afterEach, beforeEach, describe, expect, test, mock } from 'bun:test';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { vol } from 'memfs';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import {
+  getConfig,
+  loadConfig,
+  onConfigChange,
+  saveConfig,
+  unwatchConfigFile,
+  updateConfig,
+  validateWebDAVConfig,
+  watchConfigFile,
+} from '../src/config.js';
+import { getConfigFilePath } from '../src/paths.js';
 
-const DEFAULT_PATHS_BASE = join(tmpdir(), 'pdb-config-default');
-let pathsBase = DEFAULT_PATHS_BASE;
+vi.mock('fs');
+vi.mock('fs/promises');
 
-mock.module('env-paths', () => ({
-  default: () => {
-    const paths = {
-      config: join(pathsBase, 'config', 'proton-drive-webdav-bridge'),
-      data: join(pathsBase, 'data', 'proton-drive-webdav-bridge'),
-      log: join(pathsBase, 'log', 'proton-drive-webdav-bridge'),
-      temp: join(pathsBase, 'temp', 'proton-drive-webdav-bridge'),
-      cache: join(pathsBase, 'cache', 'proton-drive-webdav-bridge'),
-    };
-
-    // Create directories on access
-    Object.values(paths).forEach((path) => mkdirSync(path, { recursive: true }));
-
-    return paths;
-  },
-}));
+beforeEach(() => {
+  // reset the state of in-memory fs
+  vol.reset();
+});
 
 describe('Config - Initialization and Defaults', () => {
-  let baseDir: string;
-
-  beforeEach(() => {
-    baseDir = mkdtempSync(join(tmpdir(), 'pdb-config-'));
-    pathsBase = baseDir;
-  });
-
-  afterEach(async () => {
-    // Dynamically import and unwatchConfigFile to clean up file watchers
-    try {
-      const { unwatchConfigFile } = await import(`../src/config.ts?cache=${Date.now()}`);
-      unwatchConfigFile();
-    } catch {
-      // If import fails, continue cleanup
-    }
-    rmSync(baseDir, { recursive: true, force: true });
-    pathsBase = DEFAULT_PATHS_BASE;
-  });
-
   test('creates default config when missing', async () => {
-    const { loadConfig, getConfigFilePath } = await import(`../src/config.ts?cache=${Date.now()}`);
-
     const configPath = getConfigFilePath();
-    // Ensure no config exists before test
-    if (existsSync(configPath)) {
-      rmSync(configPath);
-    }
-
     const config = loadConfig();
 
     // Verify defaults
@@ -80,8 +53,7 @@ describe('Config - Initialization and Defaults', () => {
   });
 
   test('loads existing config from file', async () => {
-    const { loadConfig, getConfigFilePath } = await import(`../src/config.ts?cache=${Date.now()}`);
-    const { getConfigDir } = await import(`../src/paths.ts?cache=${Date.now()}`);
+    const { getConfigDir } = await import(`../src/paths.js`);
 
     // Create custom config
     const configPath = getConfigFilePath();
@@ -106,8 +78,7 @@ describe('Config - Initialization and Defaults', () => {
   });
 
   test('merges partial config with defaults', async () => {
-    const { loadConfig, getConfigFilePath } = await import(`../src/config.ts?cache=${Date.now()}`);
-    const { getConfigDir } = await import(`../src/paths.ts?cache=${Date.now()}`);
+    const { getConfigDir } = await import(`../src/paths.js`);
 
     const configPath = getConfigFilePath();
     getConfigDir();
@@ -122,8 +93,7 @@ describe('Config - Initialization and Defaults', () => {
   });
 
   test('handles invalid JSON gracefully', async () => {
-    const { loadConfig, getConfigFilePath } = await import(`../src/config.ts?cache=${Date.now()}`);
-    const { getConfigDir } = await import(`../src/paths.ts?cache=${Date.now()}`);
+    const { getConfigDir } = await import(`../src/paths.js`);
 
     const configPath = getConfigFilePath();
     getConfigDir();
@@ -137,31 +107,19 @@ describe('Config - Initialization and Defaults', () => {
 });
 
 describe('Config - Updates and Persistence', () => {
-  let baseDir: string;
-
-  beforeEach(() => {
-    baseDir = mkdtempSync(join(tmpdir(), 'pdb-config-'));
-    pathsBase = baseDir;
-  });
-
   afterEach(async () => {
     try {
-      const { unwatchConfigFile } = await import(`../src/config.ts?cache=${Date.now()}`);
       unwatchConfigFile();
     } catch {
       // ignore
     }
-    rmSync(baseDir, { recursive: true, force: true });
-    pathsBase = DEFAULT_PATHS_BASE;
   });
 
   test('updates and persists config', async () => {
-    const { loadConfig, updateConfig, getConfigFilePath, getConfig } = await import(
-      `../src/config.ts?cache=${Date.now()}`
-    );
-
     loadConfig();
-    const updated = updateConfig({ webdav: { port: 9090, requireAuth: false } });
+    const updated = updateConfig({
+      webdav: { host: '127.0.0.1', port: 9090, requireAuth: false, https: false },
+    });
 
     expect(updated.webdav.port).toBe(9090);
     expect(updated.webdav.requireAuth).toBe(false);
@@ -173,10 +131,8 @@ describe('Config - Updates and Persistence', () => {
   });
 
   test('updateConfig merges deeply', async () => {
-    const { loadConfig, updateConfig } = await import(`../src/config.ts?cache=${Date.now()}`);
-
     loadConfig();
-    updateConfig({ webdav: { port: 5000 } });
+    updateConfig({ webdav: { host: '127.0.0.1', port: 5000, requireAuth: true, https: false } });
     const config = updateConfig({ debug: true });
 
     expect(config.webdav.port).toBe(5000); // Previous update preserved
@@ -185,10 +141,6 @@ describe('Config - Updates and Persistence', () => {
   });
 
   test('saveConfig writes to file', async () => {
-    const { loadConfig, saveConfig, getConfigFilePath } = await import(
-      `../src/config.ts?cache=${Date.now()}`
-    );
-
     const config = loadConfig();
     config.debug = true;
     config.webdav.port = 7777;
@@ -200,10 +152,6 @@ describe('Config - Updates and Persistence', () => {
   });
 
   test('getConfig returns current config', async () => {
-    const { loadConfig, getConfig, updateConfig } = await import(
-      `../src/config.ts?cache=${Date.now()}`
-    );
-
     loadConfig();
     updateConfig({ debug: true });
     const config = getConfig();
@@ -212,34 +160,20 @@ describe('Config - Updates and Persistence', () => {
 });
 
 describe('Config - Change Callbacks', () => {
-  let baseDir: string;
-
-  beforeEach(() => {
-    baseDir = mkdtempSync(join(tmpdir(), 'pdb-config-'));
-    pathsBase = baseDir;
-  });
-
   afterEach(async () => {
     try {
-      const { unwatchConfigFile } = await import(`../src/config.ts?cache=${Date.now()}`);
       unwatchConfigFile();
     } catch {
       // ignore
     }
-    rmSync(baseDir, { recursive: true, force: true });
-    pathsBase = DEFAULT_PATHS_BASE;
   });
 
   test('onConfigChange callback is invoked on update', async () => {
-    const { loadConfig, updateConfig, onConfigChange } = await import(
-      `../src/config.ts?cache=${Date.now()}`
-    );
-
     loadConfig();
 
     let callbackInvoked = false;
     type ConfigType = ReturnType<typeof loadConfig>;
-    let callbackConfig: ConfigType | null = null;
+    let callbackConfig: any = null;
     onConfigChange((config: ConfigType) => {
       callbackInvoked = true;
       callbackConfig = config;
@@ -253,10 +187,6 @@ describe('Config - Change Callbacks', () => {
   });
 
   test('onConfigChange returns unsubscribe function', async () => {
-    const { loadConfig, updateConfig, onConfigChange } = await import(
-      `../src/config.ts?cache=${Date.now()}`
-    );
-
     loadConfig();
 
     let callCount = 0;
@@ -273,10 +203,6 @@ describe('Config - Change Callbacks', () => {
   });
 
   test('multiple callbacks can be registered', async () => {
-    const { loadConfig, updateConfig, onConfigChange } = await import(
-      `../src/config.ts?cache=${Date.now()}`
-    );
-
     loadConfig();
 
     let callback1Count = 0;
@@ -294,8 +220,6 @@ describe('Config - Change Callbacks', () => {
 
 describe('Config - Validation', () => {
   test('validateWebDAVConfig rejects invalid port', async () => {
-    const { validateWebDAVConfig } = await import(`../src/config.ts?cache=${Date.now()}`);
-
     const invalidConfig = {
       host: '127.0.0.1',
       port: 99999,
@@ -309,8 +233,6 @@ describe('Config - Validation', () => {
   });
 
   test('validateWebDAVConfig requires auth credentials when enabled', async () => {
-    const { validateWebDAVConfig } = await import(`../src/config.ts?cache=${Date.now()}`);
-
     const config = {
       host: '127.0.0.1',
       port: 8080,
@@ -324,8 +246,6 @@ describe('Config - Validation', () => {
   });
 
   test('validateWebDAVConfig requires cert/key for HTTPS', async () => {
-    const { validateWebDAVConfig } = await import(`../src/config.ts?cache=${Date.now()}`);
-
     const config = {
       host: '127.0.0.1',
       port: 8080,
@@ -340,8 +260,6 @@ describe('Config - Validation', () => {
   });
 
   test('validateWebDAVConfig accepts valid config', async () => {
-    const { validateWebDAVConfig } = await import(`../src/config.ts?cache=${Date.now()}`);
-
     const config = {
       host: '127.0.0.1',
       port: 8080,
@@ -355,31 +273,15 @@ describe('Config - Validation', () => {
 });
 
 describe('Config - File Watching', () => {
-  let baseDir: string;
-
-  beforeEach(() => {
-    baseDir = mkdtempSync(join(tmpdir(), 'pdb-config-'));
-    pathsBase = baseDir;
-  });
-
-  afterEach(() => {
-    rmSync(baseDir, { recursive: true, force: true });
-    pathsBase = DEFAULT_PATHS_BASE;
-  });
+  afterEach(async () => {});
 
   test('watchConfigFile and unwatchConfigFile execute without error', async () => {
-    const { loadConfig, watchConfigFile, unwatchConfigFile } = await import(
-      `../src/config.ts?cache=${Date.now()}`
-    );
-
     loadConfig();
     expect(() => watchConfigFile()).not.toThrow();
     expect(() => unwatchConfigFile()).not.toThrow();
   });
 
   test('watchConfigFile is idempotent', async () => {
-    const { loadConfig, watchConfigFile } = await import(`../src/config.ts?cache=${Date.now()}`);
-
     loadConfig();
     watchConfigFile();
     expect(() => watchConfigFile()).not.toThrow(); // Should not error on second call

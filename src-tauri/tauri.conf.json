@@ -23,8 +23,8 @@
   "build": {
     "frontendDist": "../dist/gui",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "bun run build:bin --outfile ./dist/proton-drive-webdav-bridge-${TAURI_ENV_TARGET_TRIPLE} && bun run gui:dev",
-    "beforeBuildCommand": "bun run build:bin --outfile ./dist/proton-drive-webdav-bridge-${TAURI_ENV_TARGET_TRIPLE} && bun run gui:build",
+    "beforeDevCommand": "npm run sidecar:build && npm run dev",
+    "beforeBuildCommand": "npm run sidecar:build && npm run build",
     "additionalWatchFolders": [
       "../src"
     ]

@@ -1,11 +1,11 @@
 /**
- * WebDAV Lock Manager using Bun SQLite
+ * WebDAV Lock Manager using better-sqlite3
  *
  * Manages WebDAV locks with SQLite persistence for reliability across server restarts.
  * Handles lock creation, validation, expiration, and cleanup.
  */
 
-import { Database } from 'bun:sqlite';
+import Database from 'better-sqlite3';
 import { join } from 'path';
 import { getDataDir } from '../paths.js';
 import { logger } from '../logger.js';
@@ -46,7 +46,7 @@ interface LockRow {
 // ============================================================================
 
 export class LockManager {
-  private db: Database;
+  private db: InstanceType<typeof Database>;
   private static instance: LockManager | null = null;
 
   private constructor() {
@@ -70,7 +70,7 @@ export class LockManager {
   }
 
   private initializeDatabase(): void {
-    this.db.run(`
+    this.db.exec(`
       CREATE TABLE IF NOT EXISTS locks (
         token TEXT PRIMARY KEY,
         path TEXT NOT NULL,
@@ -85,18 +85,18 @@ export class LockManager {
       )
     `);
 
-    this.db.run(`
+    this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_locks_path ON locks(path)
     `);
 
-    this.db.run(`
+    this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_locks_expires_at ON locks(expires_at)
     `);
   }
 
   private cleanupExpiredLocks(): void {
     const now = Date.now();
-    const result = this.db.run('DELETE FROM locks WHERE expires_at < ?', [now]);
+    const result = this.db.prepare('DELETE FROM locks WHERE expires_at < ?').run(now);
     if (result.changes > 0) {
       logger.info(`Cleaned up ${result.changes} expired locks`);
     }
@@ -125,10 +125,12 @@ export class LockManager {
     const now = Date.now();
     const expiresAt = now + timeout * 1000;
 
-    this.db.run(
-      `INSERT INTO locks (token, path, username, created_at, expires_at, timeout, scope, depth, provisional, owner)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
+    this.db
+      .prepare(
+        `INSERT INTO locks (token, path, username, created_at, expires_at, timeout, scope, depth, provisional, owner)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
         token,
         path,
         user.username,
@@ -138,9 +140,8 @@ export class LockManager {
         scope,
         depth,
         provisional ? 1 : 0,
-        JSON.stringify(owner),
-      ]
-    );
+        JSON.stringify(owner)
+      );
 
     return {
       token,
@@ -169,7 +170,7 @@ export class LockManager {
     if (!normalized) return null;
 
     const row = this.db
-      .query<LockRow, [string]>('SELECT * FROM locks WHERE token = ?')
+      .prepare<[string], LockRow>('SELECT * FROM locks WHERE token = ?')
       .get(normalized);
 
     if (!row) {
@@ -182,27 +183,29 @@ export class LockManager {
   getLocksForPath(path: string): LockInfo[] {
     this.cleanupExpiredLocks();
 
-    const rows = this.db.query<LockRow, [string]>('SELECT * FROM locks WHERE path = ?').all(path);
+    const rows = this.db
+      .prepare<[string], LockRow>('SELECT * FROM locks WHERE path = ?')
+      .all(path) as LockRow[];
 
-    return rows.map((row) => this.rowToLockInfo(row));
+    return rows.map((row: LockRow) => this.rowToLockInfo(row));
   }
 
   getLocksForUser(username: string): LockInfo[] {
     this.cleanupExpiredLocks();
 
     const rows = this.db
-      .query<LockRow, [string]>('SELECT * FROM locks WHERE username = ?')
-      .all(username);
+      .prepare<[string], LockRow>('SELECT * FROM locks WHERE username = ?')
+      .all(username) as LockRow[];
 
-    return rows.map((row) => this.rowToLockInfo(row));
+    return rows.map((row: LockRow) => this.rowToLockInfo(row));
   }
 
   getAllLocks(): LockInfo[] {
     this.cleanupExpiredLocks();
 
-    const rows = this.db.query<LockRow, []>('SELECT * FROM locks').all();
+    const rows = this.db.prepare<[], LockRow>('SELECT * FROM locks').all() as LockRow[];
 
-    return rows.map((row) => this.rowToLockInfo(row));
+    return rows.map((row: LockRow) => this.rowToLockInfo(row));
   }
 
   refreshLock(token: string, timeout: number): boolean {
@@ -219,11 +222,9 @@ export class LockManager {
     const now = Date.now();
     const expiresAt = now + timeout * 1000;
 
-    const result = this.db.run('UPDATE locks SET expires_at = ?, timeout = ? WHERE token = ?', [
-      expiresAt,
-      timeout,
-      normalized,
-    ]);
+    const result = this.db
+      .prepare('UPDATE locks SET expires_at = ?, timeout = ? WHERE token = ?')
+      .run(expiresAt, timeout, normalized);
 
     return result.changes > 0;
   }
@@ -231,12 +232,12 @@ export class LockManager {
   deleteLock(token: string): boolean {
     const normalized = this.normalizeToken(token);
     if (!normalized) return false;
-    const result = this.db.run('DELETE FROM locks WHERE token = ?', [normalized]);
+    const result = this.db.prepare('DELETE FROM locks WHERE token = ?').run(normalized);
     return result.changes > 0;
   }
 
   deleteLocksForPath(path: string): number {
-    const result = this.db.run('DELETE FROM locks WHERE path = ?', [path]);
+    const result = this.db.prepare('DELETE FROM locks WHERE path = ?').run(path);
     return result.changes;
   }
 
@@ -251,9 +252,13 @@ export class LockManager {
       params.push(ignoreToken);
     }
 
-    const result = this.db
-      .query<{ count: number }, [string] | [string, string]>(query)
-      .get(...(params as [string] | [string, string]));
+    const stmt = this.db.prepare(query);
+    let result: { count: number } | undefined;
+    if (ignoreToken) {
+      result = stmt.get(path, ignoreToken) as { count: number } | undefined;
+    } else {
+      result = stmt.get(path) as { count: number } | undefined;
+    }
 
     return (result?.count ?? 0) > 0;
   }
@@ -298,9 +303,9 @@ export class LockManager {
     // If depth is infinity, check for locks on child paths
     if (depth === 'infinity') {
       const childLocks = this.db
-        .query<LockRow, [string]>('SELECT * FROM locks WHERE path LIKE ?')
+        .prepare<[string], LockRow>('SELECT * FROM locks WHERE path LIKE ?')
         .all(`${path}/%`);
-      locks.push(...childLocks.map((row) => this.rowToLockInfo(row)));
+      locks.push(...(childLocks as LockRow[]).map((row: LockRow) => this.rowToLockInfo(row)));
     }
 
     // Check for parent locks with depth infinity
@@ -308,9 +313,9 @@ export class LockManager {
     for (let i = pathParts.length - 1; i >= 0; i--) {
       const parentPath = '/' + pathParts.slice(0, i).join('/');
       const parentLocks = this.db
-        .query<LockRow, [string, string]>('SELECT * FROM locks WHERE path = ? AND depth = ?')
+        .prepare<[string, string], LockRow>('SELECT * FROM locks WHERE path = ? AND depth = ?')
         .all(parentPath, 'infinity');
-      locks.push(...parentLocks.map((row) => this.rowToLockInfo(row)));
+      locks.push(...(parentLocks as LockRow[]).map((row: LockRow) => this.rowToLockInfo(row)));
     }
 
     return locks;

@@ -4,24 +4,11 @@
  * Tests logger with real file I/O, log file creation, and format validation.
  */
 
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, vi, test } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { logger, setDebugMode } from '../src/logger.js';
-
-const DEFAULT_PATHS_BASE = join(tmpdir(), 'pdb-logger-default');
-let pathsBase = DEFAULT_PATHS_BASE;
-
-mock.module('env-paths', () => ({
-  default: () => ({
-    config: join(pathsBase, 'config', 'proton-drive-webdav-bridge'),
-    data: join(pathsBase, 'data', 'proton-drive-webdav-bridge'),
-    log: join(pathsBase, 'log', 'proton-drive-webdav-bridge'),
-    temp: join(pathsBase, 'temp', 'proton-drive-webdav-bridge'),
-    cache: join(pathsBase, 'cache', 'proton-drive-webdav-bridge'),
-  }),
-}));
+import { setDebugMode, logger } from '../src/logger.js';
 
 describe('Logger - Instance Methods', () => {
   test('should have info method', () => {
@@ -141,25 +128,8 @@ describe('Logger - Performance', () => {
 });
 
 describe('Logger - File Transports', () => {
-  let logDir: string;
-
-  beforeEach(() => {
-    logDir = mkdtempSync(join(tmpdir(), 'pdb-logger-'));
-    pathsBase = logDir;
-  });
-
-  afterEach(() => {
-    rmSync(logDir, { recursive: true, force: true });
-    pathsBase = DEFAULT_PATHS_BASE;
-  });
-
-  test('should create log directory', async () => {
-    const { logger: testLogger } = await import(`../src/logger.js?cache=${Date.now()}`);
-    testLogger.info('Test log message');
-
-    // Wait a bit for file write
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
+  test('should create log directory', () => {
+    logger.info('Test log message');
     expect(true).toBe(true); // Logger doesn't throw
   });
 });

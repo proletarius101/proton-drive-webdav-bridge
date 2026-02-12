@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach } from 'bun:test';
+import { describe, test, expect, beforeEach } from 'vitest';
 import { getDataDir } from '../src/paths.js';
 import { writeFileSync, mkdirSync } from 'fs';
 import ProtonDriveLock from '../src/webdav/ProtonDriveLock.js';

@@ -4,7 +4,7 @@
  * Demonstrates the performance improvement from path caching.
  */
 
-import { describe, expect, test, beforeEach } from 'bun:test';
+import { describe, expect, test, beforeEach } from 'vitest';
 import ProtonDriveAdapter from '../src/webdav/ProtonDriveAdapter.js';
 import ProtonDriveResource from '../src/webdav/ProtonDriveResource.js';
 import type { DriveClientManager, DriveNode } from '../src/drive.js';

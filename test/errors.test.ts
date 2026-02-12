@@ -1,7 +1,7 @@
 /**
  * Tests for error types and error handling
  */
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect } from 'vitest';
 import {
   AppError,
   ValidationError,

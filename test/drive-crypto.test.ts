@@ -8,7 +8,7 @@
  * was missing, causing "this.openPGPCrypto.decryptArmoredSessionKey is not a function"
  * errors when the SDK tried to decrypt shares.
  */
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect } from 'vitest';
 
 describe('OpenPGP Crypto Wrapper', () => {
   test('Drive SDK expects specific crypto interface', () => {

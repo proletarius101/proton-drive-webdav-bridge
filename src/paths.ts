@@ -8,14 +8,14 @@ import envPaths from 'env-paths';
 import { join } from 'path';
 import { mkdirSync } from 'fs';
 import { tmpdir } from 'os';
-import logger from './logger';
+import logger from './logger.js';
 
 // ============================================================================
 // Path Constants
 // ============================================================================
 
 const APP_NAME = 'proton-drive-webdav-bridge';
-const paths = envPaths(APP_NAME, { suffix: '' });
+export const paths = envPaths(APP_NAME, { suffix: '' });
 
 const ensureDir = (dirPath?: string): string => {
   try {

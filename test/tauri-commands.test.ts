@@ -12,15 +12,15 @@
  * User Stories: GH-006, GH-007, GH-008, GH-009, GH-010, GH-013, GH-031
  */
 
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
+import { vol } from 'memfs';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 
-let __perTestEnv: PerTestEnv;
-beforeEach(async () => {
-  __perTestEnv = await setupPerTestEnv();
-});
-afterEach(async () => {
-  await __perTestEnv.cleanup();
+vi.mock('fs');
+vi.mock('fs/promises');
+
+beforeEach(() => {
+  // reset the state of in-memory fs
+  vol.reset();
 });
 
 // ============================================================================

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import * as React from 'react';
 import { act } from 'react';
 import { App } from '../../src/gui/App';

@@ -1,57 +1,32 @@
-import { mkdtemp } from 'fs/promises';
-import { rmSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
-// Import `mock` lazily inside the setup function to avoid evaluating test
-// globals at module import time which can cause ReferenceError when the
-// test runner hasn't set up the test globals yet.
+import { vol, fs } from 'memfs';
+import logger from '../../src/logger';
+import envPaths from 'env-paths';
+import { vi } from 'vitest';
 
-export type PerTestEnv = {
-  baseDir: string;
-  cleanup: () => Promise<void>;
-};
+export async function mockFileSystem(): Promise<void> {
+  vol.reset();
 
-export async function setupPerTestEnv(): Promise<PerTestEnv> {
-  const baseDir = await mkdtemp(join(tmpdir(), 'pdb-test-'));
-
-  // Register a file-scoped module mock for env-paths so modules that read
-  // paths at import time will use our test directory. Import `mock` lazily
-  // so we don't reference test-runner globals during module evaluation.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { mock } = await import('bun:test');
-    mock.module('env-paths', () => ({
-      default: () => ({
-        config: join(baseDir, 'config'),
-        data: join(baseDir, 'data'),
-        log: join(baseDir, 'log'),
-        temp: join(baseDir, 'temp'),
-        cache: join(baseDir, 'cache'),
-      }),
-    }));
+    // Redirect common import specifiers to the in-memory fs. Some code imports
+    // 'fs' / 'fs/promises' while others import 'node:fs' / 'node:fs/promises'.
+    vi.doMock('fs');
+    vi.doMock('node:fs');
+    // memfs exposes a .promises API compatible with fs/promises
+    vi.doMock('fs/promises');
+    vi.doMock('node:fs/promises');
   } catch {
-    // If dynamic import fails for some reason, continue without registering
-    // the mock — individual tests may register their own env-paths mock.
+    // If mocking fails, continue without installing the in-memory fs mock.
+    logger.error('Failed to set up in-memory fs mock');
   }
 
-  return {
-    baseDir,
-    async cleanup() {
-      try {
-        rmSync(baseDir, { recursive: true, force: true });
-      } catch {
-        /* ignore */
-      }
-      try {
-        mock.restore();
-      } catch {
-        /* ignore */
-      }
-      try {
-        mock.clearAllMocks();
-      } catch {
-        /* ignore */
-      }
-    },
-  };
+  // Ensure the per-test directories exist inside the in-memory fs so that
+  // modules that call mkdirSync/read/write succeed.
+  try {
+    const paths = envPaths('proton-drive-webdav-bridge');
+    fs.mkdirSync(paths.config, { recursive: true });
+    fs.mkdirSync(paths.data, { recursive: true });
+    fs.mkdirSync(paths.log, { recursive: true });
+  } catch {
+    logger.error('Failed to create in-memory test directories');
+  }
 }
