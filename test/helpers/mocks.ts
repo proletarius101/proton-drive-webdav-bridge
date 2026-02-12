@@ -5,7 +5,7 @@
  * and ensure consistent mocking patterns across tests.
  */
 
-import { mock } from 'bun:test';
+import { vi } from 'vitest';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
@@ -94,17 +94,17 @@ export async function captureConsoleAsync<T>(
 
 export function createKeychainMocks(state: MockState) {
   return {
-    storeCredentials: mock((creds: any) => {
+    storeCredentials: vi.fn((creds: any) => {
       state.credentials = creds;
       return Promise.resolve();
     }),
-    getStoredCredentials: mock(() => Promise.resolve(state.credentials)),
-    deleteStoredCredentials: mock(() => {
+    getStoredCredentials: vi.fn(() => Promise.resolve(state.credentials)),
+    deleteStoredCredentials: vi.fn(() => {
       state.credentials = null;
       return Promise.resolve();
     }),
-    hasStoredCredentials: mock(() => Promise.resolve(state.credentials !== null)),
-    flushPendingWrites: mock(() => Promise.resolve()),
+    hasStoredCredentials: vi.fn(() => Promise.resolve(state.credentials !== null)),
+    flushPendingWrites: vi.fn(() => Promise.resolve()),
     getCredentialsFilePath: () => join(tmpdir(), 'test-credentials.enc'),
   };
 }
@@ -115,8 +115,8 @@ export function createKeychainMocks(state: MockState) {
 
 export function createConfigMocks(state: MockState) {
   return {
-    getConfig: mock(() => state.config),
-    updateConfig: mock((updates: Partial<typeof state.config>) => {
+    getConfig: vi.fn(() => state.config),
+    updateConfig: vi.fn((updates: Partial<typeof state.config>) => {
       state.config = {
         ...state.config,
         ...updates,
@@ -125,8 +125,8 @@ export function createConfigMocks(state: MockState) {
       };
       return state.config;
     }),
-    loadConfig: mock(() => state.config),
-    saveConfig: mock((config: any) => {
+    loadConfig: vi.fn(() => state.config),
+    saveConfig: vi.fn((config: any) => {
       state.config = config;
     }),
   };
@@ -137,16 +137,16 @@ export function createConfigMocks(state: MockState) {
 // ============================================================================
 
 export function createAuthMocks() {
-  const loginMock = mock(() =>
+  const loginMock = vi.fn(() =>
     Promise.resolve({ UID: 'user-123', AccessToken: 'token', RefreshToken: 'refresh' })
   );
-  const submit2FAMock = mock(() =>
+  const submit2FAMock = vi.fn(() =>
     Promise.resolve({ UID: 'user-123', AccessToken: 'token', RefreshToken: 'refresh' })
   );
-  const submitMailboxPasswordMock = mock(() =>
+  const submitMailboxPasswordMock = vi.fn(() =>
     Promise.resolve({ UID: 'user-123', AccessToken: 'token', RefreshToken: 'refresh' })
   );
-  const getReusableCredentialsMock = mock(() => ({
+  const getReusableCredentialsMock = vi.fn(() => ({
     parentUID: 'parent-uid',
     parentAccessToken: 'parent-access',
     parentRefreshToken: 'parent-refresh',
@@ -157,18 +157,18 @@ export function createAuthMocks() {
     UserID: 'user-id',
     passwordMode: 1 as const,
   }));
-  const getSessionMock = mock(() => null);
-  const refreshTokenMock = mock(() =>
+  const getSessionMock = vi.fn(() => null);
+  const refreshTokenMock = vi.fn(() =>
     Promise.resolve({ UID: 'user-123', AccessToken: 'token', RefreshToken: 'refresh' })
   );
-  const forkNewChildSessionMock = mock(() =>
+  const forkNewChildSessionMock = vi.fn(() =>
     Promise.resolve({ UID: 'user-123', AccessToken: 'token', RefreshToken: 'refresh' })
   );
-  const restoreSessionMock = mock(() =>
+  const restoreSessionMock = vi.fn(() =>
     Promise.resolve({ UID: 'user-123', AccessToken: 'token', RefreshToken: 'refresh' })
   );
-  const logoutMock = mock(() => Promise.resolve());
-  const restoreSessionFromStorageMock = mock(() => Promise.resolve({ username: 'testuser' }));
+  const logoutMock = vi.fn(() => Promise.resolve());
+  const restoreSessionFromStorageMock = vi.fn(() => Promise.resolve({ username: 'testuser' }));
 
   return {
     ProtonAuth: class MockProtonAuth {
@@ -214,12 +214,12 @@ export function createPathsMocks(baseDir: string) {
 export function createLoggerMocks() {
   return {
     logger: {
-      info: mock(() => {}),
-      error: mock(() => {}),
-      warn: mock(() => {}),
-      debug: mock(() => {}),
+      info: vi.fn(() => {}),
+      error: vi.fn(() => {}),
+      warn: vi.fn(() => {}),
+      debug: vi.fn(() => {}),
     },
-    setDebugMode: mock(() => {}),
+    setDebugMode: vi.fn(() => {}),
   };
 }
 
@@ -228,8 +228,8 @@ export function createLoggerMocks() {
 // ============================================================================
 
 export function createWebDAVMocks() {
-  const startMock = mock(() => Promise.resolve());
-  const stopMock = mock(() => Promise.resolve());
+  const startMock = vi.fn(() => Promise.resolve());
+  const stopMock = vi.fn(() => Promise.resolve());
 
   return {
     WebDAVServer: class MockWebDAVServer {
@@ -250,13 +250,13 @@ export function createWebDAVMocks() {
 // ============================================================================
 
 export function createPromptMocks() {
-  const mockInput = mock(({ message }: { message: string }) => {
+  const mockInput = vi.fn(({ message }: { message: string }) => {
     if (message.includes('2FA')) return Promise.resolve('123456');
     return Promise.resolve('testuser');
   });
   
-  const mockPassword = mock(() => Promise.resolve('password123'));
-  const mockConfirm = mock(() => Promise.resolve(true));
+  const mockPassword = vi.fn(() => Promise.resolve('password123'));
+  const mockConfirm = vi.fn(() => Promise.resolve(true));
 
   return {
     input: mockInput,
@@ -272,10 +272,18 @@ export function createPromptMocks() {
 /**
  * Install all mocks for a test suite with isolated state
  * 
+ * WARNING: This function creates mock objects but does NOT install them via vi.mock().
+ * You must manually call vi.mock() for each module in your test file, referencing the
+ * returned mocks. This is because vi.mock() calls are hoisted to the top of the module
+ * and cannot reference variables created inside functions.
+ * 
  * Usage:
  * ```typescript
  * const mockState = createMockState();
  * const mocks = setupAllMocks(mockState, baseDir);
+ * // Then in your test, manually call:
+ * // vi.mock('../src/keychain.js', () => mocks.keychain);
+ * // etc.
  * ```
  */
 export function setupAllMocks(state: MockState, baseDir: string) {
@@ -287,14 +295,8 @@ export function setupAllMocks(state: MockState, baseDir: string) {
   const webdavMocks = createWebDAVMocks();
   const promptMocks = createPromptMocks();
 
-  // Install module mocks
-  mock.module('../src/keychain.js', () => keychainMocks);
-  mock.module('../src/config.js', () => configMocks);
-  mock.module('../src/auth.js', () => authMocks);
-  mock.module('../src/paths.js', () => pathsMocks);
-  mock.module('../src/logger.js', () => loggerMocks);
-  mock.module('../src/webdav/index.js', () => webdavMocks);
-  mock.module('@inquirer/prompts', () => promptMocks);
+  // NOTE: We do NOT call vi.mock() here because it would be hoisted before
+  // these variables are created. The caller must manually install the mocks.
 
   return {
     keychain: keychainMocks,

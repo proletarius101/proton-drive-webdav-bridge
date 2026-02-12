@@ -1,31 +1,15 @@
-import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'fs';
-import { mkdtemp, rm } from 'fs/promises';
-import { tmpdir } from 'os';
+import { User } from 'nephele';
 import { join } from 'path';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { getDataDir } from '../src/paths.js';
+import { mockFileSystem } from './helpers/perTestEnv.js';
 
 // Per-test dynamic setup: create unique temp dirs and register env-paths mock
-let baseDirs: string[] = [];
 let LockManager: any;
 
 beforeEach(async () => {
-  // Create per-test temp dirs
-  const config = await mkdtemp(join(tmpdir(), 'pdb-lock-config-'));
-  const data = await mkdtemp(join(tmpdir(), 'pdb-lock-data-'));
-  const log = await mkdtemp(join(tmpdir(), 'pdb-lock-log-'));
-  const temp = await mkdtemp(join(tmpdir(), 'pdb-lock-temp-'));
-  const cache = await mkdtemp(join(tmpdir(), 'pdb-lock-cache-'));
-  baseDirs.push(config, data, log, temp, cache);
-
-  // Register per-test env-paths mock
-  mock.module('env-paths', () => ({
-    default: () => ({ config, data, log, temp, cache }),
-  }));
-
-  // Import paths and lock manager after mock is registered
-  const cacheBuster = `${Date.now()}-${Math.random()}`;
-  const pathsMod = await import(`../src/paths.js?cache=${cacheBuster}`);
-  const getDataDir = pathsMod.getDataDir;
+  await mockFileSystem();
 
   // Ensure data dir exists for SQLite and pre-create database file
   const dataDir = getDataDir();
@@ -33,20 +17,11 @@ beforeEach(async () => {
   const dbPath = join(dataDir, 'locks.db');
   writeFileSync(dbPath, '', { flag: 'a' });
 
-  const lmMod = await import(`../src/webdav/LockManager.js?cache=${cacheBuster}`);
+  const lmMod = await import('../src/webdav/LockManager.js');
   LockManager = lmMod.LockManager;
 });
 
 afterEach(async () => {
-  // Remove temporary directories
-  for (const d of baseDirs) {
-    try {
-      await rm(d, { recursive: true, force: true });
-    } catch {
-      /* ignore errors during cleanup */
-    }
-  }
-  baseDirs = [];
   // Ensure LockManager singleton is reset
   try {
     const inst = LockManager.getInstance();
@@ -55,8 +30,9 @@ afterEach(async () => {
     /* ignore close errors */
   }
   // Restore mocks
-  mock.restore();
-  mock.clearAllMocks();
+  vi.resetModules();
+  vi.restoreAllMocks();
+  vi.clearAllMocks();
 });
 
 describe('LockManager - basic operations', () => {

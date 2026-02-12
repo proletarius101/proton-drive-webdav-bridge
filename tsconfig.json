@@ -36,12 +36,15 @@
     "noImplicitReturns": true,
     "allowSyntheticDefaultImports": true,
     "types": [
-      "node",
-      "bun"
+      "node"
     ]
   },
   "include": [
     "src/**/*"
+  ],
+  "typeRoots": [
+    "types",
+    "node_modules/@types"
   ],
   "exclude": [
     "node_modules",

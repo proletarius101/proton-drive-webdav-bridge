@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import * as React from 'react';
 import { render, waitFor } from '@testing-library/react';
 import { TauriProvider, type TauriApi } from '../src/gui/tauri/TauriProvider';

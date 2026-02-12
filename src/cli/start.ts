@@ -4,6 +4,7 @@
  * Starts the WebDAV server.
  */
 
+import { spawn } from 'child_process';
 import { Command } from 'commander';
 import { logger, setDebugMode } from '../logger.js';
 import { loadConfig } from '../config.js';
@@ -117,13 +118,13 @@ async function spawnDaemon(options: Record<string, unknown>): Promise<void> {
 
   // Get the path to this script
   const scriptPath = process.argv[1];
-  const runtime = process.argv[0]; // bun or node
+  const runtime = process.argv[0]; // node runtime
 
   if (!scriptPath || !runtime) {
     throw new Error('Unable to determine runtime or script path for daemon spawn');
   }
 
-  const child = Bun.spawn([runtime, scriptPath, ...args], {
+  const child = spawn(runtime, [scriptPath, ...args], {
     detached: true,
     stdio: ['ignore', 'ignore', 'inherit'],
     env: { ...process.env },

@@ -7,41 +7,42 @@
  * - Platform detection and fallback logic
  * - Password derivation with PBKDF2
  * - Error handling and decryption failures
+ *
+ * Uses dynamic imports with mockFileSystem() for true per-test isolation.
  */
 
-import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync } from 'fs';
-import { mkdtemp, rm } from 'fs/promises';
-import { tmpdir } from 'os';
-import { join } from 'path';
-import { afterEach, beforeEach, afterAll, describe, expect, test, mock } from 'bun:test';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { vol } from 'memfs';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { keyringStore } from './setup.js';
+import {
+  storeCredentials,
+  getStoredCredentials,
+  hasStoredCredentials,
+  deleteStoredCredentials,
+  getCredentialsFilePath,
+  flushPendingWrites,
+  resetKeyringInstrumentation,
+  getKeyringReadCount,
+  getKeyringWriteCount,
+  getGetStoredCallCount,
+} from '../src/keychain.js';
 
-// Per-test env-paths mock: ensure each test uses an isolated temp dir
-let __testTempBase: string;
+vi.mock('fs');
+vi.mock('fs/promises');
+
+// Setup per-test isolated environment
 beforeEach(async () => {
-  __testTempBase = await mkdtemp(join(tmpdir(), 'pdb-keychain-global-'));
-  mock.module('env-paths', () => ({
-    default: () => ({
-      config: join(__testTempBase, 'config'),
-      data: join(__testTempBase, 'data'),
-      log: join(__testTempBase, 'log'),
-      temp: join(__testTempBase, 'temp'),
-      cache: join(__testTempBase, 'cache'),
-    }),
-  }));
+  // reset the state of in-memory fs
+  vol.reset();
+  keyringStore.clear();
 });
 
 afterEach(async () => {
-  try {
-    await rm(__testTempBase, { recursive: true, force: true });
-  } catch {
-    /* ignore cleanup errors */
-  }
-  mock.restore();
-  mock.clearAllMocks();
+  keyringStore.clear();
+  vi.restoreAllMocks();
+  vi.clearAllMocks();
 });
-
-const DEFAULT_PATHS_BASE = join(tmpdir(), 'pdb-keychain-default');
 
 const sampleCredentials = {
   parentUID: 'parent-uid-123',
@@ -57,25 +58,11 @@ const sampleCredentials = {
 };
 
 describe('Keychain - File-Based Storage', () => {
-  let baseDir: string;
-
   beforeEach(() => {
-    baseDir = mkdtempSync(join(tmpdir(), 'pdb-keychain-'));
-    process.env.KEYRING_PASSWORD = 'secure-test-password-123';
-  });
-
-  afterEach(() => {
-    mock.restore();
-    mock.clearAllMocks();
-    rmSync(baseDir, { recursive: true, force: true });
-    delete process.env.KEYRING_PASSWORD;
+    vi.stubEnv('KEY_FILE_PASSWORD', 'secure-test-password-123');
   });
 
   test('stores and retrieves credentials with encryption', async () => {
-    const { storeCredentials, getStoredCredentials, hasStoredCredentials } = await import(
-      `../src/keychain.ts?cache=${Date.now()}`
-    );
-
     await storeCredentials(sampleCredentials);
 
     expect(await hasStoredCredentials()).toBe(true);
@@ -87,10 +74,6 @@ describe('Keychain - File-Based Storage', () => {
   });
 
   test('returns null when no credentials stored', async () => {
-    const { getStoredCredentials, hasStoredCredentials, deleteStoredCredentials } = await import(
-      `../src/keychain.ts?cache=${Date.now()}`
-    );
-
     // Ensure clean state
     await deleteStoredCredentials();
 
@@ -100,10 +83,6 @@ describe('Keychain - File-Based Storage', () => {
   });
 
   test('deletes stored credentials', async () => {
-    const { storeCredentials, getStoredCredentials, deleteStoredCredentials } = await import(
-      `../src/keychain.ts?cache=${Date.now()}`
-    );
-
     await storeCredentials(sampleCredentials);
     expect(await getStoredCredentials()).not.toBeNull();
 
@@ -114,10 +93,6 @@ describe('Keychain - File-Based Storage', () => {
   });
 
   test('creates encrypted file with secure permissions', async () => {
-    const { storeCredentials, getCredentialsFilePath, flushPendingWrites } = await import(
-      `../src/keychain.ts?cache=${Date.now()}`
-    );
-
     await storeCredentials(sampleCredentials);
     await flushPendingWrites();
     const filePath = getCredentialsFilePath();
@@ -132,10 +107,6 @@ describe('Keychain - File-Based Storage', () => {
   });
 
   test('overwrites existing credentials', async () => {
-    const { storeCredentials, getStoredCredentials } = await import(
-      `../src/keychain.ts?cache=${Date.now()}`
-    );
-
     await storeCredentials(sampleCredentials);
 
     const updated = { ...sampleCredentials, username: 'newuser@proton.me' };
@@ -146,10 +117,6 @@ describe('Keychain - File-Based Storage', () => {
   });
 
   test('handles different password modes', async () => {
-    const { storeCredentials, getStoredCredentials } = await import(
-      `../src/keychain.ts?cache=${Date.now()}`
-    );
-
     const twoPasswordCreds = { ...sampleCredentials, passwordMode: 2 as const };
     await storeCredentials(twoPasswordCreds);
 
@@ -159,40 +126,17 @@ describe('Keychain - File-Based Storage', () => {
 });
 
 describe('Keychain - Encryption and Security', () => {
-  let baseDir: string;
-
-  beforeEach(() => {
-    baseDir = mkdtempSync(join(tmpdir(), 'pdb-keychain-'));
-    keyringStore.clear();
-  });
-
-  afterEach(() => {
-    mock.restore();
-    mock.clearAllMocks();
-    rmSync(baseDir, { recursive: true, force: true });
-    delete process.env.KEYRING_PASSWORD;
-  });
-
   test('uses different encryption key with different passwords', async () => {
-    process.env.KEYRING_PASSWORD = 'password1';
-    const { storeCredentials, getCredentialsFilePath, flushPendingWrites } = await import(
-      `../src/keychain.ts?cache=${Date.now()}`
-    );
-
+    vi.stubEnv('KEY_FILE_PASSWORD', 'password1');
     await storeCredentials(sampleCredentials);
     await flushPendingWrites();
     const filePath = getCredentialsFilePath();
     const encrypted1 = readFileSync(filePath);
 
     // Change password and re-encrypt
-    delete process.env.KEYRING_PASSWORD;
-    process.env.KEYRING_PASSWORD = 'password2';
-    const { storeCredentials: storeCredentials2, flushPendingWrites: flush2 } = await import(
-      `../src/keychain.ts?cache=${Date.now() + 1}`
-    );
-
-    await storeCredentials2(sampleCredentials);
-    await flush2();
+    vi.stubEnv('KEY_FILE_PASSWORD', 'password2');
+    await storeCredentials(sampleCredentials);
+    await flushPendingWrites();
     const encrypted2 = readFileSync(filePath);
 
     // Files should be different due to different keys
@@ -200,26 +144,18 @@ describe('Keychain - Encryption and Security', () => {
   });
 
   test('fails to decrypt with wrong password', async () => {
-    process.env.KEYRING_PASSWORD = 'correct-password';
-    const { storeCredentials } = await import(`../src/keychain.ts?cache=${Date.now()}`);
-
+    vi.stubEnv('KEY_FILE_PASSWORD', 'correct-password');
     await storeCredentials(sampleCredentials);
 
     // Try to read with wrong password
-    delete process.env.KEYRING_PASSWORD;
-    process.env.KEYRING_PASSWORD = 'wrong-password';
-    const { getStoredCredentials } = await import(`../src/keychain.ts?cache=${Date.now() + 1}`);
+    vi.stubEnv('KEY_FILE_PASSWORD', 'wrong-password');
 
     const stored = await getStoredCredentials();
     expect(stored).toBeNull(); // Should return null on decryption failure
   });
 
-  test('uses default password when KEYRING_PASSWORD not set', async () => {
-    delete process.env.KEYRING_PASSWORD;
-    const { storeCredentials, getStoredCredentials, deleteStoredCredentials } = await import(
-      `../src/keychain.ts?cache=${Date.now()}`
-    );
-
+  test('uses default password when KEY_FILE_PASSWORD not set', async () => {
+    vi.stubEnv('KEY_FILE_PASSWORD', undefined);
     await storeCredentials(sampleCredentials);
     const stored = await getStoredCredentials();
 
@@ -232,49 +168,8 @@ describe('Keychain - Encryption and Security', () => {
 });
 
 describe('Keychain - Platform Detection', () => {
-  // Ensure any stored credentials are removed between tests to avoid cross-test
-  // contamination that may cause network calls in other modules.
-  afterEach(async () => {
-    mock.restore();
-    mock.clearAllMocks();
-    try {
-      const { deleteStoredCredentials } = await import(`../src/keychain.ts?cache=${Date.now()}`);
-      await deleteStoredCredentials();
-    } catch {
-      /* ignore cleanup errors */
-    }
-  });
-
-  afterAll(async () => {
-    try {
-      const { deleteStoredCredentials } = await import(`../src/keychain.ts?cache=${Date.now()}`);
-      await deleteStoredCredentials();
-    } catch {
-      /* ignore cleanup errors */
-    }
-  });
-  let baseDir: string;
-
-  beforeEach(() => {
-    baseDir = mkdtempSync(join(tmpdir(), 'pdb-keychain-'));
-    keyringStore.clear();
-  });
-
-  afterEach(() => {
-    mock.restore();
-    mock.clearAllMocks();
-    rmSync(baseDir, { recursive: true, force: true });
-    delete process.env.KEYRING_PASSWORD;
-    delete process.env.DISPLAY;
-    delete process.env.WAYLAND_DISPLAY;
-  });
-
-  test('uses file storage when KEYRING_PASSWORD is set', async () => {
-    process.env.KEYRING_PASSWORD = 'explicit-file-storage';
-    const { storeCredentials, getCredentialsFilePath, flushPendingWrites } = await import(
-      `../src/keychain.ts?cache=${Date.now()}`
-    );
-
+  test('uses file storage when KEY_FILE_PASSWORD is set', async () => {
+    vi.stubEnv('KEY_FILE_PASSWORD', 'explicit-file-storage');
     await storeCredentials(sampleCredentials);
     await flushPendingWrites();
 
@@ -285,38 +180,20 @@ describe('Keychain - Platform Detection', () => {
 });
 
 describe('Keychain - Error Handling', () => {
-  let baseDir: string;
-
   beforeEach(() => {
-    baseDir = mkdtempSync(join(tmpdir(), 'pdb-keychain-'));
-    keyringStore.clear();
-    process.env.KEYRING_PASSWORD = 'test-password';
-  });
-
-  afterEach(() => {
-    mock.restore();
-    mock.clearAllMocks();
-    rmSync(baseDir, { recursive: true, force: true });
-    delete process.env.KEYRING_PASSWORD;
+    vi.stubEnv('KEY_FILE_PASSWORD', 'test-password');
   });
 
   test('deleteStoredCredentials does not throw when no credentials exist', async () => {
-    const { deleteStoredCredentials } = await import(`../src/keychain.ts?cache=${Date.now()}`);
-
     await expect(deleteStoredCredentials()).resolves.toBeUndefined();
   });
 
   test('handles corrupted file gracefully', async () => {
-    const { getCredentialsFilePath, getStoredCredentials } = await import(
-      `../src/keychain.ts?cache=${Date.now()}`
-    );
-
     const filePath = getCredentialsFilePath();
-    const { getDataDir } = await import(`../src/paths.ts?cache=${Date.now()}`);
+    const { getDataDir } = await import('../src/paths.js');
     getDataDir(); // Ensure directory exists
 
     // Write corrupted data
-    const { writeFileSync } = await import('fs');
     writeFileSync(filePath, 'corrupted-data', { mode: 0o600 });
 
     const stored = await getStoredCredentials();
@@ -325,26 +202,11 @@ describe('Keychain - Error Handling', () => {
 });
 
 describe('Keychain - Credential Structure', () => {
-  let baseDir: string;
-
   beforeEach(() => {
-    baseDir = mkdtempSync(join(tmpdir(), 'pdb-keychain-'));
-    keyringStore.clear();
-    process.env.KEYRING_PASSWORD = 'test-password';
-  });
-
-  afterEach(() => {
-    mock.restore();
-    mock.clearAllMocks();
-    rmSync(baseDir, { recursive: true, force: true });
-    delete process.env.KEYRING_PASSWORD;
+    vi.stubEnv('KEY_FILE_PASSWORD', 'test-password');
   });
 
   test('preserves all credential fields', async () => {
-    const { storeCredentials, getStoredCredentials } = await import(
-      `../src/keychain.ts?cache=${Date.now()}`
-    );
-
     const fullCredentials = {
       parentUID: 'parent-uid',
       parentAccessToken: 'parent-access',
@@ -366,10 +228,6 @@ describe('Keychain - Credential Structure', () => {
   });
 
   test('handles special characters in credentials', async () => {
-    const { storeCredentials, getStoredCredentials } = await import(
-      `../src/keychain.ts?cache=${Date.now()}`
-    );
-
     const specialCredentials = {
       ...sampleCredentials,
       username: 'user+special@proton.me',
@@ -384,26 +242,20 @@ describe('Keychain - Credential Structure', () => {
   });
 });
 
-// ============================================================================
-// Performance & Concurrency
-// ============================================================================
-
 describe('Keychain - Performance & Concurrency', () => {
   test('caches and coalesces concurrent reads', async () => {
     // Write credentials with one module instance and flush to storage
-    const m1 = await import(`../src/keychain.ts?cache=${Date.now()}`);
-    await m1.deleteStoredCredentials();
-    await m1.storeCredentials(sampleCredentials);
-    await m1.flushPendingWrites();
+    await deleteStoredCredentials();
+    await storeCredentials(sampleCredentials);
+    await flushPendingWrites();
 
-    // Import a fresh instance so it has no in-memory cache
-    const m2 = await import(`../src/keychain.ts?cache=${Date.now() + 1}`);
-    m2.resetKeyringInstrumentation();
+    // Ensure instrumentation reset
+    resetKeyringInstrumentation();
 
     const [a, b, c] = await Promise.all([
-      m2.getStoredCredentials(),
-      m2.getStoredCredentials(),
-      m2.getStoredCredentials(),
+      getStoredCredentials(),
+      getStoredCredentials(),
+      getStoredCredentials(),
     ]);
 
     expect(a).toEqual(sampleCredentials);
@@ -411,45 +263,76 @@ describe('Keychain - Performance & Concurrency', () => {
     expect(c).toEqual(sampleCredentials);
 
     // Underlying keyring/file read should have happened only once
-    expect(m2.getKeyringReadCount()).toBe(1);
+    expect(getKeyringReadCount()).toBe(1);
   });
 
   test('debounces writes and coalesces concurrent writes', async () => {
-    const mod = await import(`../src/keychain.ts?cache=${Date.now()}`);
-    mod.resetKeyringInstrumentation();
-    await mod.deleteStoredCredentials();
+    resetKeyringInstrumentation();
+    await deleteStoredCredentials();
 
     // Rapid successive writes - only the last should persist after debounce
-    await mod.storeCredentials({ ...sampleCredentials, username: 'a' });
-    await mod.storeCredentials({ ...sampleCredentials, username: 'b' });
-    await mod.storeCredentials({ ...sampleCredentials, username: 'c' });
+    await storeCredentials({ ...sampleCredentials, username: 'a' });
+    await storeCredentials({ ...sampleCredentials, username: 'b' });
+    await storeCredentials({ ...sampleCredentials, username: 'c' });
 
-    await mod.flushPendingWrites();
+    await flushPendingWrites();
 
     // Only one underlying write should have been performed
-    expect(mod.getKeyringWriteCount()).toBeLessThanOrEqual(1);
+    expect(getKeyringWriteCount()).toBeLessThanOrEqual(1);
 
-    const stored = await mod.getStoredCredentials();
+    const stored = await getStoredCredentials();
     expect(stored?.username).toBe('c');
   });
 
   test('instrumentation increments on get and store', async () => {
-    const mod = await import(`../src/keychain.ts?cache=${Date.now()}`);
-    mod.resetKeyringInstrumentation();
-    await mod.deleteStoredCredentials();
+    resetKeyringInstrumentation();
+    await deleteStoredCredentials();
 
-    expect(mod.getKeyringReadCount()).toBe(0);
-    expect(mod.getKeyringWriteCount()).toBe(0);
+    expect(getKeyringReadCount()).toBe(0);
+    expect(getKeyringWriteCount()).toBe(0);
 
-    await mod.storeCredentials(sampleCredentials);
-    await mod.flushPendingWrites();
-    expect(mod.getKeyringWriteCount()).toBe(1);
+    await storeCredentials(sampleCredentials);
+    await flushPendingWrites();
+    expect(getKeyringWriteCount()).toBe(1);
 
-    // Import a fresh instance to force a backend read (cache not present)
-    const mod2 = await import(`../src/keychain.ts?cache=${Date.now() + 1}`);
-    mod2.resetKeyringInstrumentation();
-    const fetched = await mod2.getStoredCredentials();
+    // Force a backend read by clearing cached state in module (if provided)
+    resetKeyringInstrumentation();
+    const fetched = await getStoredCredentials();
     expect(fetched).not.toBeNull();
-    expect(mod2.getKeyringReadCount()).toBe(1);
+    expect(getKeyringReadCount()).toBe(1);
+  });
+
+  test('getStored call count reflects top-level calls', async () => {
+    resetKeyringInstrumentation();
+    await deleteStoredCredentials();
+
+    // Call several times (will trigger backend read on first after reset)
+    await storeCredentials(sampleCredentials);
+    await flushPendingWrites();
+
+    // Call getStoredCredentials multiple times concurrently
+    await Promise.all([getStoredCredentials(), getStoredCredentials()]);
+    // getStored call count should be >= 2 (top-level calls)
+    expect(getGetStoredCallCount()).toBeGreaterThanOrEqual(2);
+  });
+
+  test('cache expiry causes a backend read', async () => {
+    // Use fake timers to advance time beyond CACHE_TTL_MS
+    vi.useFakeTimers();
+    await storeCredentials(sampleCredentials);
+    await flushPendingWrites();
+
+    // First read - should be served from cache and not increment backend read (if cached)
+    await getStoredCredentials();
+    const before = getKeyringReadCount();
+
+    // Advance time by 31s to expire cache (CACHE_TTL_MS = 30_000)
+    vi.setSystemTime(Date.now() + 31_000);
+    // Next read should trigger backend read
+    await getStoredCredentials();
+    const after = getKeyringReadCount();
+
+    expect(after).toBeGreaterThanOrEqual(before + 1);
+    vi.useRealTimers();
   });
 });

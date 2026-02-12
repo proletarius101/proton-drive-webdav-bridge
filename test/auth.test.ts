@@ -14,12 +14,12 @@
  * integration with keychain storage.
  */
 
-import { afterEach, beforeEach, beforeAll, describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, beforeAll, describe, expect, vi, test } from 'vitest';
 import { mkdirSync, mkdtempSync, rmSync } from 'fs';
-import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { keyringStore } from './setup.js';
+import { mockFileSystem } from './helpers/perTestEnv';
 import type {
   ApiError,
   Session,
@@ -54,35 +54,23 @@ let restoreSessionFromStorage: () => Promise<{
 }>;
 
 // Per-test setup: create isolated temp dir and load module after mocking env-paths
-let testTempDir: string;
 beforeEach(async () => {
-  testTempDir = await mkdtemp(join(tmpdir(), 'pdb-test-'));
-
-  mock.module('env-paths', () => ({
-    default: () => ({
-      config: join(testTempDir, 'config'),
-      data: join(testTempDir, 'data'),
-      log: join(testTempDir, 'log'),
-      temp: join(testTempDir, 'temp'),
-      cache: join(testTempDir, 'cache'),
-    }),
-  }));
-
-  const cacheBuster = `${Date.now()}-${Math.random()}`;
-  const mod = await import(`../src/auth.js?cache=${cacheBuster}`);
+  // Install per-test in-memory fs and reset module cache so imports use the mock
+  await mockFileSystem();
+  vi.resetModules();
+  const mod = await import('../src/auth.js');
   ProtonAuth = mod.ProtonAuth;
   authenticateAndStore = mod.authenticateAndStore;
   restoreSessionFromStorage = mod.restoreSessionFromStorage;
 });
 
 afterEach(async () => {
-  // remove test dir and restore mocks
-  await rm(testTempDir, { recursive: true, force: true });
-  mock.restore();
+  // restore mocks
+  vi.restoreAllMocks();
 });
 
 // Rejects immediately so tests never hit the real Proton API.
-const rejectedApiRequester = mock(async () => {
+const rejectedApiRequester = vi.fn(async () => {
   throw new Error('Mocked network call');
 }) as unknown as ApiRequester;
 
@@ -92,7 +80,7 @@ describe('ProtonAuth - Initialization', () => {
   });
 
   afterEach(() => {
-    mock.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('should instantiate ProtonAuth with all required methods', () => {
@@ -167,7 +155,7 @@ describe('ProtonAuth - Error Types', () => {
 
 describe('ProtonAuth - Login Flow (Mocked)', () => {
   test('should handle invalid credentials error', async () => {
-    const mockApi = mock(async () => {
+    const mockApi = vi.fn(async () => {
       throw new Error('Invalid credentials');
     }) as unknown as ApiRequester;
 
@@ -176,7 +164,7 @@ describe('ProtonAuth - Login Flow (Mocked)', () => {
   });
 
   test('should handle network errors gracefully', async () => {
-    const mockApi = mock(async () => {
+    const mockApi = vi.fn(async () => {
       throw new Error('Network error');
     }) as unknown as ApiRequester;
 
@@ -216,7 +204,7 @@ describe('ProtonAuth - Credential Management', () => {
 
 describe('ProtonAuth - Session Restoration', () => {
   test('restoreSession should fail with invalid credentials', async () => {
-    const mockApi = mock(async () => {
+    const mockApi = vi.fn(async () => {
       throw new Error('Invalid session');
     }) as unknown as ApiRequester;
 
@@ -243,7 +231,7 @@ describe('ProtonAuth - Session Restoration', () => {
     // This test verifies that UserID is properly set on both session and parentSession.
 
     // Mock successful API responses using injected ApiRequester
-    const mockApi = mock(async (method: string, endpoint: string) => {
+    const mockApi = vi.fn(async (method: string, endpoint: string) => {
       if (endpoint.includes('/users')) {
         return {
           Code: 1000,
@@ -310,15 +298,14 @@ describe('ProtonAuth - Session State Management', () => {
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'pdb-auth-state-'));
     // pathsBase set via per-test env-paths mock in top-level beforeEach
-    process.env.KEYRING_PASSWORD = 'test-password';
+    vi.stubEnv('KEY_FILE_PASSWORD', 'test-password');
     originalFetch = global.fetch;
   });
 
   afterEach(() => {
-    mock.restore();
-    mock.clearAllMocks();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
     rmSync(tempDir, { recursive: true, force: true });
-    delete process.env.KEYRING_PASSWORD;
     // restore default handled by top-level afterEach
     global.fetch = originalFetch;
   });
@@ -346,14 +333,13 @@ describe('ProtonAuth - Credential Storage Integration', () => {
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'pdb-auth-storage-'));
     // pathsBase set via per-test env-paths mock in top-level beforeEach
-    process.env.KEYRING_PASSWORD = 'test-password';
+    vi.stubEnv('KEY_FILE_PASSWORD', 'test-password');
   });
 
   afterEach(() => {
-    mock.restore();
-    mock.clearAllMocks();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
     rmSync(tempDir, { recursive: true, force: true });
-    delete process.env.KEYRING_PASSWORD;
     // restore default handled by top-level afterEach
   });
 
@@ -591,14 +577,13 @@ describe('ProtonAuth - Helper Functions Integration', () => {
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'pdb-auth-helpers-'));
     // pathsBase set via per-test env-paths mock in top-level beforeEach
-    process.env.KEYRING_PASSWORD = 'test-password';
+    vi.stubEnv('KEY_FILE_PASSWORD', 'test-password');
   });
 
   afterEach(() => {
-    mock.restore();
-    mock.clearAllMocks();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
     rmSync(tempDir, { recursive: true, force: true });
-    delete process.env.KEYRING_PASSWORD;
     // restore default handled by top-level afterEach
   });
 
@@ -611,7 +596,7 @@ describe('ProtonAuth - Helper Functions Integration', () => {
   });
 
   test('restoreSessionFromStorage should throw when no credentials stored', async () => {
-    const { deleteStoredCredentials } = await import(`../src/keychain.ts?cache=${Date.now()}`);
+    const { deleteStoredCredentials } = await import(`../src/keychain.ts`);
     await deleteStoredCredentials();
     // May fail for other reasons (keyring vs file storage differences); assert that it rejects
     await expect(restoreSessionFromStorage()).rejects.toThrow();

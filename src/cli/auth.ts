@@ -129,7 +129,7 @@ export function registerAuthCommand(program: Command): void {
         const appError = toAppError(error);
         console.error(`\n✗ Login failed: ${appError.getPublicMessage()}`);
         logger.error(`Login failed: [${appError.code}] ${appError.message}`);
-        process.exit(1);
+        throw appError;
       }
     });
 
@@ -165,7 +165,7 @@ export function registerAuthCommand(program: Command): void {
         const appError = toAppError(error);
         console.error(`✗ Logout failed: ${appError.getPublicMessage()}`);
         logger.error(`Logout failed: [${appError.code}] ${appError.message}`);
-        process.exit(1);
+        throw appError;
       }
     });
 
@@ -194,7 +194,7 @@ export function registerAuthCommand(program: Command): void {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error(`Error checking status: ${message}`);
-        process.exit(1);
+        throw error;
       }
     });
 }

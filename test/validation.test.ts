@@ -1,7 +1,7 @@
 /**
  * Tests for validation utilities
  */
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, test } from 'vitest';
 import {
   combinePaths,
   getFilename,
@@ -14,14 +14,16 @@ import {
   validatePathSafety,
   validatePort,
 } from '../src/validation/index.js';
-import { PerTestEnv, setupPerTestEnv } from './helpers/perTestEnv';
 
-let __perTestEnv: PerTestEnv;
-beforeEach(async () => {
-  __perTestEnv = await setupPerTestEnv();
-});
-afterEach(async () => {
-  await __perTestEnv.cleanup();
+import { vol } from 'memfs';
+import { vi } from 'vitest';
+
+vi.mock('fs');
+vi.mock('fs/promises');
+
+beforeEach(() => {
+  // reset the state of in-memory fs
+  vol.reset();
 });
 
 describe('Path validation - Normalization', () => {

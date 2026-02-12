@@ -4,25 +4,14 @@
  * Winston-based logging with console and optional rotating file transports.
  */
 
+import { join } from 'path';
 import winston from 'winston';
 import DailyRotateFile from 'winston-daily-rotate-file';
-import { join } from 'path';
-import { mkdirSync } from 'fs';
-import { getLogDir } from './paths.js';
+import { paths } from './paths.js';
 
 // ============================================================================
 // Configuration
 // ============================================================================
-
-const LOG_DIR = getLogDir();
-
-// Ensure log directory exists
-try {
-  mkdirSync(LOG_DIR, { recursive: true });
-} catch (error) {
-  // Log error but continue - directory might already exist or be inaccessible
-  console.error(`Failed to create log directory: ${error}`);
-}
 
 // ============================================================================
 // Log Format
@@ -61,7 +50,7 @@ const transports: winston.transport[] = [consoleTransport];
 
 if (!isTestEnv) {
   const fileTransport = new DailyRotateFile({
-    dirname: LOG_DIR,
+    dirname: paths.log,
     filename: 'proton-drive-webdav-bridge-%DATE%.log',
     datePattern: 'YYYY-MM-DD',
     maxSize: '20m',
@@ -71,7 +60,7 @@ if (!isTestEnv) {
   });
 
   const errorFileTransport = new DailyRotateFile({
-    dirname: LOG_DIR,
+    dirname: paths.log,
     filename: 'proton-drive-webdav-bridge-error-%DATE%.log',
     datePattern: 'YYYY-MM-DD',
     maxSize: '20m',
@@ -119,7 +108,7 @@ export function isDebugMode(): boolean {
  */
 export function getLogFilePath(): string {
   const date = new Date().toISOString().split('T')[0];
-  return join(LOG_DIR, `proton-drive-webdav-bridge-${date}.log`);
+  return join(paths.log, `proton-drive-webdav-bridge-${date}.log`);
 }
 
 export default logger;
