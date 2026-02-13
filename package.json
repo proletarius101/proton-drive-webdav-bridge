@@ -85,7 +85,6 @@
     "eslint-formatter-gitlab": "^7.0.1",
     "eslint-plugin-prettier": "^5.5.4",
     "husky": "^9.1.7",
-    "jsdom": "^28.0.0",
     "memfs": "^4.56.10",
     "prettier": "^3.7.3",
     "ts-node": "^10.9.2",
