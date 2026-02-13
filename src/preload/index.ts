@@ -150,13 +150,19 @@ contextBridge.exposeInMainWorld('electron', {
   // Event helpers (main -> renderer)
   events: {
     on: (channel: string, callback: (...args: unknown[]) => void) => {
-      ipcRenderer.on(channel, (_event: Electron.IpcRendererEvent, ...args: unknown[]) => callback(...args));
+      ipcRenderer.on(channel, (_event: Electron.IpcRendererEvent, ...args: unknown[]) =>
+        callback(...args)
+      );
     },
     once: (channel: string, callback: (...args: unknown[]) => void) => {
-      ipcRenderer.once(channel, (_event: Electron.IpcRendererEvent, ...args: unknown[]) => callback(...args));
+      ipcRenderer.once(channel, (_event: Electron.IpcRendererEvent, ...args: unknown[]) =>
+        callback(...args)
+      );
     },
     off: (channel: string, callback: (...args: unknown[]) => void) => {
-      ipcRenderer.removeListener(channel, (_event: Electron.IpcRendererEvent, ...args: unknown[]) => callback(...args));
+      ipcRenderer.removeListener(channel, (_event: Electron.IpcRendererEvent, ...args: unknown[]) =>
+        callback(...args)
+      );
     },
   },
 

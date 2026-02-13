@@ -104,7 +104,8 @@ export function LoginScreen() {
         setError(result.error || '2FA verification failed. Please try again.');
       }
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : '2FA verification failed. Please try again.';
+      const errorMessage =
+        err instanceof Error ? err.message : '2FA verification failed. Please try again.';
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -137,7 +138,10 @@ export function LoginScreen() {
 
       setError(result.error || 'Mailbox password verification failed. Please try again.');
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Mailbox password verification failed. Please try again.';
+      const errorMessage =
+        err instanceof Error
+          ? err.message
+          : 'Mailbox password verification failed. Please try again.';
       setError(errorMessage);
     } finally {
       setLoading(false);

@@ -152,4 +152,3 @@ export function ControlPanel() {
     </div>
   );
 }
-
