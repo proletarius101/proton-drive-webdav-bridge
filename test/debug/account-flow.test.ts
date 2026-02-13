@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as React from 'react';
 import { act } from 'react';
-import { App } from '../../src/gui/App';
+import { App } from '../../src/renderer/App';
 import { renderWithElectron } from '../helpers/renderWithElectron';
 import type { ElectronTestApi } from '../helpers/renderWithElectron';
 

@@ -1,20 +1,22 @@
 import { useState, useEffect } from 'react';
 import { useElectron } from '../electron/ElectronProvider.js';
+import type { ServerStatus } from '../types/electron-api';
 
 /**
  * Service status badge component
  * Shows running/connecting/stopped states with color coding
  */
 export function ServiceBadge() {
-  const [status, setStatus] = useState<'active' | 'connecting' | 'stopped'>('stopped');
+  const [status, setStatus] = useState<'active' | 'stopped'>('stopped');
   const [isLoading, setIsLoading] = useState(true);
   const electron = useElectron();
 
   useEffect(() => {
     const fetchStatus = async () => {
       try {
-        const result = await electron.invoke<'webdav:getStatus'>('webdav:getStatus');
-        setStatus((result as any)?.running ? 'active' : 'stopped');
+        const result = await electron.invoke('webdav:getStatus');
+        const res = result as ServerStatus;
+        setStatus(res.running ? 'active' : 'stopped');
       } catch (err) {
         console.error('Failed to get WebDAV status:', err);
         setStatus('stopped');
@@ -43,7 +45,6 @@ export function ServiceBadge() {
   const getStatusLabel = () => {
     if (isLoading) return 'Loading...';
     if (status === 'active') return 'Active';
-    if (status === 'connecting') return 'Connecting';
     return 'Stopped';
   };
 
@@ -56,8 +57,7 @@ export function ServiceBadge() {
         borderRadius: '4px',
         fontWeight: 600,
         fontSize: '14px',
-        backgroundColor:
-          status === 'active' ? '#4CAF50' : status === 'connecting' ? '#FFC107' : '#F44336',
+        backgroundColor: status === 'active' ? '#4CAF50' : '#F44336',
         color: 'white',
       }}
     >

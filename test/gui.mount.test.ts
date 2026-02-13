@@ -1,7 +1,7 @@
 import { fireEvent, waitFor } from '@testing-library/react';
 import * as React from 'react';
 import { describe, expect, it } from 'vitest';
-import { useMountStatus } from '../src/gui/hooks/useMountStatus';
+import { useMountStatus } from '../src/renderer/hooks/useMountStatus';
 import { renderWithElectron, type ElectronTestApi } from './helpers/renderWithElectron';
 
 function TestMount({

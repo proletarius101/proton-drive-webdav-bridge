@@ -26,6 +26,6 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ['dist/**', 'node_modules/**', 'src/gui/**/*.js'],
+    ignores: ['dist/**', 'node_modules/**', 'src/renderer/**/*.js'],
   }
 );
