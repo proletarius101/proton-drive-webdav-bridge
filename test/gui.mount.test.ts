@@ -1,10 +1,14 @@
-import { describe, it, expect } from 'vitest';
+import { fireEvent, waitFor } from '@testing-library/react';
 import * as React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react';
-import { TauriProvider, type TauriApi } from '../src/gui/tauri/TauriProvider';
+import { describe, expect, it } from 'vitest';
 import { useMountStatus } from '../src/gui/hooks/useMountStatus';
+import { renderWithElectron, type ElectronTestApi } from './helpers/renderWithElectron';
 
-function TestMount({ options }: { options?: { mountRetryDelayMs?: number; mountMaxRetries?: number } }) {
+function TestMount({
+  options,
+}: {
+  options?: { mountRetryDelayMs?: number; mountMaxRetries?: number };
+}) {
   const { isMounted, isToggling, toggleMount } = useMountStatus(options);
   return React.createElement(
     'div',
@@ -19,7 +23,7 @@ function TestMount({ options }: { options?: { mountRetryDelayMs?: number; mountM
 describe('GUI Mount Logic (useMountStatus)', () => {
   it('verifies actual mount state after mount_drive error', async () => {
     let checkCount = 0;
-    const invoke: TauriApi['invoke'] = async (cmd) => {
+    const invoke: ElectronTestApi['invoke'] = async (cmd) => {
       if (cmd === 'mount_drive') {
         throw new Error('GIO error: Mount not found');
       }
@@ -30,12 +34,11 @@ describe('GUI Mount Logic (useMountStatus)', () => {
       return true as any;
     };
 
-    const listen: TauriApi['listen'] = async () => async () => {};
+    const listen: ElectronTestApi['listen'] = async () => async () => {};
 
-    const { getByText, getByTestId } = render(
-      React.createElement(TauriProvider, { invoke, listen }, React.createElement(TestMount, {
-        options: { mountRetryDelayMs: 10, mountMaxRetries: 3 },
-      }))
+    const { getByText, getByTestId } = renderWithElectron(
+      React.createElement(TestMount, { options: { mountRetryDelayMs: 10, mountMaxRetries: 3 } }),
+      { invoke, listen }
     );
 
     await waitFor(() => expect(getByTestId('mounted').textContent).toBe('no'));
@@ -48,7 +51,7 @@ describe('GUI Mount Logic (useMountStatus)', () => {
 
   it('unmounts after successful unmount_drive', async () => {
     let mounted = true;
-    const invoke: TauriApi['invoke'] = async (cmd) => {
+    const invoke: ElectronTestApi['invoke'] = async (cmd) => {
       if (cmd === 'unmount_drive') {
         mounted = false;
         return undefined as any;
@@ -59,12 +62,11 @@ describe('GUI Mount Logic (useMountStatus)', () => {
       return true as any;
     };
 
-    const listen: TauriApi['listen'] = async () => async () => {};
+    const listen: ElectronTestApi['listen'] = async () => async () => {};
 
-    const { getByText, getByTestId } = render(
-      React.createElement(TauriProvider, { invoke, listen }, React.createElement(TestMount, {
-        options: { mountRetryDelayMs: 10, mountMaxRetries: 2 },
-      }))
+    const { getByText, getByTestId } = renderWithElectron(
+      React.createElement(TestMount, { options: { mountRetryDelayMs: 10, mountMaxRetries: 2 } }),
+      { invoke, listen }
     );
 
     await waitFor(() => expect(getByTestId('mounted').textContent).toBe('yes'));

@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import * as React from 'react';
 import { act } from 'react';
 import { App } from '../../src/gui/App';
-import { renderWithTauri } from '../helpers/renderWithTauri';
-import type { TauriApi } from '../../src/gui/tauri/TauriProvider';
+import { renderWithElectron } from '../helpers/renderWithElectron';
+import type { ElectronTestApi } from '../helpers/renderWithElectron';
 
 describe('Debug: Account Selection Flow', () => {
   it('traces the full flow from list_accounts to AccountDetails', async () => {
@@ -23,17 +23,21 @@ describe('Debug: Account Selection Flow', () => {
     const mockInvoke = (async (cmd: string, args?: Record<string, unknown>) => {
       log(`invoke: ${cmd} ${args ? JSON.stringify(args) : ''}`);
 
-      if (cmd === 'get_status') {
+      if (cmd === 'auth:getStatus') {
+        // Return the shape currently expected by the renderer + sidebar
         const result = {
+          authenticated: true,
+          email: 'user@proton.me',
+          username: 'user@proton.me',
+          // keep legacy fields just in case other callers rely on them
           server: { running: true, pid: 1234, url: 'http://127.0.0.1:8080' },
-          auth: { loggedIn: true, username: 'user@proton.me' },
           config: {
             webdav: { host: '127.0.0.1', port: 8080, https: false, requireAuth: false },
             remotePath: '/',
           },
           logFile: '/tmp/test.log',
         };
-        log(`get_status returning: ${JSON.stringify(result.auth)}`);
+        log(`auth:getStatus returning: ${JSON.stringify(result)}`);
         return result;
       }
 
@@ -60,17 +64,18 @@ describe('Debug: Account Selection Flow', () => {
       }
 
       return true;
-    }) as TauriApi['invoke'];
+    }) as ElectronTestApi['invoke'];
 
-    const mockListen: TauriApi['listen'] = async (event: string, _handler: any) => {
+    const mockListen: ElectronTestApi['listen'] = async (event: string, _handler: any) => {
       log(`listen registered: ${event}`);
       return async () => {};
     };
 
-    const container = document.getElementById('root')!;
-    renderWithTauri(container, React.createElement(App, null), { invoke: mockInvoke, listen: mockListen });
+    renderWithElectron(React.createElement(App, null), { invoke: mockInvoke, listen: mockListen });
 
     log('Rendered App component');
+    // dump current DOM for debugging
+    log(`DOM snapshot: ${document.body.innerHTML.replace(/\n/g, '')}`);
 
     // Helper to wait for condition with timeout
     const waitFor = async (
@@ -79,10 +84,12 @@ describe('Debug: Account Selection Flow', () => {
     ): Promise<void> => {
       const { timeout = 2000, interval = 50 } = options;
       const startTime = Date.now();
-      
+
       while (!condition()) {
         if (Date.now() - startTime > timeout) {
-          throw new Error('Timeout waiting for condition');
+          throw new Error(
+            `Timeout waiting for condition — DOM snapshot: ${document.body.innerHTML.replace(/\n/g, '')}`
+          );
         }
         await act(async () => {
           await new Promise((r) => setTimeout(r, interval));
@@ -104,7 +111,7 @@ describe('Debug: Account Selection Flow', () => {
 
     log('\n=== Final State ===');
     log(`All logs:\n${logs.join('\n')}`);
-    
+
     const header = document.querySelector('#app-header');
     const titleEl = header?.querySelector('.title');
     const subtitleEl = header?.querySelector('.subtitle');
@@ -112,6 +119,7 @@ describe('Debug: Account Selection Flow', () => {
     log(`account-status: "${subtitleEl?.textContent}"`);
 
     expect(titleEl?.textContent).toBe('user@proton.me');
-    expect(subtitleEl?.textContent).toBe('active');
+    // renderer no longer fetches full account status here; default fallback is used
+    expect(subtitleEl?.textContent).toBe('Live status: N/A');
   });
 });
