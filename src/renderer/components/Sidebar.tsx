@@ -27,7 +27,7 @@ export function Sidebar({
     async function loadAccounts() {
       try {
         console.log('[Sidebar] Calling auth:getStatus...');
-        const status: any = await electron.invoke('auth:getStatus');
+        const status = await electron.invoke<'auth:getStatus'>('auth:getStatus');
         console.log('[Sidebar] auth:getStatus returned:', status);
         if (status?.email && onAccountSelect) {
           onAccountSelect(status.email);

@@ -21,7 +21,7 @@ export function Dashboard() {
     const initializeStatus = async () => {
       try {
         // Get WebDAV server status
-        const status = await electron.invoke('webdav:getStatus');
+        const status = await electron.invoke<'webdav:getStatus'>('webdav:getStatus');
         setWebdavStatus(status);
 
         if (status?.config?.webdav) {
@@ -32,7 +32,10 @@ export function Dashboard() {
         }
 
         // Get storage quota
-        const quota = await electron.invoke('config:get', { key: 'storage' });
+        const quota = (await electron.invoke<'config:get'>('config:get', { key: 'storage' })) as
+          | { used?: number; total?: number }
+          | null
+          | undefined;
         if (quota) {
           const used = quota.used || 0;
           const total = quota.total || 0;
@@ -83,9 +86,9 @@ export function Dashboard() {
   const handleMountToggle = async (checked: boolean) => {
     try {
       if (checked) {
-        await electron.invoke('webdav:start');
+        await electron.invoke<'webdav:start'>('webdav:start');
       } else {
-        await electron.invoke('webdav:stop');
+        await electron.invoke<'webdav:stop'>('webdav:stop');
       }
       // Status update will come from event listener
     } catch (err) {
@@ -111,12 +114,12 @@ export function Dashboard() {
 
   const handleApplyPort = async () => {
     try {
-      await electron.invoke('config:update', {
+      await electron.invoke<'config:update'>('config:update', {
         key: 'webdav.port',
         value: Number(port),
       });
       // Refresh status
-      const status = await electron.invoke('webdav:getStatus');
+      const status = await electron.invoke<'webdav:getStatus'>('webdav:getStatus');
       if (status?.config?.webdav) {
         const newPort = status.config.webdav.port || port;
         const host = status.config.webdav.host || 'localhost';
@@ -130,7 +133,7 @@ export function Dashboard() {
 
   const handlePurgeCache = async () => {
     try {
-      await electron.invoke('config:update', {
+      await electron.invoke<'config:update'>('config:update', {
         key: 'cache.purge',
         value: true,
       });
@@ -142,7 +145,7 @@ export function Dashboard() {
 
   const handleLogout = async () => {
     try {
-      await electron.invoke('auth:logout');
+      await electron.invoke<'auth:logout'>('auth:logout');
       // Component will re-render via context when auth state changes
     } catch (err) {
       console.error('Failed to logout:', err);

@@ -14,7 +14,7 @@ export function NetworkSettings() {
   useEffect(() => {
     const fetchStatus = async () => {
       try {
-        const status = await electron.invoke('webdav:getStatus');
+        const status = await electron.invoke<'webdav:getStatus'>('webdav:getStatus');
         if (status?.config?.webdav) {
           const port = status.config.webdav.port || 12345;
           const host = status.config.webdav.host || 'localhost';
@@ -56,9 +56,9 @@ export function NetworkSettings() {
 
     try {
       setIsApplying(true);
-      await electron.invoke('config:update', { key: 'webdav.port', value: port });
+      await electron.invoke<'config:update'>('config:update', { key: 'webdav.port', value: port });
       // Fetch updated status
-      const status = await electron.invoke('webdav:getStatus');
+      const status = await electron.invoke<'webdav:getStatus'>('webdav:getStatus');
       if (status?.config?.webdav) {
         const newPort = status.config.webdav.port || port;
         const host = status.config.webdav.host || 'localhost';

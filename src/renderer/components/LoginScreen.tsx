@@ -45,7 +45,7 @@ export function LoginScreen() {
     setError('');
 
     try {
-      const result = await electron.invoke('auth:login', { email, password });
+      const result = await electron.invoke<'auth:login'>('auth:login', { email, password });
 
       if (!isAuthResult(result)) {
         setError('Invalid response from server');
@@ -86,7 +86,7 @@ export function LoginScreen() {
     setError('');
 
     try {
-      const result = await electron.invoke('auth:submit2FA', { code });
+      const result = await electron.invoke<'auth:submit2FA'>('auth:submit2FA', { code });
 
       if (!isAuthResult(result)) {
         setError('Invalid response from server');
@@ -122,7 +122,7 @@ export function LoginScreen() {
     setError('');
 
     try {
-      const result = await electron.invoke('auth:submitMailboxPassword', {
+      const result = await electron.invoke<'auth:submitMailboxPassword'>('auth:submitMailboxPassword', {
         password: mailboxPassword,
       });
 

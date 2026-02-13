@@ -6,12 +6,14 @@
  */
 
 import React, { createContext, useCallback, useContext } from 'react';
+import type { InvokeFn, OnFn } from '../../ipc/types.js';
 
 interface ElectronContextType {
-  invoke: <T = unknown>(channel: string, ...args: unknown[]) => Promise<T>;
+  // Strongly-typed invoke/on using the central IPC contract (InvokeFn/OnFn)
+  invoke: InvokeFn;
   send: (channel: string, ...args: unknown[]) => void;
-  on: (channel: string, listener: (data: unknown) => void) => () => void;
-  once: (channel: string, listener: (data: unknown) => void) => void;
+  on: OnFn;
+  once: OnFn;
 }
 
 const ElectronContext = createContext<ElectronContextType | undefined>(undefined);
@@ -24,6 +26,12 @@ interface ElectronProviderProps {
  * Provider component for Electron IPC
  */
 export function ElectronProvider({ children }: ElectronProviderProps) {
+  // Map to keep wrapper listeners so we can correctly remove them later.
+  // Keyed by channel, then by original listener -> wrapper function
+  type AnyListener = (data: unknown) => void;
+  type WrapperFn = (...args: unknown[]) => void;
+  const listenerMap = React.useRef(new Map<string, Map<AnyListener, WrapperFn>>());
+
   // Debug on mount
   React.useEffect(() => {
     console.log('[ElectronProvider] Mounted');
@@ -82,10 +90,30 @@ export function ElectronProvider({ children }: ElectronProviderProps) {
       return () => {};
     }
 
-    window.electron.events.on(channel, listener);
+    // Wrap listener to match underlying signature (...args: unknown[])
+    const wrapper = (...args: unknown[]) => {
+      try {
+        // forward first argument as the data payload
+        (listener as (data: unknown) => void)(args[0]);
+      } catch (e) {
+        // swallow errors from listener
+        console.error('[IPC] Listener threw error', e);
+      }
+    };
+
+    // store wrapper so we can remove it later
+    const channelMap = listenerMap.current.get(channel) ?? new Map<AnyListener, WrapperFn>();
+    channelMap.set(listener as AnyListener, wrapper);
+    listenerMap.current.set(channel, channelMap);
+
+    window.electron.events.on(channel, wrapper);
     return () => {
       if (window.electron?.events?.off) {
-        window.electron.events.off(channel, listener);
+        const stored = listenerMap.current.get(channel)?.get(listener as AnyListener);
+        if (stored) {
+          window.electron.events.off(channel, stored);
+          listenerMap.current.get(channel)?.delete(listener as AnyListener);
+        }
       }
     };
   }, []);
@@ -93,9 +121,17 @@ export function ElectronProvider({ children }: ElectronProviderProps) {
   const once = useCallback<ElectronContextType['once']>((channel, listener) => {
     if (typeof window === 'undefined' || !window.electron?.events?.once) {
       console.warn(`[IPC] once not available for: ${channel}`);
-      return;
+      return () => {};
     }
-    window.electron.events.once(channel, listener);
+    const wrapper: WrapperFn = (...args: unknown[]) => {
+      try {
+        (listener as (data: unknown) => void)(args[0]);
+      } catch (e) {
+        console.error('[IPC] Listener threw error', e);
+      }
+    };
+    window.electron.events.once(channel, wrapper);
+    return () => {};
   }, []);
 
   const value: ElectronContextType = { invoke, send, on, once };

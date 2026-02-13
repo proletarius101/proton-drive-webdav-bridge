@@ -2,7 +2,7 @@
   "compilerOptions": {
     // Environment setup & latest features
     "target": "ESNext",
-    "module": "commonjs",
+    "module": "esnext",
     "jsx": "react-jsx",
     "allowJs": true,
     "moduleResolution": "node",

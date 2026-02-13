@@ -13,8 +13,8 @@ export function ServiceBadge() {
   useEffect(() => {
     const fetchStatus = async () => {
       try {
-        const result = await electron.invoke('webdav:getStatus');
-        setStatus(result?.running ? 'active' : 'stopped');
+        const result = await electron.invoke<'webdav:getStatus'>('webdav:getStatus');
+        setStatus((result as any)?.running ? 'active' : 'stopped');
       } catch (err) {
         console.error('Failed to get WebDAV status:', err);
         setStatus('stopped');

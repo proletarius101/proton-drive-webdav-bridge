@@ -26,7 +26,7 @@ function AppContent() {
   useEffect(() => {
     const checkAuthStatus = async () => {
       try {
-        const status = await electron.invoke('auth:getStatus');
+        const status = await electron.invoke<'auth:getStatus'>('auth:getStatus');
         if (status?.authenticated) {
           setIsAuthenticated(true);
           setCurrentView('dashboard');

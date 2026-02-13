@@ -16,10 +16,10 @@ export function ControlPanel() {
   useEffect(() => {
     const startWebDAV = async () => {
       try {
-        const status: any = await electron.invoke('webdav:getStatus');
+        const status = await electron.invoke<'webdav:getStatus'>('webdav:getStatus');
         if (!status?.running) {
           try {
-            await electron.invoke('webdav:start');
+            await electron.invoke<'webdav:start'>('webdav:start');
             console.log('WebDAV server started');
           } catch (err) {
             const msg = String((err as any)?.message ?? err ?? '');
@@ -49,7 +49,7 @@ export function ControlPanel() {
 
   const handlePurgeCache = async () => {
     try {
-      await electron.invoke('config:update', { key: 'cache.purge', value: true });
+      await electron.invoke<'config:update'>('config:update', { key: 'cache.purge', value: true });
       console.log('Cache purged');
     } catch (err) {
       console.error('Failed to purge cache:', err);
@@ -58,7 +58,7 @@ export function ControlPanel() {
 
   const handleLogout = async () => {
     try {
-      await electron.invoke('auth:logout');
+      await electron.invoke<'auth:logout'>('auth:logout');
     } catch (err) {
       console.error('Failed to logout:', err);
     }
