@@ -37,3 +37,6 @@ bun.lockb
 # Test coverage
 coverage/
 test-results/
+
+# Vite
+.vite/

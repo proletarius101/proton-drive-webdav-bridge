@@ -4,7 +4,7 @@ import path from 'path';
 export default defineConfig({
   test: {
     globals: true,
-    environment: 'happy-dom',
+    environment: 'node',
     include: ['test/**/*.test.ts'],
     setupFiles: [
       path.resolve(__dirname, 'test/setup.ts'),

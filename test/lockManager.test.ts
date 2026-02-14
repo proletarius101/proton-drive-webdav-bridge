@@ -1,24 +1,26 @@
-import { mkdirSync, writeFileSync } from 'fs';
+import { fs, vol } from 'memfs';
 import { User } from 'nephele';
 import { join } from 'path';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { getDataDir } from '../src/paths.js';
-import { mockFileSystem } from './helpers/perTestEnv.js';
+import { LockManager } from '../src/webdav/LockManager.js';
 
-// Per-test dynamic setup: create unique temp dirs and register env-paths mock
-let LockManager: any;
+vi.mock('fs');
+vi.mock('fs/promises');
 
+// Per-test setup: create isolated temp dir and load module after mocking env-paths
 beforeEach(async () => {
-  await mockFileSystem();
+  vol.reset();
+
+  // Since we can't mock fs for the native module used by better-sqlite3, we use an environment variable to point the locks DB to an in-memory location.
+  // This allows tests to run without filesystem access while still using the real LockManager implementation.
+  vi.stubEnv('LOCKS_DB_PATH', ':memory:');
 
   // Ensure data dir exists for SQLite and pre-create database file
   const dataDir = getDataDir();
-  mkdirSync(dataDir, { recursive: true });
+  vol.mkdirSync(dataDir, { recursive: true });
   const dbPath = join(dataDir, 'locks.db');
-  writeFileSync(dbPath, '', { flag: 'a' });
-
-  const lmMod = await import('../src/webdav/LockManager.js');
-  LockManager = lmMod.LockManager;
+  fs.writeFileSync(dbPath, '', { flag: 'a' });
 });
 
 afterEach(async () => {

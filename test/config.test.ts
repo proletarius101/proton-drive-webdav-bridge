@@ -2,11 +2,9 @@
  * Comprehensive Integration Tests - Configuration Module
  *
  * Tests config loading, saving, updates, validation, file watching, and callbacks.
- * Uses dynamic imports with mockFileSystem() for true per-test isolation.
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { vol } from 'memfs';
+import { fs, vol } from 'memfs';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import {
   getConfig,
@@ -46,8 +44,8 @@ describe('Config - Initialization and Defaults', () => {
     expect(config.autoStart).toBe(false);
 
     // Verify file created
-    expect(existsSync(configPath)).toBe(true);
-    const raw = JSON.parse(readFileSync(configPath, 'utf-8')) as typeof config;
+    expect(fs.existsSync(configPath)).toBe(true);
+    const raw = JSON.parse(fs.readFileSync(configPath, 'utf-8') as string) as typeof config;
     expect(raw.webdav.host).toBe(config.webdav.host);
     expect(raw.webdav.port).toBe(config.webdav.port);
   });
@@ -65,7 +63,7 @@ describe('Config - Initialization and Defaults', () => {
       debug: true,
       autoStart: true,
     };
-    writeFileSync(configPath, JSON.stringify(customConfig), { mode: 0o600 });
+    fs.writeFileSync(configPath, JSON.stringify(customConfig), { mode: 0o600 });
 
     // Load and verify
     const config = loadConfig();
@@ -84,7 +82,7 @@ describe('Config - Initialization and Defaults', () => {
     getConfigDir();
     // Only override port
     const partialConfig = { webdav: { port: 3000 } };
-    writeFileSync(configPath, JSON.stringify(partialConfig), { mode: 0o600 });
+    fs.writeFileSync(configPath, JSON.stringify(partialConfig), { mode: 0o600 });
 
     const config = loadConfig();
     expect(config.webdav.port).toBe(3000);
@@ -97,7 +95,7 @@ describe('Config - Initialization and Defaults', () => {
 
     const configPath = getConfigFilePath();
     getConfigDir();
-    writeFileSync(configPath, '{ invalid json }', { mode: 0o600 });
+    fs.writeFileSync(configPath, '{ invalid json }', { mode: 0o600 });
 
     const config = loadConfig();
     // Should return defaults on parse error
@@ -125,7 +123,9 @@ describe('Config - Updates and Persistence', () => {
     expect(updated.webdav.requireAuth).toBe(false);
     expect(getConfig().webdav.port).toBe(9090);
 
-    const raw = JSON.parse(readFileSync(getConfigFilePath(), 'utf-8')) as typeof updated;
+    const raw = JSON.parse(
+      fs.readFileSync(getConfigFilePath(), 'utf-8') as string
+    ) as typeof updated;
     expect(raw.webdav.port).toBe(9090);
     expect(raw.webdav.requireAuth).toBe(false);
   });
@@ -146,7 +146,9 @@ describe('Config - Updates and Persistence', () => {
     config.webdav.port = 7777;
     saveConfig(config);
 
-    const raw = JSON.parse(readFileSync(getConfigFilePath(), 'utf-8')) as typeof config;
+    const raw = JSON.parse(
+      fs.readFileSync(getConfigFilePath(), 'utf-8') as string
+    ) as typeof config;
     expect(raw.debug).toBe(true);
     expect(raw.webdav.port).toBe(7777);
   });

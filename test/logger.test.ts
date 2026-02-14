@@ -4,11 +4,8 @@
  * Tests logger with real file I/O, log file creation, and format validation.
  */
 
-import { afterEach, beforeEach, describe, expect, vi, test } from 'vitest';
-import { mkdtempSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
-import { setDebugMode, logger } from '../src/logger.js';
+import { describe, expect, test } from 'vitest';
+import { logger, setDebugMode } from '../src/logger.js';
 
 describe('Logger - Instance Methods', () => {
   test('should have info method', () => {
