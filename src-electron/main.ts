@@ -20,12 +20,17 @@ let mainWindow: BrowserWindow | null = null;
  * This runs once when the app is ready and applies to all sessions
  */
 function setupContentSecurityPolicy(): void {
+  // In development, Vite needs 'unsafe-inline' for HMR
+  // @ts-expect-error - Electron Forge Vite globals
+  const isDev = !!MAIN_WINDOW_VITE_DEV_SERVER_URL;
+  const scriptSrc = isDev ? "'self' 'unsafe-inline'" : "'self'";
+  
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
         'Content-Security-Policy': [
-          "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:",
+          `default-src 'self'; script-src ${scriptSrc}; style-src 'self' 'unsafe-inline'; img-src 'self' data:`,
         ],
       },
     });

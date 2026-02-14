@@ -5,7 +5,7 @@
     "module": "esnext",
     "jsx": "react-jsx",
     "allowJs": true,
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     // Best practices
     "strict": true,
     "skipLibCheck": true,
@@ -25,7 +25,8 @@
     "noUnusedParameters": true,
     "noImplicitReturns": true,
     "allowSyntheticDefaultImports": true,
-    "types": ["node"]
+    "types": ["node"],
+    "lib": ["ESNext"]
   },
   "include": ["src/**/*"],
   "typeRoots": ["types", "node_modules/@types"],

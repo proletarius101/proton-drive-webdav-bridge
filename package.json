@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "description": "WebDAV bridge for Proton Drive - access your Proton Drive files via WebDAV protocol",
-  "main": ".vite/build/main.js",
+  "main": ".vite/build/main.mjs",
   "scripts": {
     "build": "electron-forge make",
     "build:check": "tsc --noEmit",

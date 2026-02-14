@@ -22,10 +22,16 @@ const VALID_RECEIVE_CHANNELS = [
   'webdav:status-changed',
   'webdav:started',
   'webdav:stopped',
+  'webdav:error',
   'platform:log',
   'platform:terminated',
   'mount:status',
   'auth:session-expired',
+  'auth:login-success',
+  'auth:logout-success',
+  'account:updated',
+  'config:updated',
+  'app:log',
 ] as const;
 
 type SendChannel = (typeof VALID_SEND_CHANNELS)[number];
