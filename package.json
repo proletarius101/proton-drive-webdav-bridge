@@ -16,10 +16,7 @@
     "format": "prettier --write 'src/**/*.ts' 'src/**/*.tsx' '*.json' '*.md'",
     "pre-commit": "npm run build:check && npm run lint:fix && npm run format",
     "test": "vitest",
-    "test:e2e": "vitest --run --dir test --include 'test/**/*.e2e.test.ts'",
-    "test:unit": "vitest --run --dir test --include 'test/**/!(*.e2e).test.ts'",
-    "test:ci": "mkdir -p test-results && vitest --run --reporter junit > ./test-results/junit.xml",
-    "test:e2e:ci": "mkdir -p test-results && vitest --run 'test/**/*.e2e.test.ts' --reporter junit > ./test-results/e2e-junit.xml",
+    "test:ci": "mkdir -p test-results && npm run test -- --reporter junit > ./test-results/junit.xml",
     "prepare": "husky"
   },
   "keywords": [
