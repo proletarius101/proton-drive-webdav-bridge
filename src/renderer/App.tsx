@@ -45,10 +45,12 @@ function AppContent() {
     checkAuthStatus();
 
     // Listen for auth state changes
-    const unsubscribeLogin = electron.on('auth:login-success', (data: any) => {
+    const unsubscribeLogin = electron.on('auth:login-success', (data: unknown) => {
       setIsAuthenticated(true);
       setCurrentView('dashboard');
-      setAccount({ email: data?.email, status: 'Authenticated' });
+      if (data && typeof data === 'object' && 'email' in data) {
+        setAccount({ email: String(data.email), status: 'Authenticated' });
+      }
     });
 
     const unsubscribeLogout = electron.on('auth:logout-success', () => {
@@ -104,8 +106,8 @@ function AppContent() {
         // In Electron, we would invoke via IPC
         // For now, this is a placeholder - actual account data would come from WebDAV or Drive API
         setAccount({ id: selectedAccountId });
-      } catch (error) {
-        console.error('[App] Error calling auth:getAccount:', error);
+      } catch (err) {
+        console.error('[App] Error calling auth:getAccount:', err);
         setAccount(null);
       }
     }
@@ -119,7 +121,7 @@ function AppContent() {
 
     try {
       unsubscribe = electron.on('account:updated', handleAccountUpdate);
-    } catch (error) {
+    } catch {
       // ignore in test/SSR
     }
 

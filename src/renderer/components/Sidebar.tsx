@@ -41,12 +41,12 @@ export function Sidebar({
 
     // Listen for auth state changes
     try {
-      unsubscribe = electron.on('auth:login-success', (data: any) => {
-        if (data?.email && onAccountSelect) {
-          onAccountSelect(data.email);
+      unsubscribe = electron.on('auth:login-success', (data: unknown) => {
+        if (data && typeof data === 'object' && 'email' in data && onAccountSelect) {
+          onAccountSelect(String(data.email));
         }
       });
-    } catch (e) {
+    } catch {
       // ignore in tests/SSR
     }
 

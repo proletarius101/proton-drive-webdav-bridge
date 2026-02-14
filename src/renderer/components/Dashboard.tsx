@@ -10,7 +10,7 @@ export function Dashboard() {
   const [logsVisible, setLogsVisible] = useState(false);
   const [logs, setLogs] = useState('');
   const [storageQuota, setStorageQuota] = useState({ used: 0, total: 0, percent: 0 });
-  const [webdavStatus, setWebdavStatus] = useState<any>(null);
+  const [webdavStatus, setWebdavStatus] = useState<unknown>(null);
 
   useEffect(() => {
     let unsubscribeLogs: (() => void) | undefined;
@@ -51,25 +51,39 @@ export function Dashboard() {
 
     // Subscribe to event listeners
     try {
-      unsubscribeLogs = electron.on('app:log', (data: any) => {
-        if (data?.level && data?.message) {
+      unsubscribeLogs = electron.on('app:log', (data: unknown) => {
+        if (data && typeof data === 'object' && 'level' in data && 'message' in data) {
           setLogs((prev) => `${prev}[${data.level}] ${data.message}\n`);
         }
       });
 
       unsubscribeStarted = electron.on('webdav:started', () => {
         console.log('WebDAV server started');
-        setWebdavStatus((prev: any) => ({ ...prev, running: true }));
+        setWebdavStatus((prev: unknown) => {
+          if (prev && typeof prev === 'object') {
+            return { ...prev, running: true };
+          }
+          return { running: true };
+        });
       });
 
       unsubscribeStopped = electron.on('webdav:stopped', () => {
         console.log('WebDAV server stopped');
-        setWebdavStatus((prev: any) => ({ ...prev, running: false }));
+        setWebdavStatus((prev: unknown) => {
+          if (prev && typeof prev === 'object') {
+            return { ...prev, running: false };
+          }
+          return { running: false };
+        });
       });
 
-      unsubscribeError = electron.on('webdav:error', (error: any) => {
+      unsubscribeError = electron.on('webdav:error', (error: unknown) => {
         console.error('WebDAV error:', error);
-        setLogs((prev) => `${prev}[ERROR] ${error?.message || 'Unknown error'}\n`);
+        const message =
+          error && typeof error === 'object' && 'message' in error
+            ? String(error.message)
+            : 'Unknown error';
+        setLogs((prev) => `${prev}[ERROR] ${message}\n`);
       });
     } catch (e) {
       console.error('Failed to subscribe to events:', e);

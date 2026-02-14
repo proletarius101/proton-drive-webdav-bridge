@@ -1,6 +1,7 @@
 {
   "name": "proton-drive-webdav-bridge",
   "version": "0.1.0",
+  "type": "module",
   "description": "WebDAV bridge for Proton Drive - access your Proton Drive files via WebDAV protocol",
   "main": ".vite/build/main.js",
   "scripts": {

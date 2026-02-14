@@ -22,7 +22,7 @@ export function ControlPanel() {
             await electron.invoke<'webdav:start'>('webdav:start');
             console.log('WebDAV server started');
           } catch (err) {
-            const msg = String((err as any)?.message ?? err ?? '');
+            const msg = String((err instanceof Error ? err.message : err) ?? '');
             if (!msg.toLowerCase().includes('already')) {
               console.error('Failed to start WebDAV:', err);
             } else {

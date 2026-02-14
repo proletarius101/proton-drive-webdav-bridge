@@ -12,15 +12,21 @@ export function LogViewer() {
 
   useEffect(() => {
     // Listen for log events
-    const unsubscribeLogs = electron.on('app:log', (data: any) => {
-      const level = data?.level ?? 'info';
-      const message = String(data?.message ?? '').replace(/\n$/, '');
+    const unsubscribeLogs = electron.on('app:log', (data: unknown) => {
+      const level =
+        data && typeof data === 'object' && 'level' in data ? String(data.level) : 'info';
+      const message = String(
+        (data && typeof data === 'object' && 'message' in data ? data.message : '') ?? ''
+      ).replace(/\n$/, '');
       setLogs((prev) => `${prev}[${level}] ${message}\n`);
     });
 
     // Listen for WebDAV errors
-    const unsubscribeError = electron.on('webdav:error', (error: any) => {
-      const message = error?.message || String(error);
+    const unsubscribeError = electron.on('webdav:error', (error: unknown) => {
+      const message =
+        error && typeof error === 'object' && 'message' in error
+          ? String(error.message)
+          : String(error);
       setLogs((prev) => `${prev}[error] ${message}\n`);
     });
 

@@ -41,10 +41,11 @@ if (typeof document !== 'undefined') {
   }
 
   // Error handling
-  window.addEventListener('error', (e: any) => {
-    console.error('Uncaught error in UI', e.error ?? e.message ?? e);
+  window.addEventListener('error', (event: Event) => {
+    const err = event instanceof ErrorEvent ? (event.error ?? event.message) : event;
+    console.error('Uncaught error in UI', err);
   });
-  window.addEventListener('unhandledrejection', (e: any) => {
-    console.error('Unhandled promise rejection in UI', e.reason ?? e);
+  window.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => {
+    console.error('Unhandled promise rejection in UI', event.reason);
   });
 }
