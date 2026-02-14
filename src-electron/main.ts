@@ -29,7 +29,7 @@ function createWindow(): void {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false, // Required for some native modules
+      sandbox: true,
     },
     titleBarStyle: 'hidden',
     trafficLightPosition: { x: 15, y: 15 },
