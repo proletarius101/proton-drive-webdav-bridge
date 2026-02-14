@@ -25,10 +25,10 @@ export interface IPCChannels {
     req: { id: string };
     res: { id: string; email?: string; status?: string } | null;
   };
-  'sidecar:openInFiles': { req: undefined; res: unknown };
-  'sidecar:mountDrive': { req: undefined; res: unknown };
-  'sidecar:checkMountStatus': { req: undefined; res: string | null };
-  'sidecar:unmountDrive': { req: undefined; res: unknown };
+  'platform:openInFiles': { req: undefined; res: unknown };
+  'platform:mountDrive': { req: undefined; res: unknown };
+  'platform:checkMountStatus': { req: undefined; res: string | null };
+  'platform:unmountDrive': { req: undefined; res: unknown };
   // Events
   'webdav:started': { req: undefined; res: undefined };
   'webdav:stopped': { req: undefined; res: undefined };

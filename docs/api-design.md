@@ -1,174 +1,39 @@
-# API Design Specification
-
-**Version**: 1.0  
-**Last Updated**: January 27, 2026
-
-## Table of Contents
-
-1. [Overview](#overview)
-2. [Architecture](#architecture)
-3. [Tauri IPC API](#tauri-ipc-api)
-4. [CLI Interface](#cli-interface)
-5. [Sidecar Communication Protocol](#sidecar-communication-protocol)
-6. [WebDAV Protocol](#webdav-protocol)
-7. [Event System](#event-system)
-8. [Error Handling](#error-handling)
-9. [Security Considerations](#security-considerations)
-
-## Overview
-
-The Proton Drive WebDAV Bridge uses three primary communication interfaces:
-
-1. **Tauri IPC (Inter-Process Communication)**: Rust backend ↔ TypeScript/Web frontend
-2. **CLI Interface**: User/Shell ↔ Node.js CLI binary
-3. **Sidecar Protocol**: Tauri GUI ↔ CLI sidecar binary (via shell subprocess)
-
-### Technology Stack
-
-- **Tauri**: IPC via command/invoke pattern (async RPC-style)
-- **CLI**: Commander.js with JSON output support
-- **Runtime**: Node.js (TypeScript/JavaScript execution via tsc or tsx)
-- **WebDAV**: Nephele server (RFC 4918 compliant)
-- **GIO/GVFS**: Native mount integration via GLib/GIO bindings
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Tauri Desktop App                    │
-├───────────────────────────┬─────────────────────────────┤
-│   Web Frontend (TS/JS)    │   Rust Backend (Tauri)      │
-│                           │                             │
-│   - UI Components         │   - Tauri Commands          │
-│   - Event Listeners       │   - Event Emitters          │
-│   - State Management      │   - Sidecar Process Mgmt    │
-│                           │   - GIO Mount Operations    │
-└───────────▲───────────────┴──────────┬──────────────────┘
-            │                          │
-            │ Tauri IPC                │ Shell Exec
-            │ (invoke/emit)            │ (stdin/stdout)
-            │                          │
-            │                          ▼
-            │                   ┌──────────────────┐
-            │                   │  CLI Sidecar     │
-            │                   │  (Node.js/TS)    │
-            │                   │                  │
-            │                   │  - Auth          │
-            │                   │  - WebDAV Server │
-            │                   │  - Proton SDK    │
-            │                   └────────┬─────────┘
-            │                            │
-            │                            │ WebDAV
-            │                            │ Protocol
-            │                            ▼
-            │                   ┌──────────────────┐
-            │                   │  File Manager    │
-            │                   │  (GIO/GVFS)      │
-            │                   └──────────────────┘
-            │
-            └─────────────── Direct CLI Usage ──────────────►
-```
-
-**Execution Flow**:
-
-- **GUI Mode**: Tauri app spawns CLI sidecar via `child_process.spawn()` → runs WebDAV server → IPC communication
-- **CLI Mode**: Direct execution → WebDAV server → foreground or daemon mode
-- **Sidecar**: Node.js process running compiled WebDAV server
-
-## Tauri IPC API
-
-### Communication Pattern
-
-Tauri uses a command/invoke pattern for RPC-style communication:
-
-- **Frontend → Backend**: `invoke<T>(command: string, args?: object): Promise<T>`
-- **Backend → Frontend**: `app.emit(event: string, payload?: object)`
-
-### Design Principles
-
-1. **Async-first**: All commands return `Promise<T>` or `Result<T, E>`
-2. **Type-safe**: TypeScript definitions match Rust types via `serde`
-3. **Error handling**: Rust `Result<T, String>` maps to JS Promise rejection
-4. **Naming convention**: `snake_case` for commands (matches Rust convention)
-5. **Minimal state**: Stateless commands preferred; state managed in Rust `State<T>`
-
-### Concurrency and State Management
-
-1. **Concurrent Commands**: Tauri commands execute concurrently and may run simultaneously
-   - Multiple `invoke()` calls are not queued
-   - Commands may interleave in their execution
-   - No automatic mutual exclusion
-
-2. **State Protection**: Application state is protected via `Arc<Mutex<T>>`
-   - Ensures thread-safe access to shared state
-   - Prevents data races between concurrent operations
-   - Lock contention is acceptable for typical usage patterns
-
-3. **Conflict Handling**: When operations conflict:
-   - **Duplicate Start**: Calling `start_sidecar` twice returns `"Sidecar already running"`
-   - **Stop While Starting**: Stopping during startup may succeed or fail depending on timing
-   - **Mount During Start**: Mounting before server is fully ready returns `"Server not running"`
-   - **Application should handle** these edge cases gracefully with retry logic
-
-### Input Validation
-
-1. **Port Numbers**
-   - Valid range: 1024-65535
-   - Rejected ports: < 1024 (requires privilege escalation)
-   - Conflict detection: Checks if port is already in use before binding
-   - Error returned: `"Invalid port number"` or `"Port already in use"`
-
-2. **Email Addresses**
-   - Format validation: Basic email format (RFC 5322 subset)
-   - Domain validation: Future enhancement for Proton domains
-   - Error returned: `"Invalid email format"`
-
-3. **Paths**
-   - Validation happens at: Rust backend command entry point
-   - No path traversal: WebDAV adapter prevents `../` attacks
-   - Proton Drive paths: Enforced by Proton SDK
-
-4. **Validation Strategy**: All inputs validated at command entry point in Rust with clear, user-friendly error messages
-
-### Commands (Frontend → Backend)
-
 #### Server Lifecycle
 
-##### `start_sidecar`
+The application manages the WebDAV server lifecycle inside the Electron main process when running as a desktop app. For the Electron renderer, use the typed IPC commands below to start, stop, and query the server. The older `start_sidecar`/`stop_sidecar` subprocess-based commands are deprecated in the in-process model.
 
-Start the WebDAV server sidecar process.
+##### `webdav:start`
+
+Start the in-process WebDAV server.
 
 **Parameters:**
 
 ```typescript
-{
-  port?: number  // Optional override port (default: 8080)
-}
+{ port?: number } // Optional override port (default: 8080)
 ```
 
 **Returns:**
 
 ```typescript
-Promise<number>; // PID of started process
+Promise<void>;
 ```
 
 **Errors:**
 
-- `"Sidecar already running"` - Process already active
-- `"Failed to spawn sidecar: <reason>"` - Spawn failed
+- `"Server already running"` - Server is already active
+- `"Failed to start server: <reason>"` - Startup failed
 
 **Example:**
 
 ```typescript
-const pid = await invoke<number>('start_sidecar', { port: 8080 });
-console.log(`Server started with PID ${pid}`);
+await invoke('webdav:start', { port: 8080 });
 ```
 
 ---
 
-##### `stop_sidecar`
+##### `webdav:stop`
 
-Stop the running sidecar process.
+Stop the in-process WebDAV server.
 
 **Parameters:** None
 
@@ -180,37 +45,116 @@ Promise<void>;
 
 **Errors:**
 
-- `"Sidecar not running"` - No active process
+- `"Server not running"` - No active server to stop
 
 **Example:**
 
 ```typescript
-await invoke('stop_sidecar');
+await invoke('webdav:stop');
 ```
 
 ---
 
-##### `get_status`
+#### Architecture Overview
 
-Retrieve comprehensive status of server, authentication, and configuration.
+```
+GUI Mode:
+┌──────────────────────────┐
+│   Renderer (UI)          │
+└────────────┬─────────────┘
+             │
+             │ IPC (invoke/listen)
+             ▼
+┌──────────────────────────────────────┐
+│   Electron Main Process              │
+│  ┌──────────────────────────────┐   │
+│  │  In-process WebDAV Server    │   │
+│  │  ├─ Proton SDK              │   │
+│  │  ├─ Drive Client Manager    │   │
+│  │  └─ WebDAV Protocol Layer   │   │
+│  └────────────┬─────────────────┘   │
+│               │ emits events        │
+│               │ (logs, status)      │
+└───────────────┼─────────────────────┘
+                │
+                │ WebDAV Protocol
+                ▼
+        ┌──────────────────────┐
+        │  File Manager        │
+        │  (GIO/GVFS)          │
+        │  (macOS Finder)      │
+        │  (Windows Explorer)  │
+        └──────────────────────┘
 
-**Parameters:** None
+CLI Mode:
+┌─────────────────────────────────────┐
+│  proton-drive-webdav-bridge CLI     │
+│  ├─ Proton SDK                      │
+│  ├─ Drive Client Manager            │
+│  └─ WebDAV Protocol Layer           │
+└────────────┬────────────────────────┘
+             │ WebDAV Protocol
+             ▼
+     ┌──────────────────────┐
+     │  File Manager        │
+     │  (GIO/GVFS, davfs2)  │
+     └──────────────────────┘
+```
 
-**Returns:**
+**Execution Flow**:
+
+- **GUI Mode**: GUI/desktop app starts the WebDAV server in-process (hosted in the main process) → IPC communication
+- **CLI Mode**: Direct execution → WebDAV server → foreground or daemon mode
+## In-process Server Model
+
+The Electron application hosts the WebDAV server in-process (typically in the main process) rather than spawning an external CLI "sidecar". The renderer and main processes communicate using the application's IPC layer (invoke/listen), and lifecycle operations are exposed as typed IPC commands.
+
+### Design Principles
+
+1. **In-process server**: WebDAV server runs inside the Electron main process (or a managed worker) — no separate CLI subprocess by default.
+2. **IPC-first**: Use the existing IPC contract for control and status (e.g., `webdav:start`, `webdav:stop`, `webdav:status`).
+3. **Event-driven**: Emit progress and log events via the event system (`webdav:log`, `mount:status`, `webdav:stopped`).
+4. **No PID files**: Lifecycle is managed by the main process; PID files and stdout-parsing are not used in the in-process model.
+
+### Communication Flow
+
+```
+Renderer (UI)
+       │
+       │ invoke()/listen()
+       ▼
+Electron Main (in-process WebDAV server)
+       │
+       │ emits events (webdav:log, mount:status, webdav:stopped)
+       ▼
+Renderer (UI)
+```
+
+### Status and Lifecycle Commands
+
+Use the following IPC commands from the renderer to control or inspect the server when running under Electron:
+
+- `webdav:start(options?: { port?: number }): Promise<void>` — start the server inside the Electron main process
+- `webdav:stop(): Promise<void>` — stop the in-process server
+- `webdav:status(): Promise<StatusResponse>` — get current status (running, url, config)
+
+Example:
 
 ```typescript
-Promise<StatusResponse>;
+try {
+  await invoke('webdav:start', { port: 8080 });
+  console.log('WebDAV server started');
+} catch (err) {
+  console.error('Failed to start server:', err);
+}
+```
 
-interface StatusResponse {
-  server: {
-    running: boolean;
-    pid: number | null;
-    url: string | null;
-  };
-  auth: {
-    loggedIn: boolean;
-    username: string | null;
-  };
+### Process Management Notes
+
+- Crashes or unexpected termination of the in-process server should be surfaced as events (e.g. `webdav:stopped`/`webdav:error`) so the UI can present meaningful messages and offer restart.
+- Configuration changes (port, auth) are applied via IPC commands and may require a controlled restart implemented in the main process.
+
+---
   config: {
     webdav: {
       host: string;
@@ -306,7 +250,7 @@ await invoke('logout');
 
 #### Mount Operations
 
-##### `sidecar:mountDrive`
+##### `platform:mountDrive`
 
 Mount Proton Drive using GIO/GVFS.
 
@@ -332,7 +276,7 @@ Promise<void>;
 
 ```typescript
 try {
-  await invoke('sidecar:mountDrive');
+  await invoke('platform:mountDrive');
   console.log('Drive mounted successfully');
 } catch (error) {
   console.error('Mount failed:', error);
@@ -341,7 +285,7 @@ try {
 
 ---
 
-##### `sidecar:unmountDrive`
+##### `platform:unmountDrive`
 
 Unmount the Proton Drive.
 
@@ -361,12 +305,12 @@ Promise<void>;
 **Example:**
 
 ```typescript
-await invoke('sidecar:unmountDrive');
+await invoke('platform:unmountDrive');
 ```
 
 ---
 
-##### `sidecar:checkMountStatus`
+##### `platform:checkMountStatus`
 
 Check if Proton Drive is currently mounted.
 
@@ -386,7 +330,7 @@ Promise<string | null>;
 **Example:**
 
 ```typescript
-const mountPoint = await invoke<string | null>('sidecar:checkMountStatus');
+const mountPoint = await invoke<string | null>('platform:checkMountStatus');
 if (mountPoint) {
   console.log(`Mounted at: ${mountPoint}`);
 }
@@ -502,7 +446,7 @@ await invoke('set_autostart', { enabled: true });
 
 #### Utilities
 
-##### `sidecar:openInFiles`
+##### `platform:openInFiles`
 
 Open the default file manager at the mount point.
 
@@ -522,7 +466,7 @@ Promise<void>;
 **Example:**
 
 ```typescript
-await invoke('sidecar:openInFiles');
+await invoke('platform:openInFiles');
 ```
 
 ---
@@ -563,9 +507,9 @@ await invoke('emit_test_log', {
 
 Events use the Tauri event system with typed payloads.
 
-#### `sidecar:log`
+#### `platform:log`
 
-Real-time log events from the sidecar process.
+Real-time log events from the in-process server.
 
 **Payload:**
 
@@ -581,16 +525,16 @@ Real-time log events from the sidecar process.
 ```typescript
 import { listen } from '@tauri-apps/api/event';
 
-await listen<{ level: string; message: string }>('sidecar:log', (event) => {
+await listen<{ level: string; message: string }>('platform:log', (event) => {
   console.log(`[${event.payload.level}] ${event.payload.message}`);
 });
 ```
 
 ---
 
-#### `sidecar:terminated`
+#### `platform:terminated`
 
-Emitted when sidecar process exits unexpectedly.
+Emitted when the in-process server exits unexpectedly.
 
 **Payload:**
 
@@ -605,9 +549,9 @@ Emitted when sidecar process exits unexpectedly.
 **Example:**
 
 ```typescript
-await listen('sidecar:terminated', (event) => {
+await listen('platform:terminated', (event) => {
   const { code, signal } = event.payload;
-  console.error(`Sidecar terminated: code=${code}, signal=${signal}`);
+  console.error(`Server terminated: code=${code}, signal=${signal}`);
 });
 ```
 
@@ -1131,9 +1075,9 @@ proton-drive-webdav-bridge config reset --yes
 
 ---
 
-## Sidecar Communication Protocol
+## In-process Server Communication
 
-The Tauri GUI wrapper communicates with the CLI sidecar binary via subprocess execution.
+The GUI communicates with an in-process WebDAV server hosted in the application's main process. Lifecycle operations (start/stop/status) are performed via IPC and the server emits events for logs and status changes.
 
 ### Design Principles
 
@@ -1145,22 +1089,17 @@ The Tauri GUI wrapper communicates with the CLI sidecar binary via subprocess ex
 ### Communication Flow
 
 ```
-Tauri Rust Backend
-       │
-       │ spawn
-       ▼
+GUI / Main Process (hosts WebDAV server)
+  │
+  │ start/stop/status via IPC
+  ▼
 ┌──────────────────┐
-│  CLI Sidecar     │
-│  (child process) │
+│ In-process Server │
 └──────────────────┘
-       │
-       │ stdout (JSON)
-       ▼
-    Parse & Emit Events
-       │
-       │ Tauri Events
-       ▼
-  Web Frontend
+  │
+  │ emits events (webdav:/platform:)
+  ▼
+  Web Frontend (renderer)
 ```
 
 ### Status Command Output
@@ -1210,7 +1149,7 @@ proton-drive-webdav-bridge status --json
 
 ### Server Startup in GUI Mode
 
-When Tauri starts the sidecar:
+When Tauri starts the platform process:
 
 **Command:**
 
@@ -1370,7 +1309,7 @@ WebDAV uses standard HTTP status codes:
 
 ### Event Naming Convention
 
-- **Namespace**: Use `:` separator (e.g., `sidecar:log`, `mount:status`)
+- **Namespace**: Use `:` separator (e.g., `platform:log`, `mount:status`)
 - **Hierarchy**: `namespace:action` or `namespace:subject:action`
 - **Consistency**: Use consistent names across Rust and TypeScript
 
@@ -1394,7 +1333,7 @@ app.emit("mount:status", "Mounted successfully").unwrap();
 app.emit("mount:status", "Checking mount...").unwrap();
 
 // Error event
-app.emit("sidecar:error", serde_json::json!({
+app.emit("platform:error", serde_json::json!({
     "code": "MOUNT_FAILED",
     "message": "Failed to mount drive",
     "details": error_details
@@ -1522,7 +1461,7 @@ try {
    - Behavior: Returns error if status check exceeds timeout
    - Cause: Server unresponsive or overloaded
 
-2. **`sidecar:mountDrive` Command**
+2. **`platform:mountDrive` Command**
   - Timeout: 30 seconds
   - Behavior: Returns `"Mount operation timed out"` error
   - Cause: GIO/GVFS mount operation stalled
@@ -1622,10 +1561,10 @@ These error codes should be included in the structured error response so clients
    - Commands run in Rust backend (trusted)
    - No direct DOM access from backend
 
-2. **Sidecar Communication**
-   - Sidecar runs with same user privileges
-   - No privilege escalation
-   - PID file prevents duplicate instances
+2. **Server Communication**
+  - In-process server runs with the same user privileges
+  - No privilege escalation
+  - PID file (if present) prevents duplicate instances
 
 ### WebDAV Security
 
@@ -1688,19 +1627,16 @@ The application maintains two distinct execution paths:
 
 **Rationale**: Allows the same binary to serve both audiences without compromising user experience in either mode.
 
-### Why Sidecar Pattern Is Used
+### Why the In-process Model Is Used
 
-Rather than embedding the WebDAV server directly in Tauri, we spawn it as a separate CLI subprocess:
+The project has moved away from a separate CLI "sidecar" subprocess in favor of hosting the WebDAV server inside the Electron main process (or a managed worker). This simplifies deployment and improves integration with the UI.
 
-1. **Process Isolation**: Server crashes don't crash GUI
-2. **Resource Control**: Server can be restarted independently
-3. **Single Source of Truth**: CLI binary is also sidecar binary
-4. **Backward Compatibility**: Users can run CLI standalone
-5. **Easy Updates**: Sidecar process can be restarted on version updates
-6. **Platform Consistency**: Same behavior on macOS, Linux, Windows
+1. **Simplicity**: No subprocess management, PID files, or stdout parsing — lifecycle is controlled directly by the main process.
+2. **Better Integration**: Events and logs are emitted via the app's IPC/event system, improving telemetry and UI responsiveness.
+3. **Faster Recovery**: The main process can restart or recover the server deterministically without shelling out.
+4. **Reduced Surface Area**: Fewer moving parts reduces platform-specific differences and makes packaging/electron builds simpler.
 
-**Trade-off**: Adds complexity for IPC and process management, but gains robustness and flexibility.
-
+**Trade-off**: The in-process model couples server lifecycle to the app process; care must be taken to handle crashes and resource recovery. Emit clear events (`webdav:stopped`, `webdav:error`) so the UI can respond appropriately.
 ---
 
 ## Versioning
@@ -1816,7 +1752,7 @@ interface AccountInfo {
 }
 
 // Command parameters
-interface StartSidecarParams {
+interface StartServerParams {
   port?: number;
 }
 

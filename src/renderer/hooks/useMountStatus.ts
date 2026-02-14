@@ -20,7 +20,7 @@ export function useMountStatus(options?: { mountRetryDelayMs?: number; mountMaxR
 
     const check = async () => {
       try {
-        const res = await electron.invoke('sidecar:checkMountStatus');
+        const res = await electron.invoke('platform:checkMountStatus');
         if (cancelled) return;
         setIsMounted(Boolean(res));
       } catch (err) {
@@ -43,14 +43,14 @@ export function useMountStatus(options?: { mountRetryDelayMs?: number; mountMaxR
 
       if (shouldMount) {
         try {
-          await electron.invoke('sidecar:mountDrive');
+          await electron.invoke('platform:mountDrive');
           setIsMounted(true);
         } catch {
           // On error, poll status
           for (let i = 0; i < mountMaxRetries; i++) {
             try {
               await new Promise((r) => setTimeout(r, mountRetryDelayMs));
-              const res = await electron.invoke('sidecar:checkMountStatus');
+              const res = await electron.invoke('platform:checkMountStatus');
               if (res) {
                 setIsMounted(true);
                 break;
@@ -64,7 +64,7 @@ export function useMountStatus(options?: { mountRetryDelayMs?: number; mountMaxR
         }
       } else {
         try {
-          await electron.invoke('sidecar:unmountDrive');
+          await electron.invoke('platform:unmountDrive');
           setIsMounted(false);
         } catch (err) {
           console.error('Failed to unmount drive:', err);
