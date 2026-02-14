@@ -10,6 +10,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { validateIPCRequest } from '../src/ipc/validation.js';
 import { withTimeout, handleIPCError, logIPCHandler } from '../src/ipc/handler-utils.js';
+import authManager from './auth-manager.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -87,8 +88,9 @@ function createWindow(): void {
 /**
  * App lifecycle handlers
  */
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   setupContentSecurityPolicy();
+  await authManager.initializeAuthManager();
   createWindow();
 
   app.on('activate', () => {
@@ -133,8 +135,12 @@ ipcMain.on('window:close', () => {
 /**
  * Authentication IPC handlers
  *
- * These handlers bridge the Electron renderer process to the backend auth service.
- * In production, these should connect to the actual auth module.
+ * These handlers coordinate the multi-step authentication flow:
+ * 1. Login (email + password) -> may require 2FA or mailbox password
+ * 2. 2FA submission (if required) -> may require mailbox password
+ * 3. Mailbox password submission (if required) -> authentication complete
+ * 4. Logout (clears session and stored credentials)
+ * 5. Check (returns current authentication status)
  */
 ipcMain.handle('auth:login', async (_event, credentials) => {
   logIPCHandler('auth:login', 'start');
@@ -148,15 +154,11 @@ ipcMain.handle('auth:login', async (_event, credentials) => {
     // Wrap in timeout (30s default)
     const result = await withTimeout(
       (async () => {
-        // TODO: Connect to actual auth service
-        // const result = await authManager.login(credentials);
-        // return result;
-        const cred = validation.data as Record<string, unknown>;
-        console.log('IPC: auth:login called', { email: cred.email });
-        return {
-          success: false,
-          error: 'Auth service not yet implemented',
-        };
+        const creds = validation.data as { email?: string; password?: string };
+        return authManager.handleLogin({
+          email: creds.email || '',
+          password: creds.password || '',
+        });
       })()
     );
     logIPCHandler('auth:login', 'complete');
@@ -179,12 +181,8 @@ ipcMain.handle('auth:submit2FA', async (_event, twoFactor) => {
     // Wrap in timeout (30s default)
     const result = await withTimeout(
       (async () => {
-        // TODO: Connect to actual auth service
-        console.log('IPC: auth:submit2FA called');
-        return {
-          success: false,
-          error: 'Auth service not yet implemented',
-        };
+        const data = validation.data as { code?: string };
+        return authManager.handleSubmit2FA(data.code || '');
       })()
     );
     logIPCHandler('auth:submit2FA', 'complete');
@@ -207,12 +205,8 @@ ipcMain.handle('auth:submitMailboxPassword', async (_event, mailbox) => {
     // Wrap in timeout (30s default)
     const result = await withTimeout(
       (async () => {
-        // TODO: Connect to actual auth service
-        console.log('IPC: auth:submitMailboxPassword called');
-        return {
-          success: false,
-          error: 'Auth service not yet implemented',
-        };
+        const data = validation.data as { password?: string };
+        return authManager.handleSubmitMailboxPassword(data.password || '');
       })()
     );
     logIPCHandler('auth:submitMailboxPassword', 'complete');
@@ -227,15 +221,7 @@ ipcMain.handle('auth:logout', async () => {
   logIPCHandler('auth:logout', 'start');
   try {
     // Wrap in timeout (30s default)
-    const result = await withTimeout(
-      (async () => {
-        // TODO: Connect to actual auth service
-        console.log('IPC: auth:logout called');
-        return {
-          success: true,
-        };
-      })()
-    );
+    const result = await withTimeout(authManager.handleLogout());
     logIPCHandler('auth:logout', 'complete');
     return result;
   } catch (error: unknown) {
@@ -249,13 +235,9 @@ ipcMain.handle('auth:check', async () => {
   try {
     // Wrap in timeout (30s default)
     const result = await withTimeout(
-      (async () => {
-        // TODO: Connect to actual auth service
-        console.log('IPC: auth:check called');
-        return {
-          isAuthenticated: false,
-        };
-      })()
+      (async () => ({
+        isAuthenticated: authManager.isAuthenticated(),
+      }))()
     );
     logIPCHandler('auth:check', 'complete');
     return result;

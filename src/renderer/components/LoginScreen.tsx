@@ -24,6 +24,26 @@ export function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const electron = useElectron();
 
+  const handleEmailChange = (e: unknown) => {
+    const event = e as { currentTarget: { value: string } };
+    setEmail(event.currentTarget.value);
+  };
+
+  const handlePasswordChange = (e: unknown) => {
+    const event = e as { currentTarget: { value: string } };
+    setPassword(event.currentTarget.value);
+  };
+
+  const handleCodeChange = (e: unknown) => {
+    const event = e as { currentTarget: { value: string } };
+    setCode(event.currentTarget.value);
+  };
+
+  const handleMailboxPasswordChange = (e: unknown) => {
+    const event = e as { currentTarget: { value: string } };
+    setMailboxPassword(event.currentTarget.value);
+  };
+
   const handleEmailSubmit = async () => {
     if (!email) {
       setError('Please enter your email');
@@ -166,7 +186,7 @@ export function LoginScreen() {
               type="email"
               placeholder="you@proton.me"
               value={email}
-              onChange={(e) => setEmail(e.currentTarget.value)}
+              onChange={handleEmailChange}
               autoComplete="email"
               disabled={loading}
               onKeyDown={(e) => e.key === 'Enter' && handleEmailSubmit()}
@@ -188,7 +208,7 @@ export function LoginScreen() {
               type="password"
               placeholder="••••••••"
               value={password}
-              onChange={(e) => setPassword(e.currentTarget.value)}
+              onChange={handlePasswordChange}
               autoComplete="current-password"
               disabled={loading}
               onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()}
@@ -220,7 +240,7 @@ export function LoginScreen() {
               type="text"
               placeholder="000000"
               value={code}
-              onChange={(e) => setCode(e.currentTarget.value)}
+              onChange={handleCodeChange}
               disabled={loading}
               onKeyDown={(e) => e.key === 'Enter' && handle2FASubmit()}
             />
@@ -240,7 +260,7 @@ export function LoginScreen() {
               type="password"
               placeholder="••••••••"
               value={mailboxPassword}
-              onChange={(e) => setMailboxPassword(e.currentTarget.value)}
+              onChange={handleMailboxPasswordChange}
               disabled={loading}
               onKeyDown={(e) => e.key === 'Enter' && handleMailboxPasswordSubmit()}
             />
