@@ -32,17 +32,19 @@ if (typeof document !== 'undefined') {
 
   // Listen for theme changes
   if (typeof window !== 'undefined' && window.matchMedia) {
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-      const b = document?.body;
-      if (!b) return;
-      b.classList.toggle('dark-theme', !!e.matches);
-      b.classList.toggle('light-theme', !e.matches);
-    });
+    window
+      .matchMedia('(prefers-color-scheme: dark)')
+      .addEventListener('change', (e: MediaQueryListEvent) => {
+        const b = document?.body;
+        if (!b) return;
+        b.classList.toggle('dark-theme', !!e.matches);
+        b.classList.toggle('light-theme', !e.matches);
+      });
   }
 
   // Error handling
-  window.addEventListener('error', (event: Event) => {
-    const err = event instanceof ErrorEvent ? (event.error ?? event.message) : event;
+  window.addEventListener('error', (event: ErrorEvent) => {
+    const err = event.error ?? event.message;
     console.error('Uncaught error in UI', err);
   });
   window.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => {

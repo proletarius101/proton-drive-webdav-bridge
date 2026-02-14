@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ChangeEvent } from 'react';
 import * as Mie from '@mielo-ui/mielo-react';
 import { useElectron } from '../electron/ElectronProvider';
 
@@ -220,7 +220,9 @@ export function Dashboard() {
                 toggle
                 name="mount-toggle"
                 checked={webdavStatus?.running || false}
-                onChange={(e) => handleMountToggle(e.target.checked)}
+                onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                  handleMountToggle(e.currentTarget.checked)
+                }
               />
             }
           />
@@ -257,7 +259,7 @@ export function Dashboard() {
                   min="1024"
                   max="65535"
                   value={port}
-                  onChange={(e) => setPort(e.currentTarget.value)}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setPort(e.currentTarget.value)}
                   r
                 />
                 <Mie.Button id="apply-port" onClick={handleApplyPort} size="small">

@@ -26,7 +26,7 @@
     "noImplicitReturns": true,
     "allowSyntheticDefaultImports": true,
     "types": ["node"],
-    "lib": ["ESNext"]
+    "lib": ["ESNext", "DOM", "DOM.Iterable"]
   },
   "include": ["src/**/*"],
   "typeRoots": ["types", "node_modules/@types"],

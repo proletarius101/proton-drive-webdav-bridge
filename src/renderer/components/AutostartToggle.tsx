@@ -1,3 +1,4 @@
+import type { ChangeEvent } from 'react';
 import { useAutostart } from '../hooks/useAutostart.js';
 
 /**
@@ -29,7 +30,7 @@ export function AutostartToggle() {
           id="autostart-toggle"
           type="checkbox"
           checked={isEnabled}
-          onChange={(e) => handleToggle(e.target.checked)}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => handleToggle(e.currentTarget.checked)}
           disabled={isLoading}
         />
         <span>Start on Boot</span>

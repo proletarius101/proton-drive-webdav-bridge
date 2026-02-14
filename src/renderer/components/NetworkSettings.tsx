@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, type ChangeEvent } from 'react';
 import { useElectron } from '../electron/ElectronProvider.js';
 
 /**
@@ -126,7 +126,7 @@ export function NetworkSettings() {
             id="network-port"
             type="number"
             value={localPort}
-            onChange={(e) => setLocalPort(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setLocalPort(e.currentTarget.value)}
             disabled={isApplying}
             style={{
               flex: 1,

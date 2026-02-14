@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, type ChangeEvent } from 'react';
 import * as Mie from '@mielo-ui/mielo-react';
 import { useElectron } from '../electron/ElectronProvider.js';
 import { useAutostart } from '../hooks/useAutostart.js';
@@ -89,7 +89,9 @@ export function Sidebar({
             name="autostart"
             label="Autostart"
             checked={autostartEnabled}
-            onChange={(e) => handleAutostartToggle(e.target.checked)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) =>
+              handleAutostartToggle(e.currentTarget.checked)
+            }
           />
         </Mie.L.View>
       </Mie.L.View>
