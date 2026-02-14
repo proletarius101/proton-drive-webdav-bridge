@@ -6,7 +6,7 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig({
   // prevent vite from obscuring rust errors
   clearScreen: false,
-  root: path.resolve(__dirname, 'src/gui'),
+  root: path.resolve(__dirname, 'src/renderer'),
   plugins: [react()],
   server: {
     port: 5173,
@@ -25,7 +25,7 @@ export default defineConfig({
   },
   envPrefix: ['VITE_', 'TAURI_ENV_*'],
   build: {
-    outDir: path.resolve(__dirname, 'dist/gui'),
+    outDir: path.resolve(__dirname, 'dist/renderer'),
     emptyOutDir: true,
     target: process.env.TAURI_ENV_PLATFORM == 'windows' ? 'chrome105' : 'safari13',
     // don't minify for debug builds

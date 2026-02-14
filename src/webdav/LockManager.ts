@@ -6,10 +6,11 @@
  */
 
 import Database from 'better-sqlite3';
-import { join } from 'path';
-import { getDataDir } from '../paths.js';
-import { logger } from '../logger.js';
 import type { User } from 'nephele';
+import { dirname, join } from 'path';
+import { logger } from '../logger.js';
+import { getDataDir } from '../paths.js';
+import { mkdirSync } from 'fs';
 
 // ============================================================================
 // Types
@@ -55,6 +56,15 @@ export class LockManager {
     // platform-specific data directory.
     const envPath = process.env.LOCKS_DB_PATH;
     const dbPath = envPath ? envPath : join(getDataDir(), 'locks.db');
+
+    // Creates the parent directory if it doesn't exist
+    try {
+      mkdirSync(dirname(dbPath), { recursive: true });
+    } catch (error) {
+      // Directory might already exist, which is fine
+      logger.debug(`Directory creation for ${dbPath}: ${error}`);
+    }
+
     this.db = new Database(dbPath);
 
     this.initializeDatabase();

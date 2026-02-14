@@ -7,12 +7,9 @@
  * - Platform detection and fallback logic
  * - Password derivation with PBKDF2
  * - Error handling and decryption failures
- *
- * Uses dynamic imports with mockFileSystem() for true per-test isolation.
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { vol } from 'memfs';
+import { fs, vol } from 'memfs';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { keyringStore } from './setup.js';
 import {
@@ -97,10 +94,10 @@ describe('Keychain - File-Based Storage', () => {
     await flushPendingWrites();
     const filePath = getCredentialsFilePath();
 
-    expect(existsSync(filePath)).toBe(true);
+    expect(fs.existsSync(filePath)).toBe(true);
 
     // Verify file is encrypted (not plain JSON)
-    const fileContent = readFileSync(filePath);
+    const fileContent = fs.readFileSync(filePath);
     const fileStr = fileContent.toString('utf8');
     expect(fileStr).not.toContain('testuser@proton.me');
     expect(fileStr).not.toContain('parent-uid-123');
@@ -131,16 +128,16 @@ describe('Keychain - Encryption and Security', () => {
     await storeCredentials(sampleCredentials);
     await flushPendingWrites();
     const filePath = getCredentialsFilePath();
-    const encrypted1 = readFileSync(filePath);
+    const encrypted1 = fs.readFileSync(filePath);
 
     // Change password and re-encrypt
     vi.stubEnv('KEY_FILE_PASSWORD', 'password2');
     await storeCredentials(sampleCredentials);
     await flushPendingWrites();
-    const encrypted2 = readFileSync(filePath);
+    const encrypted2 = fs.readFileSync(filePath);
 
     // Files should be different due to different keys
-    expect(encrypted1.equals(encrypted2)).toBe(false);
+    expect(Buffer.from(encrypted1).equals(Buffer.from(encrypted2))).toBe(false);
   });
 
   test('fails to decrypt with wrong password', async () => {
@@ -175,7 +172,7 @@ describe('Keychain - Platform Detection', () => {
 
     // Verify file was created (indicates file storage was used)
     const filePath = getCredentialsFilePath();
-    expect(existsSync(filePath)).toBe(true);
+    expect(fs.existsSync(filePath)).toBe(true);
   });
 });
 
@@ -194,7 +191,7 @@ describe('Keychain - Error Handling', () => {
     getDataDir(); // Ensure directory exists
 
     // Write corrupted data
-    writeFileSync(filePath, 'corrupted-data', { mode: 0o600 });
+    fs.writeFileSync(filePath, 'corrupted-data', { mode: 0o600 });
 
     const stored = await getStoredCredentials();
     expect(stored).toBeNull(); // Should return null instead of throwing

@@ -1,5 +1,4 @@
-import { mkdirSync, writeFileSync } from 'fs';
-import { vol } from 'memfs';
+import { fs, vol } from 'memfs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { driveClient } from '../src/drive.js';
 import { getDataDir } from '../src/paths.js';
@@ -12,6 +11,10 @@ vi.mock('fs/promises');
 beforeEach(() => {
   // reset the state of in-memory fs
   vol.reset();
+
+  // Since we can't mock fs for the native module used by better-sqlite3, we use an environment variable to point the locks DB to an in-memory location.
+  // This allows tests to run without filesystem access while still using the real LockManager implementation.
+  vi.stubEnv('LOCKS_DB_PATH', ':memory:');
 });
 
 let server: InstanceType<typeof WebDAVServer> | null = null;
@@ -23,8 +26,8 @@ beforeEach(() => {
   // Ensure DB file exists for LockManager
   const dataDir = getDataDir();
   // Create data dir if missing and touch DB file to ensure sqlite can open it
-  mkdirSync(dataDir, { recursive: true });
-  writeFileSync(`${dataDir}/locks.db`, '', { flag: 'a' });
+  vol.mkdirSync(dataDir, { recursive: true });
+  fs.writeFileSync(`${dataDir}/locks.db`, '', { flag: 'a' });
 
   // Stub driveClient to avoid network/auth
   driveClient.initialize = async () => {};

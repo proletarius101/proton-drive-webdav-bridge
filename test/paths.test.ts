@@ -4,8 +4,7 @@
  * Tests path resolution and directory creation using env-paths.
  */
 
-import { existsSync } from 'fs';
-import { vol } from 'memfs';
+import { fs, vol } from 'memfs';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 vi.mock('fs');
@@ -82,19 +81,19 @@ describe('Paths - Directory Creation', () => {
   test('getConfigDir should create directory', async () => {
     const { getConfigDir } = await loadPaths();
     const configDir = getConfigDir();
-    expect(existsSync(configDir)).toBe(true);
+    expect(fs.existsSync(configDir)).toBe(true);
   });
 
   test('getDataDir should create directory', async () => {
     const { getDataDir } = await loadPaths();
     const dataDir = getDataDir();
-    expect(existsSync(dataDir)).toBe(true);
+    expect(fs.existsSync(dataDir)).toBe(true);
   });
 
   test('getLogDir should create directory', async () => {
     const { getLogDir } = await loadPaths();
     const logDir = getLogDir();
-    expect(existsSync(logDir)).toBe(true);
+    expect(fs.existsSync(logDir)).toBe(true);
   });
 });
 
@@ -127,7 +126,7 @@ describe('Paths - Runtime Directory', () => {
     const runtimeDir = getRuntimeDir();
 
     expect(runtimeDir.startsWith('/')).toBe(true);
-    expect(existsSync(runtimeDir)).toBe(true);
+    expect(fs.existsSync(runtimeDir)).toBe(true);
   });
 
   test('getRuntimeDir should remain stable across calls', async () => {
