@@ -24,10 +24,10 @@ describe('GUI Mount Logic (useMountStatus)', () => {
   it('verifies actual mount state after mount_drive error', async () => {
     let checkCount = 0;
     const invoke: ElectronTestApi['invoke'] = async (cmd) => {
-      if (cmd === 'mount_drive') {
+      if (cmd === 'sidecar:mountDrive') {
         throw new Error('GIO error: Mount not found');
       }
-      if (cmd === 'check_mount_status') {
+      if (cmd === 'sidecar:checkMountStatus') {
         checkCount += 1;
         return checkCount >= 2 ? 'dav://localhost:7777' : null;
       }
@@ -52,11 +52,11 @@ describe('GUI Mount Logic (useMountStatus)', () => {
   it('unmounts after successful unmount_drive', async () => {
     let mounted = true;
     const invoke: ElectronTestApi['invoke'] = async (cmd) => {
-      if (cmd === 'unmount_drive') {
+      if (cmd === 'sidecar:unmountDrive') {
         mounted = false;
         return undefined as any;
       }
-      if (cmd === 'check_mount_status') {
+      if (cmd === 'sidecar:checkMountStatus') {
         return mounted ? 'dav://localhost:7777' : null;
       }
       return true as any;

@@ -1,6 +1,7 @@
 import { render } from '@testing-library/react';
 import * as React from 'react';
 import type { InvokeFn } from '../../src/ipc/types.js';
+import { ElectronProvider } from '../../src/renderer/electron/ElectronProvider.js';
 
 export interface ElectronTestApi {
   // Allow strongly-typed invoke while keeping flexibility in tests
@@ -70,7 +71,7 @@ export function renderWithElectron(element: React.ReactElement, api: ElectronTes
   // @ts-ignore - tests run in JSDOM; assign for runtime only
   window.electron = createWindowElectron(api);
 
-  const result = render(element);
+  const result = render(React.createElement(ElectronProvider, null, element));
 
   const restore = () => {
     try {

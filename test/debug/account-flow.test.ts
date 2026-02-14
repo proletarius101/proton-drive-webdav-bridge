@@ -41,21 +41,21 @@ describe('Debug: Account Selection Flow', () => {
         return result;
       }
 
-      if (cmd === 'list_accounts') {
+      if (cmd === 'auth:listAccounts') {
         const result = [{ id: 'user@proton.me', email: 'user@proton.me', status: 'active' }];
-        log(`list_accounts returning: ${JSON.stringify(result)}`);
+        log(`auth:listAccounts returning: ${JSON.stringify(result)}`);
         return result;
       }
 
-      if (cmd === 'get_account') {
+      if (cmd === 'auth:getAccount') {
         const id = (args as any)?.id;
-        log(`get_account checking id: "${id}"`);
+        log(`auth:getAccount checking id: "${id}"`);
         if (id === 'user@proton.me') {
           const result = { id: 'user@proton.me', email: 'user@proton.me', status: 'active' };
-          log(`get_account returning: ${JSON.stringify(result)}`);
+          log(`auth:getAccount returning: ${JSON.stringify(result)}`);
           return result;
         }
-        log('get_account returning: null (no match)');
+        log('auth:getAccount returning: null (no match)');
         return null;
       }
 

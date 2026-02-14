@@ -306,7 +306,7 @@ await invoke('logout');
 
 #### Mount Operations
 
-##### `mount_drive`
+##### `sidecar:mountDrive`
 
 Mount Proton Drive using GIO/GVFS.
 
@@ -332,7 +332,7 @@ Promise<void>;
 
 ```typescript
 try {
-  await invoke('mount_drive');
+  await invoke('sidecar:mountDrive');
   console.log('Drive mounted successfully');
 } catch (error) {
   console.error('Mount failed:', error);
@@ -341,7 +341,7 @@ try {
 
 ---
 
-##### `unmount_drive`
+##### `sidecar:unmountDrive`
 
 Unmount the Proton Drive.
 
@@ -361,12 +361,12 @@ Promise<void>;
 **Example:**
 
 ```typescript
-await invoke('unmount_drive');
+await invoke('sidecar:unmountDrive');
 ```
 
 ---
 
-##### `check_mount_status`
+##### `sidecar:checkMountStatus`
 
 Check if Proton Drive is currently mounted.
 
@@ -386,7 +386,7 @@ Promise<string | null>;
 **Example:**
 
 ```typescript
-const mountPoint = await invoke<string | null>('check_mount_status');
+const mountPoint = await invoke<string | null>('sidecar:checkMountStatus');
 if (mountPoint) {
   console.log(`Mounted at: ${mountPoint}`);
 }
@@ -502,7 +502,7 @@ await invoke('set_autostart', { enabled: true });
 
 #### Utilities
 
-##### `open_in_files`
+##### `sidecar:openInFiles`
 
 Open the default file manager at the mount point.
 
@@ -522,7 +522,7 @@ Promise<void>;
 **Example:**
 
 ```typescript
-await invoke('open_in_files');
+await invoke('sidecar:openInFiles');
 ```
 
 ---
@@ -1522,11 +1522,11 @@ try {
    - Behavior: Returns error if status check exceeds timeout
    - Cause: Server unresponsive or overloaded
 
-2. **`mount_drive` Command**
-   - Timeout: 30 seconds
-   - Behavior: Returns `"Mount operation timed out"` error
-   - Cause: GIO/GVFS mount operation stalled
-   - Recovery: Check logs and try unmounting before retrying
+2. **`sidecar:mountDrive` Command**
+  - Timeout: 30 seconds
+  - Behavior: Returns `"Mount operation timed out"` error
+  - Cause: GIO/GVFS mount operation stalled
+  - Recovery: Check logs and try unmounting before retrying
 
 3. **Server Initialization**
    - Startup timeout: 10 seconds
@@ -1925,7 +1925,7 @@ pub struct LogEvent {
 **API Changes:**
 
 - Add `account_id` parameter to relevant commands
-- New commands: `list_accounts`, `add_account`, `remove_account`
+- New commands: `auth:listAccounts`, `auth:addAccount`, `auth:removeAccount`
 
 **Configuration:**
 

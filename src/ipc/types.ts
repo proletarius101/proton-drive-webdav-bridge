@@ -17,11 +17,18 @@ export interface IPCChannels {
   };
   'config:get': { req: { key: string }; res: unknown };
   'config:update': { req: { key: string; value: unknown }; res: unknown };
-  list_accounts: { req: undefined; res: Array<{ id: string; email?: string; status?: string }> };
-  get_account: { req: { id: string }; res: { id: string; email?: string; status?: string } | null };
-  mount_drive: { req: unknown; res: unknown };
-  check_mount_status: { req: unknown; res: string | null };
-  unmount_drive: { req: unknown; res: unknown };
+  'auth:listAccounts': {
+    req: undefined;
+    res: Array<{ id: string; email?: string; status?: string }>;
+  };
+  'auth:getAccount': {
+    req: { id: string };
+    res: { id: string; email?: string; status?: string } | null;
+  };
+  'sidecar:openInFiles': { req: undefined; res: unknown };
+  'sidecar:mountDrive': { req: undefined; res: unknown };
+  'sidecar:checkMountStatus': { req: undefined; res: string | null };
+  'sidecar:unmountDrive': { req: undefined; res: unknown };
   // Events
   'webdav:started': { req: undefined; res: undefined };
   'webdav:stopped': { req: undefined; res: undefined };
