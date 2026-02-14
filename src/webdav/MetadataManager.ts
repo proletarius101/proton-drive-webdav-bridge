@@ -1,7 +1,8 @@
 import Database from 'better-sqlite3';
-import { join } from 'path';
-import { getDataDir } from '../paths.js';
+import { mkdirSync } from 'fs';
+import { dirname, join } from 'path';
 import { logger } from '../logger.js';
+import { getDataDir } from '../paths.js';
 
 export interface MetaStorage {
   props?: { [k: string]: unknown };
@@ -20,7 +21,20 @@ export class MetadataManager {
   private static instance: MetadataManager | null = null;
 
   private constructor() {
-    const dbPath = join(getDataDir(), 'locks.db'); // reuse same DB for now
+    // Allow overriding the locks DB path via environment variable so tests
+    // (or CI) can isolate the DB per-run. If not provided, fall back to the
+    // platform-specific data directory.
+    const envPath = process.env.METADATA_DB_PATH;
+    const dbPath = envPath ? envPath : join(getDataDir(), 'metadata.db');
+
+    // Creates the parent directory if it doesn't exist
+    try {
+      mkdirSync(dirname(dbPath), { recursive: true });
+    } catch (error) {
+      // Directory might already exist, which is fine
+      logger.debug(`Directory creation for ${dbPath}: ${error}`);
+    }
+
     this.db = new Database(dbPath);
 
     this.db.exec(`

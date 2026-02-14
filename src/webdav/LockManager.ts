@@ -6,11 +6,11 @@
  */
 
 import Database from 'better-sqlite3';
-import { mkdirSync } from 'fs';
 import type { User } from 'nephele';
 import { dirname, join } from 'path';
 import { logger } from '../logger.js';
 import { getDataDir } from '../paths.js';
+import { mkdirSync } from 'fs';
 
 // ============================================================================
 // Types

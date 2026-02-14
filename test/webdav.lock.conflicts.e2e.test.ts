@@ -11,6 +11,10 @@ vi.mock('fs/promises');
 beforeEach(() => {
   // reset the state of in-memory fs
   vol.reset();
+
+  // Since we can't mock fs for the native module used by better-sqlite3, we use an environment variable to point the locks DB to an in-memory location.
+  // This allows tests to run without filesystem access while still using the real LockManager implementation.
+  vi.stubEnv('LOCKS_DB_PATH', ':memory:');
 });
 
 let server: InstanceType<typeof WebDAVServer> | null = null;
