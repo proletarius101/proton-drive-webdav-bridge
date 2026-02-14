@@ -48,7 +48,10 @@ export function useAutostart() {
 
         // Update autostart via IPC
         try {
-          await electron.invoke<'config:update'>('config:update', { key: 'autostart', value: enabled });
+          await electron.invoke<'config:update'>('config:update', {
+            key: 'autostart',
+            value: enabled,
+          });
         } catch (err) {
           console.error('Failed to persist autostart state:', err);
           // Revert UI if persistence fails

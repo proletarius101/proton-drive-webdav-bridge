@@ -100,12 +100,12 @@ function AppContent() {
         return;
       }
       try {
-            console.log('[App] Calling auth:getAccount with id:', selectedAccountId);
+        console.log('[App] Calling auth:getAccount with id:', selectedAccountId);
         // In Electron, we would invoke via IPC
         // For now, this is a placeholder - actual account data would come from WebDAV or Drive API
         setAccount({ id: selectedAccountId });
       } catch (error) {
-            console.error('[App] Error calling auth:getAccount:', error);
+        console.error('[App] Error calling auth:getAccount:', error);
         setAccount(null);
       }
     }

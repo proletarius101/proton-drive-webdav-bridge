@@ -80,10 +80,19 @@ export interface ElectronAPI {
 }
 
 /**
- * Helper to safely invoke IPC with validation
+ * Helper to safely invoke IPC with validation and error handling
  */
-const safeInvoke = <T = unknown>(channel: string, ...args: unknown[]): Promise<T> => {
-  return ipcRenderer.invoke(channel, ...args);
+const safeInvoke = async <T = unknown>(channel: string, ...args: unknown[]): Promise<T> => {
+  try {
+    console.log(`[Preload:IPC] invoke('${channel}')`, { argsCount: args.length });
+    const result = await ipcRenderer.invoke(channel, ...args);
+    console.log(`[Preload:IPC] result for '${channel}'`);
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[Preload:IPC] Error invoking '${channel}':`, message);
+    throw error;
+  }
 };
 
 /**
@@ -141,29 +150,61 @@ const electronAPI: ElectronAPI = {
 
   /**
    * Event handling API
+   * Enforces strict channel allowlisting for security
    */
   events: {
     on: (channel: ReceiveChannel | string, callback: (...args: unknown[]) => void) => {
-      const subscription = (_event: Electron.IpcRendererEvent, ...args: unknown[]) =>
-        callback(...args);
-      if (VALID_RECEIVE_CHANNELS.includes(channel as ReceiveChannel)) {
-        ipcRenderer.on(channel, subscription);
-      } else {
-        // still allow listening to arbitrary channels if caller knows what they're doing
-        ipcRenderer.on(channel, subscription);
+      // SECURITY: Enforce channel allowlist
+      if (!VALID_RECEIVE_CHANNELS.includes(channel as ReceiveChannel)) {
+        throw new Error(
+          `[Security] Invalid channel: '${channel}'. Allowed channels: ${VALID_RECEIVE_CHANNELS.join(', ')}`
+        );
       }
-      return () => ipcRenderer.removeListener(channel, subscription);
+
+      const subscription = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => {
+        try {
+          callback(...args);
+        } catch (error) {
+          console.error(`[Preload:IPC] Listener error for '${channel}':`, error);
+        }
+      };
+      ipcRenderer.on(channel, subscription);
+
+      return () => {
+        console.log(`[Preload:IPC] Unsubscribing from '${channel}'`);
+        ipcRenderer.removeListener(channel, subscription);
+      };
     },
 
     once: (channel: ReceiveChannel | string, callback: (...args: unknown[]) => void) => {
-      ipcRenderer.once(channel, (_event: Electron.IpcRendererEvent, ...args: unknown[]) =>
-        callback(...args)
-      );
+      // SECURITY: Enforce channel allowlist
+      if (!VALID_RECEIVE_CHANNELS.includes(channel as ReceiveChannel)) {
+        throw new Error(
+          `[Security] Invalid channel: '${channel}'. Allowed channels: ${VALID_RECEIVE_CHANNELS.join(', ')}`
+        );
+      }
+
+      ipcRenderer.once(channel, (_event: Electron.IpcRendererEvent, ...args: unknown[]) => {
+        try {
+          callback(...args);
+        } catch (error) {
+          console.error(`[Preload:IPC] Listener error for '${channel}':`, error);
+        }
+      });
     },
 
-    off: (channel: ReceiveChannel | string, callback: (...args: unknown[]) => void) => {
-      const wrapper = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => callback(...args);
-      ipcRenderer.removeListener(channel, wrapper);
+    off: (_channel: ReceiveChannel | string, _callback: (...args: unknown[]) => void) => {
+      // SECURITY: Enforce channel allowlist
+      if (!VALID_RECEIVE_CHANNELS.includes(_channel as ReceiveChannel)) {
+        throw new Error(
+          `[Security] Invalid channel: '${_channel}'. Allowed channels: ${VALID_RECEIVE_CHANNELS.join(', ')}`
+        );
+      }
+
+      // Note: ipcRenderer.off uses a wrapper comparison, so listeners should be unsubscribed
+      // via the returned unsubscribe function from on() for best results
+      console.log(`[Preload:IPC] Removing listener for '${_channel}'`);
+      ipcRenderer.removeAllListeners(_channel);
     },
   },
 

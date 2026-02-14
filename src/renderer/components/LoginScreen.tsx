@@ -122,9 +122,12 @@ export function LoginScreen() {
     setError('');
 
     try {
-      const result = await electron.invoke<'auth:submitMailboxPassword'>('auth:submitMailboxPassword', {
-        password: mailboxPassword,
-      });
+      const result = await electron.invoke<'auth:submitMailboxPassword'>(
+        'auth:submitMailboxPassword',
+        {
+          password: mailboxPassword,
+        }
+      );
 
       if (!isAuthResult(result)) {
         setError('Invalid response from server');
