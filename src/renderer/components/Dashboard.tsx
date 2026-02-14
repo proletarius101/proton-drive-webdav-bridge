@@ -2,6 +2,16 @@ import { useState, useEffect } from 'react';
 import * as Mie from '@mielo-ui/mielo-react';
 import { useElectron } from '../electron/ElectronProvider';
 
+interface WebDAVStatus {
+  running?: boolean;
+  config?: {
+    webdav?: {
+      port?: number;
+      host?: string;
+    };
+  };
+}
+
 export function Dashboard() {
   const electron = useElectron();
   // const [mounted, setMounted] = useState(false);
@@ -10,7 +20,7 @@ export function Dashboard() {
   const [logsVisible, setLogsVisible] = useState(false);
   const [logs, setLogs] = useState('');
   const [storageQuota, setStorageQuota] = useState({ used: 0, total: 0, percent: 0 });
-  const [webdavStatus, setWebdavStatus] = useState<unknown>(null);
+  const [webdavStatus, setWebdavStatus] = useState<WebDAVStatus | null>(null);
 
   useEffect(() => {
     let unsubscribeLogs: (() => void) | undefined;
