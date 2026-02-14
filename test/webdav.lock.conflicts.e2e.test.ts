@@ -1,5 +1,4 @@
-import { mkdirSync, writeFileSync } from 'fs';
-import { vol } from 'memfs';
+import { fs, vol } from 'memfs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { driveClient } from '../src/drive.js';
 import { getDataDir } from '../src/paths.js';
@@ -22,9 +21,9 @@ beforeEach(() => {
 
   // Ensure DB file exists (create data dir and touch locks DB)
   const dataDir = getDataDir();
-  mkdirSync(dataDir, { recursive: true });
+  vol.mkdirSync(dataDir, { recursive: true });
   // Touch DB file to ensure sqlite can open it
-  writeFileSync(`${dataDir}/locks.db`, '', { flag: 'a' });
+  fs.writeFileSync(`${dataDir}/locks.db`, '', { flag: 'a' });
 
   // Stub driveClient to avoid network/auth
   driveClient.initialize = async () => {};

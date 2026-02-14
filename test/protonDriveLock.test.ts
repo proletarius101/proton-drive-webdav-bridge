@@ -1,12 +1,12 @@
 import { describe, test, expect, beforeEach } from 'vitest';
 import { getDataDir } from '../src/paths.js';
-import { writeFileSync, mkdirSync } from 'fs';
+import { fs, vol } from 'memfs';
 import ProtonDriveLock from '../src/webdav/ProtonDriveLock.js';
 
 beforeEach(() => {
   const dataDir = getDataDir();
-  mkdirSync(dataDir, { recursive: true });
-  writeFileSync(`${dataDir}/locks.db`, '', { flag: 'a' });
+  vol.mkdirSync(dataDir, { recursive: true });
+  fs.writeFileSync(`${dataDir}/locks.db`, '', { flag: 'a' });
 });
 
 // Create a lock with a token that doesn't exist in LockManager to force failures

@@ -5,12 +5,8 @@
  * Validates that video scrubbing and large file partial reads work correctly.
  */
 
-import { mkdtempSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { vol } from 'memfs';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { driveClient } from '../src/drive.ts';
 import { WebDAVServer } from '../src/webdav/server.ts';
 import { createFileDownloader } from './utils/seekableMock.ts';

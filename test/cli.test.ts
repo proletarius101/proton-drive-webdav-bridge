@@ -6,7 +6,7 @@
 
 import { afterEach, beforeEach, describe, expect, vi, test } from 'vitest';
 import { Command } from 'commander';
-import { existsSync, unlinkSync, writeFileSync } from 'fs';
+import { fs, vol } from 'memfs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
@@ -154,6 +154,9 @@ vi.mock('@inquirer/prompts', () => ({
   confirm: mockConfirm,
 }));
 
+vi.mock('fs');
+vi.mock('fs/promises');
+
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -204,6 +207,8 @@ const captureConsole = () => {
 
 describe('CLI - Auth Commands', () => {
   beforeEach(() => {
+    vol.reset();
+    vol.mkdirSync(tmpdir(), { recursive: true });
     // Force file-based encrypted storage for keyring (not testing keyring itself)
     vi.stubEnv('KEY_FILE_PASSWORD', 'test-keyring-password');
 
@@ -279,20 +284,22 @@ describe('CLI - Auth Commands', () => {
 
 describe('CLI - Start Command', () => {
   beforeEach(() => {
+    vol.reset();
+    vol.mkdirSync(tmpdir(), { recursive: true });
     mockStart.mockClear();
     keychainMocks.hasStoredCredentials.mockReturnValue(Promise.resolve(true));
     // Force file-based encrypted storage for keyring (not testing keyring itself)
     vi.stubEnv('KEY_FILE_PASSWORD', 'test-keyring-password');
-    if (existsSync(pidFilePath)) {
-      unlinkSync(pidFilePath);
+    if (fs.existsSync(pidFilePath)) {
+      fs.unlinkSync(pidFilePath);
     }
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
-    if (existsSync(pidFilePath)) {
-      unlinkSync(pidFilePath);
+    if (fs.existsSync(pidFilePath)) {
+      fs.unlinkSync(pidFilePath);
     }
   });
 
@@ -303,7 +310,7 @@ describe('CLI - Start Command', () => {
     });
 
     expect(mockStart).toHaveBeenCalled();
-    expect(existsSync(pidFilePath)).toBe(true);
+    expect(fs.existsSync(pidFilePath)).toBe(true);
   });
 
   test('start should exit when not logged in', async () => {
@@ -329,18 +336,20 @@ describe('CLI - Start Command', () => {
 
 describe('CLI - Stop Command', () => {
   beforeEach(() => {
+    vol.reset();
+    vol.mkdirSync(tmpdir(), { recursive: true });
     // Force file-based encrypted storage for keyring (not testing keyring itself)
     vi.stubEnv('KEY_FILE_PASSWORD', 'test-keyring-password');
-    if (existsSync(pidFilePath)) {
-      unlinkSync(pidFilePath);
+    if (fs.existsSync(pidFilePath)) {
+      fs.unlinkSync(pidFilePath);
     }
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
-    if (existsSync(pidFilePath)) {
-      unlinkSync(pidFilePath);
+    if (fs.existsSync(pidFilePath)) {
+      fs.unlinkSync(pidFilePath);
     }
   });
 
@@ -358,7 +367,7 @@ describe('CLI - Stop Command', () => {
   });
 
   test('stop should remove stale PID file when process not running', async () => {
-    writeFileSync(pidFilePath, String(process.pid));
+    fs.writeFileSync(pidFilePath, String(process.pid));
 
     const originalKill = process.kill;
 
@@ -372,7 +381,7 @@ describe('CLI - Stop Command', () => {
     try {
       const program = createProgram();
       await program.parseAsync(['stop'], { from: 'user' });
-      expect(existsSync(pidFilePath)).toBe(false);
+      expect(fs.existsSync(pidFilePath)).toBe(false);
     } finally {
       process.kill = originalKill;
     }
@@ -391,24 +400,26 @@ describe('CLI - Stop Command', () => {
 
 describe('CLI - Status Command', () => {
   beforeEach(() => {
+    vol.reset();
+    vol.mkdirSync(tmpdir(), { recursive: true });
     // Force file-based encrypted storage for keyring (not testing keyring itself)
     vi.stubEnv('KEY_FILE_PASSWORD', 'test-keyring-password');
     keychainMocks.hasStoredCredentials.mockReturnValue(Promise.resolve(true));
-    if (existsSync(pidFilePath)) {
-      unlinkSync(pidFilePath);
+    if (fs.existsSync(pidFilePath)) {
+      fs.unlinkSync(pidFilePath);
     }
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
-    if (existsSync(pidFilePath)) {
-      unlinkSync(pidFilePath);
+    if (fs.existsSync(pidFilePath)) {
+      fs.unlinkSync(pidFilePath);
     }
   });
 
   test('status --json should output JSON with server and auth info', async () => {
-    writeFileSync(pidFilePath, String(process.pid));
+    fs.writeFileSync(pidFilePath, String(process.pid));
 
     const originalKill = process.kill;
     process.kill = ((pid: number, signal?: NodeJS.Signals | number) => {

@@ -1,3 +1,7 @@
+/**
+ * @vitest-environment happy-dom
+ */
+
 import { describe, it, expect } from 'vitest';
 import * as React from 'react';
 import { waitFor } from '@testing-library/react';

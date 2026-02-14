@@ -14,18 +14,17 @@
  * integration with keychain storage.
  */
 
-import { afterEach, beforeEach, beforeAll, describe, expect, vi, test } from 'vitest';
-import { mkdirSync, mkdtempSync, rmSync } from 'fs';
+import { fs, vol } from 'memfs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { keyringStore } from './setup.js';
-import { mockFileSystem } from './helpers/perTestEnv';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type {
   ApiError,
-  Session,
-  ProtonAuth as ProtonAuthClass,
   ApiRequester,
+  ProtonAuth as ProtonAuthClass,
+  Session,
 } from '../src/auth.js';
+import { keyringStore } from './setup.js';
 
 // Local test-only type for credential validation scenarios
 type TestReusableCredentials = Partial<{
@@ -53,10 +52,12 @@ let restoreSessionFromStorage: () => Promise<{
   username: string;
 }>;
 
+vi.mock('fs');
+vi.mock('fs/promises');
+
 // Per-test setup: create isolated temp dir and load module after mocking env-paths
 beforeEach(async () => {
-  // Install per-test in-memory fs and reset module cache so imports use the mock
-  await mockFileSystem();
+  vol.reset();
   vi.resetModules();
   const mod = await import('../src/auth.js');
   ProtonAuth = mod.ProtonAuth;
@@ -296,7 +297,8 @@ describe('ProtonAuth - Session State Management', () => {
   let originalFetch: typeof global.fetch;
 
   beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), 'pdb-auth-state-'));
+    vol.mkdirSync(tmpdir(), { recursive: true });
+    tempDir = fs.mkdtempSync(join(tmpdir(), 'pdb-auth-state-')) as string;
     // pathsBase set via per-test env-paths mock in top-level beforeEach
     vi.stubEnv('KEY_FILE_PASSWORD', 'test-password');
     originalFetch = global.fetch;
@@ -305,7 +307,6 @@ describe('ProtonAuth - Session State Management', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
-    rmSync(tempDir, { recursive: true, force: true });
     // restore default handled by top-level afterEach
     global.fetch = originalFetch;
   });
@@ -331,7 +332,8 @@ describe('ProtonAuth - Credential Storage Integration', () => {
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), 'pdb-auth-storage-'));
+    vol.mkdirSync(tmpdir(), { recursive: true });
+    tempDir = fs.mkdtempSync(join(tmpdir(), 'pdb-auth-storage-')) as string;
     // pathsBase set via per-test env-paths mock in top-level beforeEach
     vi.stubEnv('KEY_FILE_PASSWORD', 'test-password');
   });
@@ -339,7 +341,6 @@ describe('ProtonAuth - Credential Storage Integration', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
-    rmSync(tempDir, { recursive: true, force: true });
     // restore default handled by top-level afterEach
   });
 
@@ -575,7 +576,8 @@ describe('ProtonAuth - Helper Functions Integration', () => {
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), 'pdb-auth-helpers-'));
+    vol.mkdirSync(tmpdir(), { recursive: true });
+    tempDir = fs.mkdtempSync(join(tmpdir(), 'pdb-auth-helpers-')) as string;
     // pathsBase set via per-test env-paths mock in top-level beforeEach
     vi.stubEnv('KEY_FILE_PASSWORD', 'test-password');
   });
@@ -583,7 +585,6 @@ describe('ProtonAuth - Helper Functions Integration', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
-    rmSync(tempDir, { recursive: true, force: true });
     // restore default handled by top-level afterEach
   });
 

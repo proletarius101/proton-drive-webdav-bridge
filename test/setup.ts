@@ -1,13 +1,9 @@
 /**
  * Global test setup
- * 
+ *
  * Loaded via setupFiles in vitest.config.ts before any test files run.
  * Provides global mocks for keyring access.
- * 
- * For per-test directory isolation, use mockFileSystem() from './helpers/perTestEnv'
- * with dynamic imports in your tests. Static module-level env-paths mocking doesn't
- * provide true per-test isolation due to module caching.
- * 
+ *
  * See: https://main.vitest.dev/api/vi#vi-mock
  */
 
