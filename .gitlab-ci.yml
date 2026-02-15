@@ -93,7 +93,7 @@ build:
     expire_in: 1 week
   rules:
   - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    when: never
+    when: always
   - if: $CI_PIPELINE_SOURCE == "push"
     when: on_success
 release:
