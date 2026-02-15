@@ -81,6 +81,7 @@ build:
   stage: build
   before_script:
   - node -v && npm -v
+  - apt-get update && apt-get install -y dpkg fakeroot
   - npm ci
   script:
   - npm run build
@@ -99,6 +100,7 @@ release:
   stage: release
   before_script:
   - node -v && npm -v
+  - apt-get update && apt-get install -y dpkg fakeroot
   - npm ci
   script:
   - npm run build
